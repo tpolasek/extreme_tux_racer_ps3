@@ -47,15 +47,6 @@ void QuitGameOver() {
 	State::manager.RequestEnterState(RaceSelect);
 }
 
-void CGameOver::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
-	if (release) return;
-	if (key == sf::Keyboard::Enter || key == sf::Keyboard::Escape) QuitGameOver();
-}
-
-void CGameOver::Mouse(int button, int state, int x, int y) {
-	QuitGameOver();
-}
-
 void CGameOver::Jbutt(int button, bool pressed) {
 	if (pressed && button == 0) QuitGameOver();
 }

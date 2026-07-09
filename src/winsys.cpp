@@ -28,8 +28,6 @@ GNU General Public License for more details.
 #include "translation.h"
 #include <iostream>
 
-TVector2i cursor_pos(0, 0);
-
 CWinsys Winsys;
 
 CWinsys::CWinsys()
@@ -43,31 +41,6 @@ CWinsys::CWinsys()
 		else
 			break;
 	}
-
-	sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
-	resolutions[0] = TScreenRes(desktopMode.width, desktopMode.height);
-	resolutions[1] = TScreenRes(800, 600);
-	resolutions[2] = TScreenRes(1024, 768);
-	resolutions[3] = TScreenRes(1152, 864);
-	resolutions[4] = TScreenRes(1280, 960);
-	resolutions[5] = TScreenRes(1280, 1024);
-	resolutions[6] = TScreenRes(1360, 768);
-	resolutions[7] = TScreenRes(1400, 1050);
-	resolutions[8] = TScreenRes(1440, 900);
-	resolutions[9] = TScreenRes(1680, 1050);
-}
-
-const TScreenRes& CWinsys::GetResolution(std::size_t idx) const {
-	if (idx >= NUM_RESOLUTIONS || (idx == 0 && !param.fullscreen)) return auto_resolution;
-	return resolutions[idx];
-}
-
-std::string CWinsys::GetResName(std::size_t idx) const {
-	if (idx >= NUM_RESOLUTIONS) return "800 x 600";
-	if (idx == 0) return (Trans.Text(110));
-	std::string line = Int_StrN(resolutions[idx].width);
-	line += " x " + Int_StrN(resolutions[idx].height);
-	return line;
 }
 
 float CWinsys::CalcScreenScale() const {
@@ -118,20 +91,12 @@ void CWinsys::SetupVideoMode(const TScreenRes& res) {
 	if (param.use_quad_scale) scale = std::sqrt(scale);
 }
 
-void CWinsys::SetupVideoMode(std::size_t idx) {
-	SetupVideoMode(GetResolution(idx));
-}
-
 void CWinsys::SetupVideoMode(int width, int height) {
 	SetupVideoMode(TScreenRes(width, height));
 }
 
 void CWinsys::Init() {
-	SetupVideoMode(GetResolution(param.res_type));
-}
-
-void CWinsys::KeyRepeat(bool repeat) {
-	window.setKeyRepeatEnabled(repeat);
+	SetupVideoMode(TScreenRes(1280, 720));
 }
 
 void CWinsys::Quit() {

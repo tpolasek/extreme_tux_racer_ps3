@@ -57,7 +57,6 @@ void LoadConfigFile() {
 
 	for (CSPList::const_iterator line = list.cbegin(); line != list.cend(); ++line) {
 		param.fullscreen = SPBoolN(*line, "fullscreen", false);
-		param.res_type = SPIntN(*line, "res_type", 0);
 		param.perf_level = SPIntN(*line, "detail_level", 3);
 		param.language = Trans.GetLangIdx(SPStrN(*line, "language", "EN_en"));
 		param.sound_volume = SPIntN(*line, "sound_volume", 90);
@@ -86,8 +85,7 @@ void LoadConfigFile() {
 }
 
 void SetConfigDefaults() {
-	param.fullscreen = true;
-	param.res_type = 0; // 0=auto / 1=800x600 / 2=1024x768 ...
+	param.fullscreen = false;
 	param.perf_level = 3;	// detail level
 	param.language = std::string::npos; // If language is set to npos, ETR will try to load default system language
 	param.sound_volume = 90;
@@ -140,13 +138,6 @@ void SaveConfigFile() {
 
 	AddComment(liste, "Full-screen mode [0...1]");
 	AddItem(liste, "fullscreen", param.fullscreen);
-	liste.Add();
-
-	AddComment(liste, "Screen resolution [0...9]");
-	AddComment(liste, "0 = auto, 1 = 800x600, 2 = 1024x768");
-	AddComment(liste, "3 = 1152x864, 4 = 1280x960, 5 = 1280x1024");
-	AddComment(liste, "6 = 1360x768, 7 = 1400x1050, 8 = 1440x900, 9=1680x1050");
-	AddItem(liste, "res_type", param.res_type);
 	liste.Add();
 
 	AddComment(liste, "Level of details [1...4]");

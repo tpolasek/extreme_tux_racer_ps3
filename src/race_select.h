@@ -24,9 +24,6 @@ GNU General Public License for more details.
 class CRaceSelect : public State {
 	void Enter();
 	void Loop(float time_step);
-	void Keyb(sf::Keyboard::Key key, bool release, int x, int y);
-	void Mouse(int button, int state, int x, int y);
-	void Motion(int x, int y);
 	void Jbutt(int button, bool pressed);
 	void Jaxis(int axis, float value);
 public:

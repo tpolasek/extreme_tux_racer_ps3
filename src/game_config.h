@@ -40,7 +40,6 @@ struct TParam {
 
 	// ------------------------------------
 	// main config params:
-	std::size_t	res_type;
 	uint32_t	framerate;
 	int			perf_level;
 	std::size_t	language;

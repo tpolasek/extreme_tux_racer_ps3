@@ -126,9 +126,8 @@ void CIntro::Loop(float time_step) {
 }
 // -----------------------------------------------------------------------
 
-void CIntro::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
-	if (release)
-		return;
-
+void CIntro::Jbutt(int button, bool pressed) {
+	if (!pressed) return;
+	(void)button;
 	abort_intro();
 }

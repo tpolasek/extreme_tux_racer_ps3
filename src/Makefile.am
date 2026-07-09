@@ -19,7 +19,6 @@ etr_SOURCES =		\
 	mathlib.cpp	\
 	matrices.cpp	\
 	ogl.cpp		\
-	ogl_test.cpp	\
 	particles.cpp	\
 	paused.cpp	\
 	physics.cpp	\
@@ -32,9 +31,6 @@ etr_SOURCES =		\
 	spx.cpp		\
 	states.cpp	\
 	textures.cpp	\
-	tool_char.cpp	\
-	tool_frame.cpp	\
-	tools.cpp	\
 	track_marks.cpp	\
 	translation.cpp	\
 	tux.cpp		\
@@ -62,7 +58,6 @@ noinst_HEADERS =	\
 	mathlib.h	\
 	matrices.h	\
 	ogl.h		\
-	ogl_test.h	\
 	particles.h	\
 	paused.h	\
 	physics.h	\
@@ -75,9 +70,6 @@ noinst_HEADERS =	\
 	spx.h		\
 	states.h	\
 	textures.h	\
-	tool_char.h	\
-	tool_frame.h	\
-	tools.h		\
 	track_marks.h	\
 	translation.h	\
 	tux.h		\

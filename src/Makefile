@@ -109,14 +109,13 @@ am_etr_OBJECTS = audio.$(OBJEXT) common.$(OBJEXT) course.$(OBJEXT) \
 	game_config.$(OBJEXT) game_ctrl.$(OBJEXT) game_over.$(OBJEXT) \
 	gui.$(OBJEXT) hud.$(OBJEXT) intro.$(OBJEXT) keyframe.$(OBJEXT) \
 	loading.$(OBJEXT) main.$(OBJEXT) mathlib.$(OBJEXT) \
-	matrices.$(OBJEXT) ogl.$(OBJEXT) ogl_test.$(OBJEXT) \
-	particles.$(OBJEXT) paused.$(OBJEXT) physics.$(OBJEXT) \
-	quadtree.$(OBJEXT) race_select.$(OBJEXT) racing.$(OBJEXT) \
-	regist.$(OBJEXT) reset.$(OBJEXT) splash_screen.$(OBJEXT) \
-	spx.$(OBJEXT) states.$(OBJEXT) textures.$(OBJEXT) \
-	tool_char.$(OBJEXT) tool_frame.$(OBJEXT) tools.$(OBJEXT) \
-	track_marks.$(OBJEXT) translation.$(OBJEXT) tux.$(OBJEXT) \
-	vectors.$(OBJEXT) view.$(OBJEXT) winsys.$(OBJEXT)
+	matrices.$(OBJEXT) ogl.$(OBJEXT) particles.$(OBJEXT) \
+	paused.$(OBJEXT) physics.$(OBJEXT) quadtree.$(OBJEXT) \
+	race_select.$(OBJEXT) racing.$(OBJEXT) regist.$(OBJEXT) \
+	reset.$(OBJEXT) splash_screen.$(OBJEXT) spx.$(OBJEXT) \
+	states.$(OBJEXT) textures.$(OBJEXT) track_marks.$(OBJEXT) \
+	translation.$(OBJEXT) tux.$(OBJEXT) vectors.$(OBJEXT) \
+	view.$(OBJEXT) winsys.$(OBJEXT)
 etr_OBJECTS = $(am_etr_OBJECTS)
 etr_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_$(V))
@@ -142,15 +141,13 @@ am__depfiles_remade = ./$(DEPDIR)/audio.Po ./$(DEPDIR)/common.Po \
 	./$(DEPDIR)/intro.Po ./$(DEPDIR)/keyframe.Po \
 	./$(DEPDIR)/loading.Po ./$(DEPDIR)/main.Po \
 	./$(DEPDIR)/mathlib.Po ./$(DEPDIR)/matrices.Po \
-	./$(DEPDIR)/ogl.Po ./$(DEPDIR)/ogl_test.Po \
-	./$(DEPDIR)/particles.Po ./$(DEPDIR)/paused.Po \
-	./$(DEPDIR)/physics.Po ./$(DEPDIR)/quadtree.Po \
-	./$(DEPDIR)/race_select.Po ./$(DEPDIR)/racing.Po \
-	./$(DEPDIR)/regist.Po ./$(DEPDIR)/reset.Po \
-	./$(DEPDIR)/splash_screen.Po ./$(DEPDIR)/spx.Po \
-	./$(DEPDIR)/states.Po ./$(DEPDIR)/textures.Po \
-	./$(DEPDIR)/tool_char.Po ./$(DEPDIR)/tool_frame.Po \
-	./$(DEPDIR)/tools.Po ./$(DEPDIR)/track_marks.Po \
+	./$(DEPDIR)/ogl.Po ./$(DEPDIR)/particles.Po \
+	./$(DEPDIR)/paused.Po ./$(DEPDIR)/physics.Po \
+	./$(DEPDIR)/quadtree.Po ./$(DEPDIR)/race_select.Po \
+	./$(DEPDIR)/racing.Po ./$(DEPDIR)/regist.Po \
+	./$(DEPDIR)/reset.Po ./$(DEPDIR)/splash_screen.Po \
+	./$(DEPDIR)/spx.Po ./$(DEPDIR)/states.Po \
+	./$(DEPDIR)/textures.Po ./$(DEPDIR)/track_marks.Po \
 	./$(DEPDIR)/translation.Po ./$(DEPDIR)/tux.Po \
 	./$(DEPDIR)/vectors.Po ./$(DEPDIR)/view.Po \
 	./$(DEPDIR)/winsys.Po
@@ -325,7 +322,6 @@ etr_SOURCES = \
 	mathlib.cpp	\
 	matrices.cpp	\
 	ogl.cpp		\
-	ogl_test.cpp	\
 	particles.cpp	\
 	paused.cpp	\
 	physics.cpp	\
@@ -338,9 +334,6 @@ etr_SOURCES = \
 	spx.cpp		\
 	states.cpp	\
 	textures.cpp	\
-	tool_char.cpp	\
-	tool_frame.cpp	\
-	tools.cpp	\
 	track_marks.cpp	\
 	translation.cpp	\
 	tux.cpp		\
@@ -368,7 +361,6 @@ noinst_HEADERS = \
 	mathlib.h	\
 	matrices.h	\
 	ogl.h		\
-	ogl_test.h	\
 	particles.h	\
 	paused.h	\
 	physics.h	\
@@ -381,9 +373,6 @@ noinst_HEADERS = \
 	spx.h		\
 	states.h	\
 	textures.h	\
-	tool_char.h	\
-	tool_frame.h	\
-	tools.h		\
 	track_marks.h	\
 	translation.h	\
 	tux.h		\
@@ -496,7 +485,6 @@ include ./$(DEPDIR)/main.Po # am--include-marker
 include ./$(DEPDIR)/mathlib.Po # am--include-marker
 include ./$(DEPDIR)/matrices.Po # am--include-marker
 include ./$(DEPDIR)/ogl.Po # am--include-marker
-include ./$(DEPDIR)/ogl_test.Po # am--include-marker
 include ./$(DEPDIR)/particles.Po # am--include-marker
 include ./$(DEPDIR)/paused.Po # am--include-marker
 include ./$(DEPDIR)/physics.Po # am--include-marker
@@ -509,9 +497,6 @@ include ./$(DEPDIR)/splash_screen.Po # am--include-marker
 include ./$(DEPDIR)/spx.Po # am--include-marker
 include ./$(DEPDIR)/states.Po # am--include-marker
 include ./$(DEPDIR)/textures.Po # am--include-marker
-include ./$(DEPDIR)/tool_char.Po # am--include-marker
-include ./$(DEPDIR)/tool_frame.Po # am--include-marker
-include ./$(DEPDIR)/tools.Po # am--include-marker
 include ./$(DEPDIR)/track_marks.Po # am--include-marker
 include ./$(DEPDIR)/translation.Po # am--include-marker
 include ./$(DEPDIR)/tux.Po # am--include-marker
@@ -685,7 +670,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
 	-rm -f ./$(DEPDIR)/ogl.Po
-	-rm -f ./$(DEPDIR)/ogl_test.Po
 	-rm -f ./$(DEPDIR)/particles.Po
 	-rm -f ./$(DEPDIR)/paused.Po
 	-rm -f ./$(DEPDIR)/physics.Po
@@ -698,9 +682,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/spx.Po
 	-rm -f ./$(DEPDIR)/states.Po
 	-rm -f ./$(DEPDIR)/textures.Po
-	-rm -f ./$(DEPDIR)/tool_char.Po
-	-rm -f ./$(DEPDIR)/tool_frame.Po
-	-rm -f ./$(DEPDIR)/tools.Po
 	-rm -f ./$(DEPDIR)/track_marks.Po
 	-rm -f ./$(DEPDIR)/translation.Po
 	-rm -f ./$(DEPDIR)/tux.Po
@@ -770,7 +751,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
 	-rm -f ./$(DEPDIR)/ogl.Po
-	-rm -f ./$(DEPDIR)/ogl_test.Po
 	-rm -f ./$(DEPDIR)/particles.Po
 	-rm -f ./$(DEPDIR)/paused.Po
 	-rm -f ./$(DEPDIR)/physics.Po
@@ -783,9 +763,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/spx.Po
 	-rm -f ./$(DEPDIR)/states.Po
 	-rm -f ./$(DEPDIR)/textures.Po
-	-rm -f ./$(DEPDIR)/tool_char.Po
-	-rm -f ./$(DEPDIR)/tool_frame.Po
-	-rm -f ./$(DEPDIR)/tools.Po
 	-rm -f ./$(DEPDIR)/track_marks.Po
 	-rm -f ./$(DEPDIR)/translation.Po
 	-rm -f ./$(DEPDIR)/tux.Po

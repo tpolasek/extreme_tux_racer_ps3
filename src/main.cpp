@@ -25,34 +25,32 @@ GNU General Public License for more details.
 #include "splash_screen.h"
 #include "audio.h"
 #include "font.h"
-#include "tools.h"
-#include "ogl_test.h"
 #include "winsys.h"
 #include <iostream>
 #include <ctime>
 #include <cstring>
+#include <csignal>
 
 TGameData g_game;
 
+volatile sig_atomic_t g_sigint_received = 0;
+
+static void sigint_handler(int) {
+	g_sigint_received = 1;
+}
+
 void InitGame(int argc, char **argv) {
-	g_game.toolmode = NONE;
-	g_game.argument = 0;
-	if (argc == 4) {
-		if (std::strcmp("--char", argv[1]) == 0)
-			g_game.argument = 4;
-		Tools.SetParameter(argv[2], argv[3]);
-	} else if (argc == 2) {
-		if (std::strcmp(argv[1], "9") == 0)
-			g_game.argument = 9;
-	}
+	(void)argc;
+	(void)argv;
 
 	g_game.player = nullptr;
 	g_game.course = nullptr;
 	g_game.mirrorred = false;
 	g_game.character = nullptr;
 	g_game.location_id = 0;
-	g_game.light_id = 0;
-	g_game.snow_id = 0;
+	g_game.light_id = 0;   // Sunny
+	g_game.snow_id = 1;    // Light snow
+	g_game.wind_id = 1;    // Breeze
 	g_game.theme_id = 0;
 	g_game.force_treemap = false;
 	g_game.treesize = 3;
@@ -65,6 +63,7 @@ int main(int argc, char **argv) {
 	std::cout << "\n----------- (C) GG --------\n\n";
 
 	std::srand(std::time(nullptr));
+	std::signal(SIGINT, sigint_handler);
 	InitConfig();
 	InitGame(argc, argv);
 	Winsys.Init();
@@ -84,18 +83,7 @@ int main(int argc, char **argv) {
 	Music.LoadMusicList();
 	Music.SetVolume(param.music_volume);
 
-	switch (g_game.argument) {
-		case 0:
-			State::manager.Run(SplashScreen);
-			break;
-		case 4:
-			g_game.toolmode = TUXSHAPE;
-			State::manager.Run(Tools);
-			break;
-		case 9:
-			State::manager.Run(OglTest);
-			break;
-	}
+	State::manager.Run(SplashScreen);
 
 	Winsys.Quit();
 

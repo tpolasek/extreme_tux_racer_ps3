@@ -24,7 +24,7 @@ GNU General Public License for more details.
 class CIntro : public State {
 	void Enter();
 	void Loop(float time_step);
-	void Keyb(sf::Keyboard::Key key, bool release, int x, int y);
+	void Jbutt(int button, bool pressed);
 public:
 };
 

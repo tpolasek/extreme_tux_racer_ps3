@@ -42,30 +42,9 @@ static bool fog = true;
 static bool terr = true;
 static bool trees = true;
 
-void CPaused::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
-	if (release) return;
-	switch (key) {
-		case sf::Keyboard::C:
-			Winsys.TakeScreenshot();
-			break;
-		case sf::Keyboard::F5:
-			sky = !sky;
-			break;
-		case sf::Keyboard::F6:
-			fog = !fog;
-			break;
-		case sf::Keyboard::F7:
-			terr = !terr;
-			break;
-		case sf::Keyboard::F8:
-			trees = !trees;
-			break;
-		default:
-			State::manager.RequestEnterState(Racing);
-	}
-}
-
-void CPaused::Mouse(int button, int state, int x, int y) {
+void CPaused::Jbutt(int button, bool pressed) {
+	if (!pressed) return;
+	(void)button;
 	State::manager.RequestEnterState(Racing);
 }
 

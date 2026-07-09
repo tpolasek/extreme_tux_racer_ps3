@@ -39,7 +39,6 @@ sf::String reason;
 
 
 void CSplashScreen::Enter() {
-	Winsys.ShowCursor(!param.ice_cursor);
 	Music.Play(param.menu_music, true);
 }
 

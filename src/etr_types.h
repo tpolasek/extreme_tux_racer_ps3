@@ -20,14 +20,6 @@ GNU General Public License for more details.
 
 #include "vectors.h"
 
-enum TToolMode {
-	NONE,
-	TUXSHAPE,
-	KEYFRAME,
-	TREEGEN,
-	LEARN,
-};
-
 enum TViewMode {
 	BEHIND,
 	FOLLOW,
@@ -40,10 +32,8 @@ struct TCourse;
 struct TCharacter;
 
 struct TGameData {
-	TToolMode toolmode;
 	float time_step;
 	double finish_brake;
-	int argument;
 	int treesize;
 	int treevar;
 	bool finish;

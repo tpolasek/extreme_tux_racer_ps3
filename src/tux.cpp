@@ -413,7 +413,7 @@ void CCharShape::Draw() {
 
 	DrawNodes(node);
 	glDisable(GL_NORMALIZE);
-	if (param.perf_level > 2 && g_game.argument == 0) DrawShadow();
+	if (param.perf_level > 2) DrawShadow();
 	highlighted = false;
 }
 

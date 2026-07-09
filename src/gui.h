@@ -22,7 +22,6 @@ GNU General Public License for more details.
 
 
 #define CENTER -1
-#define CRSR_PERIODE 0.4
 
 
 struct TRect {
@@ -42,9 +41,18 @@ struct TArea {
 
 class TTexture;
 
+// Abstract input actions driven entirely by the gamepad.
+enum TInputAction {
+	ACT_UP,
+	ACT_DOWN,
+	ACT_LEFT,
+	ACT_RIGHT,
+	ACT_CONFIRM,
+	ACT_BACK
+};
+
 class TWidget {
 protected:
-	TRect mouseRect;
 	TVector2i position;
 	bool active;
 	bool visible;
@@ -55,10 +63,7 @@ public:
 	TWidget(int x, int y, int width, int height, bool interactive_ = true);
 	virtual ~TWidget() {}
 	virtual void Draw() const = 0;
-	virtual bool Click(int x, int y);
-	virtual void TextEnter(char text) {}
-	virtual void Key(sf::Keyboard::Key key, bool released) {}
-	virtual void MouseMove(int x, int y);
+	virtual void Action(TInputAction action) {}
 	virtual void Focussed() {}
 	virtual void Activated() {}
 	bool focussed() const { return focus; }
@@ -102,61 +107,6 @@ public:
 TTextButton* AddTextButton(const sf::String& text, int x, int y, int ftsize);
 TTextButton* AddTextButtonN(const sf::String& text, int x, int y, int rel_ftsize);
 
-class TTextField : public TWidget {
-	sf::Text text;
-	sf::RectangleShape frame;
-	sf::RectangleShape cursorShape;
-	std::size_t cursorPos;
-	std::size_t maxLng;
-	float time;
-	bool cursor;
-
-	void SetCursorPos(std::size_t new_pos);
-public:
-	TTextField(int x, int y, int width, int height, const sf::String& text_);
-	void Draw() const;
-	void TextEnter(char c);
-	bool Click(int x, int y);
-	void Key(sf::Keyboard::Key key, bool released);
-	void Focussed();
-	void UpdateCursor(float timestep);
-	const sf::String& Text() const { return text.getString(); }
-};
-TTextField* AddTextField(const sf::String& text, int x, int y, int width, int height);
-
-class TCheckbox : public TWidget {
-	sf::Text text;
-	sf::Sprite back, checkmark;
-public:
-	bool checked;
-
-	TCheckbox(int x, int y, int width, const sf::String& tag_);
-	void Draw() const;
-	void SetPosition(int x, int y);
-	void SetChecked(bool c) { checked = c; }
-	void Focussed();
-	bool Click(int x, int y);
-	void Key(sf::Keyboard::Key key, bool released);
-};
-TCheckbox* AddCheckbox(int x, int y, int width, const sf::String& tag);
-
-class TIconButton : public TWidget {
-	sf::Sprite sprite;
-	sf::RectangleShape frame;
-	float size;
-	int maximum;
-	int value;
-public:
-	TIconButton(int x, int y, const sf::Texture& texture, float size_, int max_, int value_);
-	int GetValue() const { return value; }
-	void SetValue(int _value);
-	void Draw() const;
-	void Focussed();
-	bool Click(int x, int y);
-	void Key(sf::Keyboard::Key key, bool released);
-};
-TIconButton* AddIconButton(int x, int y, const sf::Texture& texture, float size, int maximum, int value);
-
 class TArrow : public TWidget {
 	sf::Sprite sprite;
 	bool down;
@@ -185,19 +135,14 @@ public:
 	void SetMinimum(int min_);
 	void SetMaximum(int max_);
 	void Draw() const;
-	bool Click(int x, int y);
-	void Key(sf::Keyboard::Key key, bool released);
-	void MouseMove(int x, int y);
+	void Action(TInputAction action);
 };
 TUpDown* AddUpDown(int x, int y, int minimum, int maximum, int value, int distance = 2, bool swapArrows = false);
 
 // --------------------------------------------------------------------
 
 void DrawGUI();
-TWidget* ClickGUI(int x, int y);
-TWidget* MouseMoveGUI(int x, int y);
-TWidget* KeyGUI(sf::Keyboard::Key key, bool released);
-TWidget* TextEnterGUI(char text);
+TWidget* ActionGUI(TInputAction action);
 void SetFocus(TWidget* widget);
 void IncreaseFocus();
 void DecreaseFocus();
@@ -210,7 +155,6 @@ void DrawFrameX(int x, int y, int w, int h, int line,
 void DrawBonusExt(int y, std::size_t numraces, std::size_t num);
 void DrawGUIBackground(float scale);
 void DrawGUIFrame();
-void DrawCursor();
 
 // --------------------------------------------------------------------
 

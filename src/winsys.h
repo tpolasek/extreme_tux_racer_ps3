@@ -20,10 +20,7 @@ GNU General Public License for more details.
 
 #include "bh.h"
 
-#define NUM_RESOLUTIONS 10
 #define SCREENSHOT_FORMAT ".png"
-
-extern TVector2i cursor_pos;
 
 struct TScreenRes {
 	unsigned int width, height;
@@ -37,7 +34,6 @@ private:
 	// sfml window
 	bool sfmlRenders;
 	sf::RenderWindow window;
-	TScreenRes resolutions[NUM_RESOLUTIONS];
 	TScreenRes auto_resolution;
 	float CalcScreenScale() const;
 public:
@@ -46,15 +42,10 @@ public:
 
 	CWinsys();
 
-	const TScreenRes& GetResolution(std::size_t idx) const;
-	std::string GetResName(std::size_t idx) const;
 	void Init();
 	void SetupVideoMode(const TScreenRes& res);
-	void SetupVideoMode(std::size_t idx);
 	void SetupVideoMode(int width, int height);
-	void KeyRepeat(bool repeat);
 	void PrintJoystickInfo() const;
-	void ShowCursor(bool visible) { window.setMouseCursorVisible(visible); }
 	void SwapBuffers() { window.display(); }
 	void Quit();
 	void Terminate();

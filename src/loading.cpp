@@ -36,7 +36,6 @@ CLoading Loading;
 
 // ====================================================================
 void CLoading::Enter() {
-	Winsys.ShowCursor(false);
 	Music.Play("loading", true);
 }
 

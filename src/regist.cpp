@@ -49,35 +49,6 @@ void QuitRegistration() {
 	State::manager.RequestEnterState(RaceSelect);
 }
 
-void CRegist::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
-	TWidget* focussed = KeyGUI(key, release);
-	if (release) return;
-	switch (key) {
-		case sf::Keyboard::Escape:
-			State::manager.RequestQuit();
-			break;
-		case sf::Keyboard::Return:
-			QuitRegistration();
-			break;
-		default:
-			break;
-	}
-}
-
-void CRegist::Mouse(int button, int state, int x, int y) {
-	if (state == 1) {
-		TWidget* focussed = ClickGUI(x, y);
-		if (focussed == textbutton)
-			QuitRegistration();
-	}
-}
-
-void CRegist::Motion(int x, int y) {
-	MouseMoveGUI(x, y);
-
-	if (param.ui_snow) push_ui_snow(cursor_pos);
-}
-
 void CRegist::Jbutt(int button, bool pressed) {
 	if (!pressed) return;
 	switch (button) {
@@ -91,14 +62,16 @@ void CRegist::Jbutt(int button, bool pressed) {
 }
 
 void CRegist::Jaxis(int axis, float value) {
-	if (axis == 1) { // vertical axis (D-pad / left stick up-down)
-		if (value < -0.3) {
-			// Up navigation: previous character
-			character->Key(sf::Keyboard::Up, false);
-		} else if (value > 0.3) {
-			// Down navigation: next character
-			character->Key(sf::Keyboard::Down, false);
+	static int last_dir = 0;
+	if (axis == 1) {
+		int dir = (value < -0.5f) ? -1 : (value > 0.5f) ? 1 : 0;
+		if (dir != 0 && dir != last_dir) {
+			if (character->focussed())
+				character->Action(dir < 0 ? ACT_UP : ACT_DOWN);
+			else
+				ActionGUI(dir < 0 ? ACT_UP : ACT_DOWN);
 		}
+		last_dir = dir;
 	}
 }
 
@@ -109,7 +82,6 @@ static TLabel* sHelpCharacter;
 static TFramedText* sCharFrame;
 
 void CRegist::Enter() {
-	Winsys.ShowCursor(!param.ice_cursor);
 	Music.Play(param.menu_music, true);
 
 	framewidth = (int)(Winsys.scale * 280);
@@ -133,7 +105,7 @@ void CRegist::Enter() {
 	// Hardcode the single player name as "bunny".
 	Players.SetSinglePlayer(hardcodedName);
 
-	SetFocus(textbutton);
+	SetFocus(character);
 }
 
 void CRegist::Loop(float time_step) {

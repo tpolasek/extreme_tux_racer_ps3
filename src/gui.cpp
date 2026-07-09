@@ -27,8 +27,6 @@ GNU General Public License for more details.
 #include <vector>
 
 
-#define CURSOR_SIZE 10
-
 static std::vector<TWidget*> Widgets;
 static int lock_focussed = -1;
 static int focussed = -1;
@@ -44,35 +42,13 @@ static TWidget* AddWidget(TWidget* widget) {
 	return widget;
 }
 
-static bool Inside(int x, int y, const TRect& Rect) {
-	return (x >= Rect.left
-	        && x <= Rect.left + Rect.width
-	        && y >= Rect.top
-	        && y <= Rect.top + Rect.height);
-}
-
 TWidget::TWidget(int x, int y, int width, int height, bool interactive_)
 	: active(true)
 	, visible(true)
 	, interactive(interactive_)
 	, focus(false) {
-	mouseRect.top = y;
-	mouseRect.left = x;
-	mouseRect.height = height;
-	mouseRect.width = width;
 	position.x = x;
 	position.y = y;
-}
-
-bool TWidget::Click(int x, int y) {
-	return active && visible && Inside(x, y, mouseRect);
-}
-
-void TWidget::MouseMove(int x, int y) {
-	bool ofocus = focus;
-	focus = interactive && active && visible && Inside(x, y, mouseRect);
-	if (ofocus != focus)
-		Focussed();
 }
 
 
@@ -178,11 +154,7 @@ TTextButton::TTextButton(int x, int y, const sf::String& text_, int ftsize)
 	int len = text.getLocalBounds().width;
 	if (x == CENTER) position.x = (Winsys.resolution.width - len) / 2;
 	text.setPosition(position.x, position.y);
-	int offs = ftsize / 5;
-	mouseRect.left = position.x-20;
-	mouseRect.top = position.y+offs;
-	mouseRect.width = len+40;
-	mouseRect.height = ftsize+offs;
+	(void)ftsize;
 }
 
 void TTextButton::Focussed() {
@@ -208,247 +180,6 @@ TTextButton* AddTextButtonN(const sf::String& text, int x, int y, int rel_ftsize
 	return AddTextButton(text, x, y, siz);
 }
 
-
-TTextField::TTextField(int x, int y, int width, int height, const sf::String& text_)
-	: TWidget(x, y, width, height)
-	, text(text_, FT.getCurrentFont(), FT.AutoSizeN(5))
-	, frame(sf::Vector2f(width-6.f, height-6.f))
-	, cursorShape(sf::Vector2f(2.f, 30.f * Winsys.scale))
-	, maxLng(32)
-	, time(0.0)
-	, cursor(false) {
-	text.setPosition(mouseRect.left + 20, mouseRect.top);
-	cursorShape.setFillColor(colYellow);
-	frame.setPosition(x + 3, y + 3);
-	frame.setOutlineThickness(3);
-	frame.setFillColor(colMBackgr);
-	frame.setOutlineColor(colWhite);
-	SetCursorPos(0);
-}
-
-void TTextField::Draw() const {
-	Winsys.draw(frame);
-	Winsys.draw(text);
-	if (cursor && focus)
-		Winsys.draw(cursorShape);
-}
-
-void TTextField::TextEnter(char c) {
-	if (c != '\b') {
-		sf::String string = text.getString();
-		string.insert(cursorPos, c);
-		text.setString(string);
-		SetCursorPos(cursorPos+1);
-	}
-}
-
-void TTextField::SetCursorPos(std::size_t new_pos) {
-	cursorPos = new_pos;
-	cursorShape.setPosition(text.findCharacterPos(cursorPos).x, mouseRect.top + 9);
-}
-
-void TTextField::Focussed() {
-	if (focus) {
-		text.setFillColor(colDYell);
-		text.setOutlineColor(colDYell);
-		frame.setOutlineColor(colDYell);
-	} else {
-		text.setFillColor(colWhite);
-		text.setOutlineColor(colWhite);
-		frame.setOutlineColor(colWhite);
-	}
-}
-
-bool TTextField::Click(int x, int y) {
-	if (TWidget::Click(x, y)) {
-		cursorPos = 0;
-		float first = text.findCharacterPos(cursorPos).x;
-		for (;;) {
-			float second = text.findCharacterPos(cursorPos + 1).x;
-			if ((first + second) / 2.f >= x || cursorPos >= text.getString().getSize())
-				break;
-			cursorPos++;
-			first = second;
-		}
-		cursorShape.setPosition(text.findCharacterPos(cursorPos).x, mouseRect.top + 9);
-		return true;
-	}
-	return false;
-}
-
-static void eraseFromText(sf::Text& text, std::size_t pos) {
-	sf::String str = text.getString();
-	str.erase(pos, 1);
-	text.setString(str);
-}
-void TTextField::Key(sf::Keyboard::Key key, bool released) {
-	switch (key) {
-		case sf::Keyboard::Delete:
-			if (cursorPos < text.getString().getSize()) eraseFromText(text, cursorPos);
-			break;
-		case sf::Keyboard::BackSpace:
-			if (cursorPos > 0) { eraseFromText(text, cursorPos-1); SetCursorPos(cursorPos - 1); }
-			break;
-		case sf::Keyboard::Right:
-			if (cursorPos < text.getString().getSize()) SetCursorPos(cursorPos + 1);
-			break;
-		case sf::Keyboard::Left:
-			if (cursorPos > 0) SetCursorPos(cursorPos - 1);
-			break;
-		case sf::Keyboard::Home:
-			SetCursorPos(0);
-			break;
-		case sf::Keyboard::End:
-			SetCursorPos(text.getString().getSize());
-			break;
-		default:
-			break;
-	}
-}
-
-void TTextField::UpdateCursor(float timestep) {
-	time += timestep;
-	if (time > CRSR_PERIODE) {
-		time = 0;
-		cursor = !cursor;
-	}
-}
-
-TTextField* AddTextField(const sf::String& text, int x, int y, int width, int height) {
-	locked_LR = true;
-	return static_cast<TTextField*>(AddWidget(new TTextField(x, y, width, height, text)));
-}
-
-TCheckbox::TCheckbox(int x, int y, int width, const sf::String& tag_)
-	: TWidget(x, y, 32 * Winsys.scale / 0.8f, 32 * Winsys.scale / 0.8f)
-	, text(tag_, FT.getCurrentFont(), FT.GetSize())
-	, back(Tex.GetSFTexture(CHECKBOX))
-	, checkmark(Tex.GetSFTexture(CHECKMARK_SMALL))
-	, checked(false) {
-	text.setPosition(x, y);
-	back.setPosition(x + width - 32, y);
-	checkmark.setPosition(x + width - 32, y);
-	mouseRect.left = x + width - 32;
-	back.setScale(Winsys.scale / 0.8f, Winsys.scale / 0.8f);
-	checkmark.setScale(Winsys.scale / 0.8f, Winsys.scale / 0.8f);
-}
-
-void TCheckbox::SetPosition(int x, int y) {
-	text.setPosition(x, y);
-	back.setPosition(x, y);
-	checkmark.setPosition(x, y);
-}
-
-void TCheckbox::Focussed() {
-	if (focus) {
-		text.setFillColor(colDYell);
-		text.setOutlineColor(colDYell);
-	} else {
-		text.setFillColor(colWhite);
-		text.setOutlineColor(colWhite);
-	}
-}
-
-void TCheckbox::Draw() const {
-	Winsys.draw(back);
-	if (checked)
-		Winsys.draw(checkmark);
-	Winsys.draw(text);
-}
-
-bool TCheckbox::Click(int x, int y) {
-	if (active && visible && Inside(x, y, mouseRect)) {
-		checked = !checked;
-		return true;
-	}
-	return false;
-}
-
-void TCheckbox::Key(sf::Keyboard::Key key, bool released) {
-	if (released) return;
-
-	if (key == sf::Keyboard::Space || key == sf::Keyboard::Return) {
-		checked = !checked;
-	}
-}
-
-TCheckbox* AddCheckbox(int x, int y, int width, const sf::String& tag) {
-	return static_cast<TCheckbox*>(AddWidget(new TCheckbox(x, y, width, tag)));
-}
-
-TIconButton::TIconButton(int x, int y, const sf::Texture& texture, float size_, int max_, int value_)
-	: TWidget(x, y, 32, 32)
-	, sprite(texture)
-	, frame(sf::Vector2f(size_, size_))
-	, size(size_)
-	, maximum(max_)
-	, value(value_) {
-	sprite.setScale(size / (texture.getSize().x / 2.f), size / (texture.getSize().y / 2.f));
-	sprite.setPosition(x, y);
-	frame.setPosition(x, y);
-	frame.setOutlineColor(colWhite);
-	frame.setOutlineThickness(3.f);
-	SetValue(value_);
-}
-
-void TIconButton::SetValue(int _value) {
-	value = _value;
-	if (value > maximum)
-		value = 0;
-	else if (value < 0)
-		value = maximum;
-
-	sf::Vector2u texSize = sprite.getTexture()->getSize();
-	switch (value) {
-		case 0:
-			sprite.setTextureRect(sf::IntRect(0, 0, texSize.x / 2, texSize.y / 2));
-			break;
-		case 1:
-			sprite.setTextureRect(sf::IntRect(texSize.x / 2, 0, texSize.x / 2, texSize.y / 2));
-			break;
-		case 2:
-			sprite.setTextureRect(sf::IntRect(0, texSize.y / 2, texSize.x / 2, texSize.y / 2));
-			break;
-		case 3:
-			sprite.setTextureRect(sf::IntRect(texSize.x / 2, texSize.y / 2, texSize.x / 2, texSize.y / 2));
-			break;
-	}
-}
-
-void TIconButton::Draw() const {
-	Winsys.draw(frame);
-	Winsys.draw(sprite);
-}
-
-void TIconButton::Focussed() {
-	if (focus)
-		frame.setOutlineColor(colDYell);
-	else
-		frame.setOutlineColor(colWhite);
-}
-
-bool TIconButton::Click(int x, int y) {
-	if (Inside(x, y, mouseRect)) {
-		SetValue(value + 1);
-		return true;
-	}
-	return false;
-}
-
-void TIconButton::Key(sf::Keyboard::Key key, bool released) {
-	if (released) return;
-
-	if (key == sf::Keyboard::Down) { // Arrow down/left
-		SetValue(value - 1);
-	} else if (key == sf::Keyboard::Up) { // Arrow up/right
-		SetValue(value + 1);
-	}
-}
-
-TIconButton* AddIconButton(int x, int y, const sf::Texture& texture, float size, int maximum, int value) {
-	locked_UD = true;
-	return static_cast<TIconButton*>(AddWidget(new TIconButton(x, y, texture, size, maximum, value)));
-}
 
 TArrow::TArrow(int x, int y, bool down_)
 	: TWidget(x, y, 32 * Winsys.scale / 0.8f, 16 * Winsys.scale / 0.8f)
@@ -512,35 +243,18 @@ void TUpDown::Draw() const {
 	down.Draw();
 }
 
-bool TUpDown::Click(int x, int y) {
-	if (active && visible && lower.Click(x, y)) {
-		value++;
-		higher.SetActive(true);
-		if (value == maximum)
-			lower.SetActive(false);
-		return true;
-	}
-	if (active && visible && higher.Click(x, y)) {
-		lower.SetActive(true);
-		value--;
-		if (value == minimum)
-			higher.SetActive(false);
-		return true;
-	}
-	return false;
-}
+void TUpDown::Action(TInputAction action) {
+	bool wantUp = (!swapArrows && action == ACT_UP) || (swapArrows && action == ACT_DOWN);
+	bool wantDown = (!swapArrows && action == ACT_DOWN) || (swapArrows && action == ACT_UP);
 
-void TUpDown::Key(sf::Keyboard::Key key, bool released) {
-	if (released) return;
-
-	if ((!swapArrows && key == sf::Keyboard::Up) || (swapArrows && key == sf::Keyboard::Down)) { // Arrow up
+	if (wantUp) {
 		if (value > minimum) {
 			value--;
 			lower.SetActive(true);
 			if (value == minimum)
 				higher.SetActive(false);
 		}
-	} else if ((!swapArrows && key == sf::Keyboard::Down) || (swapArrows && key == sf::Keyboard::Up)) { // Arrow down
+	} else if (wantDown) {
 		if (value < maximum) {
 			value++;
 			higher.SetActive(true);
@@ -548,15 +262,6 @@ void TUpDown::Key(sf::Keyboard::Key key, bool released) {
 				lower.SetActive(false);
 		}
 	}
-}
-
-void TUpDown::MouseMove(int x, int y) {
-	bool ofocus = focus;
-	focus = active && visible && Inside(x, y, mouseRect);
-	if (ofocus != focus)
-		Focussed();
-	up.MouseMove(x, y);
-	down.MouseMove(x, y);
 }
 
 void TUpDown::SetValue(int value_) {
@@ -659,17 +364,6 @@ void DrawGUIBackground(float scale) {
 	Winsys.draw(logo);
 }
 
-void DrawCursor() {
-	static sf::Sprite s(Tex.GetSFTexture(MOUSECURSOR));
-	static bool init = false;
-	if (!init) {
-		s.setScale((double) Winsys.resolution.width / 1400, (double) Winsys.resolution.width / 1400);
-		init = true;
-	}
-	s.setPosition(cursor_pos.x, cursor_pos.y);
-	Winsys.draw(s);
-}
-
 
 // ------------------ Main GUI functions ---------------------------------------------
 
@@ -677,81 +371,33 @@ void DrawGUI() {
 	for (std::size_t i = 0; i < Widgets.size(); i++)
 		if (Widgets[i]->GetVisible())
 			Widgets[i]->Draw();
-	if (param.ice_cursor)
-		DrawCursor();
 }
 
-TWidget* ClickGUI(int x, int y) {
-	TWidget* clicked = nullptr;
-	for (std::size_t i = 0; i < Widgets.size(); i++) {
-		if (Widgets[i]->Click(x, y)) {
-			clicked = Widgets[i];
-			lock_focussed = focussed;
-		}
-	}
-	return clicked;
-}
-
-TWidget* MouseMoveGUI(int x, int y) {
-	if (x != 0 || y != 0) {
-		focussed = -1;
-		for (std::size_t i = 0; i < Widgets.size(); i++) {
-			Widgets[i]->MouseMove(cursor_pos.x, cursor_pos.y);
-			if (Widgets[i]->focussed())
-				focussed = (int)i;
-		}
-	}
-	if (focussed == -1) {
-		focussed = lock_focussed;
-		if (focussed != -1) {
-			Widgets[focussed]->focus = true;
-			Widgets[focussed]->Focussed();
-		}
-		return 0;
-	}
-
-	return Widgets[focussed];
-}
-
-TWidget* KeyGUI(sf::Keyboard::Key key, bool released) {
-	if (!released) {
-		switch (key) {
-			case sf::Keyboard::Tab:
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::RShift))
-					DecreaseFocus();
-				else
-					IncreaseFocus();
-				break;
-			case sf::Keyboard::Up:
-				if (!locked_UD)
-					DecreaseFocus();
-				break;
-			case sf::Keyboard::Left:
-				if (!locked_LR)
-					DecreaseFocus();
-				break;
-			case sf::Keyboard::Down:
-				if (!locked_UD)
-					IncreaseFocus();
-				break;
-			case sf::Keyboard::Right:
-				if (!locked_LR)
-					IncreaseFocus();
-				break;
-			default:
-				break;
-		}
+TWidget* ActionGUI(TInputAction action) {
+	switch (action) {
+		case ACT_UP:
+			if (!locked_UD)
+				DecreaseFocus();
+			break;
+		case ACT_LEFT:
+			if (!locked_LR)
+				DecreaseFocus();
+			break;
+		case ACT_DOWN:
+			if (!locked_UD)
+				IncreaseFocus();
+			break;
+		case ACT_RIGHT:
+			if (!locked_LR)
+				IncreaseFocus();
+			break;
+		case ACT_CONFIRM:
+		case ACT_BACK:
+			break;
 	}
 	if (focussed == -1)
 		return 0;
-	Widgets[focussed]->Key(key, released);
-	return Widgets[focussed];
-}
-
-TWidget* TextEnterGUI(char text) {
-	if (focussed == -1)
-		return 0;
-	Widgets[focussed]->TextEnter(text);
+	Widgets[focussed]->Action(action);
 	return Widgets[focussed];
 }
 

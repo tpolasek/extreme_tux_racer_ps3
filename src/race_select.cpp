@@ -30,7 +30,6 @@ GNU General Public License for more details.
 #include "font.h"
 #include "translation.h"
 #include "spx.h"
-#include "regist.h"
 #include "loading.h"
 #include "winsys.h"
 
@@ -38,142 +37,46 @@ CRaceSelect RaceSelect;
 
 static TUpDown* course;
 static TFramedText* courseName;
-static TIconButton* light;
-static TIconButton* snow;
-static TIconButton* wind;
-static TIconButton* mirror;
-static TIconButton* random_btn;
-static TWidget* textbuttons[2];
-static sf::String info;
-
-static void UpdateInfo() {
-	if (mirror->focus && mirror->GetValue() < 2)
-		info = Trans.Text(69 + mirror->GetValue());
-	else if (light->focus && light->GetValue() < 4)
-		info = Trans.Text(71 + light->GetValue());
-	else if (snow->focus && snow->GetValue() < 4)
-		info = Trans.Text(75 + snow->GetValue());
-	else if (wind->focus && wind->GetValue() < 4)
-		info = Trans.Text(79 + wind->GetValue());
-	else if (random_btn->focus)
-		info = Trans.Text(83);
-	else
-		info = "";
-}
+static TWidget* textbutton;
 
 void SetRaceConditions() {
-	g_game.mirrorred = mirror->GetValue() != 0;
-	g_game.light_id = light->GetValue();
-	g_game.snow_id = snow->GetValue();
-	g_game.wind_id = wind->GetValue();
-
+	// Map attributes are hardcoded to defaults: Sunny, Light snow, Breeze, mirror Off.
 	g_game.course = &(*Course.currentCourseList)[course->GetValue()];
 	g_game.theme_id = (*Course.currentCourseList)[course->GetValue()].music_theme;
 	State::manager.RequestEnterState(Loading);
-}
-
-void CRaceSelect::Motion(int x, int y) {
-	MouseMoveGUI(x, y);
-
-	if (param.ui_snow) push_ui_snow(cursor_pos);
-
-	UpdateInfo();
-}
-
-void CRaceSelect::Mouse(int button, int state, int x, int y) {
-	if (state == 1) {
-		ClickGUI(x, y);
-
-		if (textbuttons[0]->focussed())
-			SetRaceConditions();
-		else if (textbuttons[1]->focussed())
-			State::manager.RequestEnterState(Regist);
-
-		if (random_btn->focussed()) {
-			mirror->SetValue(IRandom(0, 1));
-			light->SetValue(IRandom(0, 3));
-			snow->SetValue(IRandom(0, 3));
-			wind->SetValue(IRandom(0, 3));
-		}
-
-		UpdateInfo();
-	}
-}
-
-void CRaceSelect::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
-	if (release) return;
-	KeyGUI(key, release);
-	UpdateInfo();
-	switch (key) {
-		case sf::Keyboard::Escape:
-			State::manager.RequestEnterState(Regist);
-			break;
-		case sf::Keyboard::U:
-			param.ui_snow = !param.ui_snow;
-			break;
-		case sf::Keyboard::T:
-			g_game.force_treemap = !g_game.force_treemap;
-			break;
-		case sf::Keyboard::C:
-			g_game.treesize++;
-			if (g_game.treesize > 5) g_game.treesize = 1;
-			break;
-		case sf::Keyboard::V:
-			g_game.treevar++;
-			if (g_game.treevar > 5) g_game.treevar = 1;
-			break;
-		case sf::Keyboard::Return:
-			if (textbuttons[1]->focussed())
-				State::manager.RequestEnterState(Regist);
-			else
-				SetRaceConditions();
-			break;
-		default:
-			break;
-	}
 }
 
 void CRaceSelect::Jbutt(int button, bool pressed) {
 	if (!pressed) return;
 	switch (button) {
 		case 0: // A / Confirm
-			if (textbuttons[1]->focussed())
-				State::manager.RequestEnterState(Regist);
-			else
-				SetRaceConditions();
+			SetRaceConditions();
 			break;
 		case 1: // B / Back
-			State::manager.RequestEnterState(Regist);
 			break;
 	}
 }
 
 void CRaceSelect::Jaxis(int axis, float value) {
-	// Map digital / analog stick movement to menu navigation.
+	static int last_vert = 0;
+	static int last_horiz = 0;
+
 	if (axis == 1) { // vertical
-		if (value < -0.3) {
+		int dir = (value < -0.5f) ? -1 : (value > 0.5f) ? 1 : 0;
+		if (dir != 0 && dir != last_vert) {
 			if (course->focussed())
-				course->Key(sf::Keyboard::Up, false);
+				course->Action(dir < 0 ? ACT_UP : ACT_DOWN);
 			else
-				KeyGUI(sf::Keyboard::Up, false);
-		} else if (value > 0.3) {
-			if (course->focussed())
-				course->Key(sf::Keyboard::Down, false);
-			else
-				KeyGUI(sf::Keyboard::Down, false);
+				ActionGUI(dir < 0 ? ACT_UP : ACT_DOWN);
 		}
+		last_vert = dir;
 	} else if (axis == 0) { // horizontal
-		if (value < -0.3) {
-			if (course->focussed())
-				course->Key(sf::Keyboard::Up, false);
-			else
-				KeyGUI(sf::Keyboard::Left, false);
-		} else if (value > 0.3) {
-			if (course->focussed())
-				course->Key(sf::Keyboard::Down, false);
-			else
-				KeyGUI(sf::Keyboard::Right, false);
+		int dir = (value < -0.5f) ? -1 : (value > 0.5f) ? 1 : 0;
+		if (dir != 0 && dir != last_horiz) {
+			if (!course->focussed())
+				ActionGUI(dir < 0 ? ACT_LEFT : ACT_RIGHT);
 		}
+		last_horiz = dir;
 	}
 }
 
@@ -181,11 +84,9 @@ void CRaceSelect::Jaxis(int axis, float value) {
 static TArea area;
 static int framewidth, frameheight, frametop;
 static int prevtop, prevwidth, prevheight;
-static int boxleft, boxwidth;
-static int infotop;
+static int prevleft;
 
 void CRaceSelect::Enter() {
-	Winsys.ShowCursor(!param.ice_cursor);
 	Music.Play(param.menu_music, true);
 
 	framewidth = 550 * Winsys.scale;
@@ -193,28 +94,15 @@ void CRaceSelect::Enter() {
 	frametop = AutoYPosN(30);
 
 	area = AutoAreaN(30, 80, framewidth);
-	prevheight = 144 * Winsys.scale;
-	prevwidth = 192 * Winsys.scale;
-	boxwidth = framewidth - prevwidth - 20;
-	boxleft = area.right - boxwidth;
-	int icontop = frametop + 2*(frameheight + 20) - 5;
-	int iconsize = 32 * Winsys.scale;
-	int iconspace = (int)((iconsize + 6) * 1.5);
-	int iconsumwidth = iconspace * 4 + iconsize;
-	int iconleft = (Winsys.resolution.width - iconsumwidth) / 2;
-	infotop = icontop + iconsize + 6;
-	prevtop = infotop + 35*Winsys.scale;
+	prevheight = 288 * Winsys.scale;
+	prevwidth = 384 * Winsys.scale;
+	prevleft = area.left + (framewidth - prevwidth) / 2;
+	prevtop = AutoYPosN(44);
 	ResetGUI();
 
-	light = AddIconButton(iconleft, icontop, Tex.GetSFTexture(LIGHT_BUTT), iconsize, 3, (int)g_game.light_id);
-	snow = AddIconButton(iconleft + iconspace, icontop, Tex.GetSFTexture(SNOW_BUTT), iconsize, 3, g_game.snow_id);
-	wind = AddIconButton(iconleft + iconspace * 2, icontop, Tex.GetSFTexture(WIND_BUTT), iconsize, 3, g_game.wind_id);
-	mirror = AddIconButton(iconleft + iconspace * 3, icontop, Tex.GetSFTexture(MIRROR_BUTT), iconsize, 1, (int)g_game.mirrorred);
-	random_btn = AddIconButton(iconleft + iconspace * 4, icontop, Tex.GetSFTexture(RANDOM_BUTT), iconsize, 0, 0);
 	int siz = FT.AutoSizeN(5);
 	int len1 = FT.GetTextWidth(Trans.Text(13));
-	textbuttons[0] = AddTextButton(Trans.Text(13), area.right-len1-50, AutoYPosN(85), siz);
-	textbuttons[1] = AddTextButton(Trans.Text(8), area.left + 50, AutoYPosN(85), siz);
+	textbutton = AddTextButton(Trans.Text(13), area.right-len1-50, AutoYPosN(85), siz);
 	FT.AutoSizeN(4);
 
 	course = AddUpDown(area.left + framewidth + 8, frametop + frameheight + 20, 0, (int)Course.currentCourseList->size() - 1, g_game.course ? (int)Course.GetCourseIdx(g_game.course) : 0);
@@ -238,19 +126,7 @@ void CRaceSelect::Loop(float time_step) {
 	courseName->SetString((*Course.currentCourseList)[course->GetValue()].name);
 
 	if ((*Course.currentCourseList)[course->GetValue()].preview)
-		(*Course.currentCourseList)[course->GetValue()].preview->DrawFrame(area.left + 3, prevtop, prevwidth, prevheight, 3, colWhite);
-
-	DrawFrameX(area.right-boxwidth, prevtop-3, boxwidth, prevheight+6, 3, colBackgr, colWhite, 1.f);
-	FT.AutoSizeN(2);
-	FT.SetColor(colWhite);
-	int dist = FT.AutoDistanceN(0);
-	for (std::size_t i = 0; i<(*Course.currentCourseList)[course->GetValue()].num_lines; i++) {
-		FT.DrawString(boxleft + 8, prevtop + i*dist, (*Course.currentCourseList)[course->GetValue()].desc[i]);
-	}
-
-	FT.DrawString(CENTER, prevtop + prevheight + 10, Trans.Text(91) + ":  " + (*Course.currentCourseList)[course->GetValue()].author);
-
-	FT.DrawString(CENTER, infotop, info);
+		(*Course.currentCourseList)[course->GetValue()].preview->DrawFrame(prevleft, prevtop, prevwidth, prevheight, 3, colWhite);
 
 	if (g_game.force_treemap) {
 		FT.AutoSizeN(4);

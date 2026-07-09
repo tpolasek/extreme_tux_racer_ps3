@@ -36,6 +36,7 @@ GNU General Public License for more details.
 #include "game_ctrl.h"
 #include "game_over.h"
 #include "paused.h"
+#include "race_select.h"
 #include "reset.h"
 #include "winsys.h"
 #include "physics.h"
@@ -48,8 +49,6 @@ GNU General Public License for more details.
 
 CRacing Racing;
 
-static bool right_turn;
-static bool left_turn;
 static bool stick_turn;
 static float stick_turnfact;
 static bool key_paddling;
@@ -68,93 +67,6 @@ static bool trees = true;
 
 static int newsound = -1;
 static int lastsound = -1;
-
-void CRacing::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
-	switch (key) {
-		// steering flipflops
-		case sf::Keyboard::Up:
-                case sf::Keyboard::W:
-			key_paddling = !release;
-			break;
-		case sf::Keyboard::Down:
-                case sf::Keyboard::S:
-			key_braking = !release;
-			break;
-		case sf::Keyboard::Left:
-                case sf::Keyboard::A:
-			left_turn = !release;
-			break;
-		case sf::Keyboard::Right:
-                case sf::Keyboard::D:
-			right_turn = !release;
-			break;
-		case sf::Keyboard::Space:
-			key_charging = !release;
-			break;
-		case sf::Keyboard::T:
-			trick_modifier = !release;
-			break;
-
-		// mode changing and other actions
-		case sf::Keyboard::Escape:
-			if (!release) {
-				g_game.raceaborted = true;
-				State::manager.RequestEnterState(GameOver);
-			}
-			break;
-		case sf::Keyboard::P:
-			if (!release) State::manager.RequestEnterState(Paused);
-			break;
-		case sf::Keyboard::R:
-			if (!release) State::manager.RequestEnterState(Reset);
-			break;
-		case sf::Keyboard::C:
-			if (!release) Winsys.TakeScreenshot();
-			break;
-
-		// view changing
-		case sf::Keyboard::Num1:
-			if (!release) {
-				set_view_mode(g_game.player->ctrl, ABOVE);
-				param.view_mode = ABOVE;
-			}
-			break;
-		case sf::Keyboard::Num2:
-			if (!release) {
-				set_view_mode(g_game.player->ctrl, FOLLOW);
-				param.view_mode = FOLLOW;
-			}
-			break;
-		case sf::Keyboard::Num3:
-			if (!release) {
-				set_view_mode(g_game.player->ctrl, BEHIND);
-				param.view_mode = BEHIND;
-			}
-			break;
-
-		// toggle display settings
-		case sf::Keyboard::H:
-			if (!release) param.show_hud = !param.show_hud;
-			break;
-		case sf::Keyboard::F:
-			if (!release) param.display_fps = !param.display_fps;
-			break;
-		case sf::Keyboard::F5:
-			if (!release) sky = !sky;
-			break;
-		case sf::Keyboard::F6:
-			if (!release) fog = !fog;
-			break;
-		case sf::Keyboard::F7:
-			if (!release) terr = !terr;
-			break;
-		case sf::Keyboard::F8:
-			if (!release) trees = !trees;
-			break;
-		default:
-			break;
-	}
-}
 
 void CRacing::Jaxis(int axis, float value) {
 	if (axis == 0) { 	// left and right
@@ -198,6 +110,13 @@ void CRacing::Jbutt(int button, bool pressed) {
 				if(ctrl->gear >= 9){
 					ctrl->gear = 9;
 				}
+			}
+			break;
+
+		case 7: // Start button - exit to map selection
+			if (pressed) {
+				g_game.raceaborted = true;
+				State::manager.RequestEnterState(RaceSelect);
 			}
 			break;
 	}
@@ -249,8 +168,6 @@ void CRacing::Enter() {
 
 	key_paddling = false;
 	key_braking = false;
-	left_turn = false;
-	right_turn = false;
 	key_charging = false;
 	trick_modifier = false;
 	stick_paddling = false;
@@ -267,8 +184,6 @@ void CRacing::Enter() {
 	Music.PlayTheme(g_game.theme_id, MUS_RACING);
 
 	g_game.finish = false;
-
-	Winsys.KeyRepeat(false);
 }
 
 // -------------------- sound -----------------------------------------
@@ -306,11 +221,6 @@ static void PlayTerrainSound(CControl *ctrl, bool airborne) {
 static void CalcSteeringControls(CControl *ctrl, float time_step) {
 	if (stick_turn) {
 		ctrl->turn_fact = stick_turnfact;
-		ctrl->turn_animation += ctrl->turn_fact * 2 * time_step;
-		ctrl->turn_animation = clamp(-1.0, ctrl->turn_animation, 1.0);
-	} else if (left_turn ^ right_turn) {
-		if (left_turn) ctrl->turn_fact = -1.0;
-		else ctrl->turn_fact = 1.0;
 		ctrl->turn_animation += ctrl->turn_fact * 2 * time_step;
 		ctrl->turn_animation = clamp(-1.0, ctrl->turn_animation, 1.0);
 	} else {
@@ -365,8 +275,8 @@ static void CalcFinishControls(CControl *ctrl, float timestep, bool airborne) {
 
 static void CalcTrickControls(CControl *ctrl, float time_step, bool airborne) {
 	if (airborne && trick_modifier) {
-		if (left_turn) ctrl->roll_left = true;
-		if (right_turn) ctrl->roll_right = true;
+		if (stick_turnfact < -0.5f) ctrl->roll_left = true;
+		if (stick_turnfact >  0.5f) ctrl->roll_right = true;
 		if (key_paddling) ctrl->front_flip = true;
 		if (ctrl->is_braking) ctrl->back_flip = true;
 	}
@@ -435,7 +345,6 @@ void CRacing::Loop(float time_step) {
 }
 
 void CRacing::Exit() {
-	Winsys.KeyRepeat(true);
 	Sound.HaltAll();
 	break_track_marks();
 }

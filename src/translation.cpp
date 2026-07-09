@@ -160,8 +160,8 @@ void CTranslation::SetDefaultTranslations() {
 	texts[110] = "auto";
 }
 
-const sf::String& CTranslation::Text(std::size_t idx) const {
-	static const sf::String empty;
+const std::string& CTranslation::Text(std::size_t idx) const {
+	static const std::string empty;
 	if (idx >= NUM_COMMON_TEXTS) return empty;
 	return texts[idx];
 }
@@ -181,16 +181,15 @@ void CTranslation::LoadLanguages() {
 	std::size_t i = 1;
 	for (CSPList::const_iterator line = list.cbegin(); line != list.cend(); ++line, i++) {
 		languages[i].lang = SPStrN(*line, "lang", "en_GB");
-		std::string tmp = SPStrN(*line, "language", "English");
-		languages[i].language = sf::String::fromUtf8(tmp.cbegin(), tmp.cend());
+		languages[i].language = SPStrN(*line, "language", "English");
 	}
 
 	if (param.language == std::string::npos)
 		param.language = GetSystemDefaultLangIdx();
 }
 
-const sf::String& CTranslation::GetLanguage(std::size_t idx) const {
-	static const sf::String error = "error";
+const std::string& CTranslation::GetLanguage(std::size_t idx) const {
+	static const std::string error = "error";
 	if (idx >= languages.size()) return error;
 	return languages[idx].language;
 }
@@ -209,8 +208,7 @@ void CTranslation::LoadTranslations(std::size_t langidx) {
 	for (CSPList::const_iterator line = list.cbegin(); line != list.cend(); ++line) {
 		int idx = SPIntN(*line, "idx", -1);
 		if (idx >= 0 && idx < NUM_COMMON_TEXTS) {
-			std::string tmp = SPStrN(*line, "trans", texts[idx]);
-			texts[idx] = sf::String::fromUtf8(tmp.cbegin(), tmp.cend());
+			texts[idx] = SPStrN(*line, "trans", texts[idx]);
 		}
 	}
 }

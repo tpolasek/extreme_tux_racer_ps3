@@ -76,7 +76,7 @@ void GameOverMessage(const CControl *ctrl) {
 		else FT.SetSize(14);
 		FT.SetColor(colDBlue);
 
-		sf::String line = Trans.Text(84) + ":  ";
+		std::string line = Trans.Text(84) + ":  ";
 		FT.DrawString(firstMarker, topframe + 15, line);
 		line = Int_StrN(g_game.score);
 		line += "  pts";

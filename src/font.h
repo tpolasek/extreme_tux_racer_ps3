@@ -38,8 +38,8 @@ private:
 	unsigned int curr_size;
 	float curr_fact;		// the length factor
 
-	void DrawText(float x, float y, const sf::String& text, std::size_t font, unsigned int size) const;
-	void GetTextSize(const sf::String& text, float &x, float &y, std::size_t font, unsigned int size) const;
+	void DrawText(float x, float y, const std::string& text, std::size_t font, unsigned int size) const;
+	void GetTextSize(const std::string& text, float &x, float &y, std::size_t font, unsigned int size) const;
 public:
 	CFont();
 	~CFont();
@@ -65,14 +65,14 @@ public:
 	int AutoDistanceN(int rel_val) const;	// rel_val = relative dist
 
 	// draw
-	void DrawString(float x, float y, const sf::String &s) const; // sf::String class
-	void DrawString(float x, float y, const sf::String &s, const std::string &fontname, unsigned int size) const;
+	void DrawString(float x, float y, const std::string &s) const;
+	void DrawString(float x, float y, const std::string &s, const std::string &fontname, unsigned int size) const;
 
 	// metrics
-	void  GetTextSize(const sf::String& text, float &x, float &y) const;
-	void  GetTextSize(const sf::String& text, float &x, float &y, const std::string &fontname, unsigned int size) const;
-	float GetTextWidth(const sf::String& text) const;
-	float GetTextWidth(const sf::String& text, const std::string &fontname, unsigned int size) const;
+	void  GetTextSize(const std::string& text, float &x, float &y) const;
+	void  GetTextSize(const std::string& text, float &x, float &y, const std::string &fontname, unsigned int size) const;
+	float GetTextWidth(const std::string& text) const;
+	float GetTextWidth(const std::string& text, const std::string &fontname, unsigned int size) const;
 
 	static std::vector<std::string> MakeLineList(const char *source, float width);
 };

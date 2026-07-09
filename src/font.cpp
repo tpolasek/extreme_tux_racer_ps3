@@ -26,8 +26,6 @@ GNU General Public License for more details.
 #include "winsys.h"
 #include "gui.h"
 
-#define USE_UNICODE 1
-
 // --------------------------------------------------------------------
 // First some common function used for textboxes and called by
 // CFont::MakeLineList. This bundle of functions generates
@@ -56,7 +54,7 @@ static std::size_t MakeLine(std::size_t first, const std::vector<std::string>& w
 
 	float spacelng = FT.GetTextWidth("a a") - FT.GetTextWidth("aa");
 	while (last < wordlist.size()) {
-		float wordlng = FT.GetTextWidth(sf::String::fromUtf8(wordlist[last].cbegin(), wordlist[last].cend()));
+		float wordlng = FT.GetTextWidth(wordlist[last]);
 		lng += wordlng;
 		lng += spacelng;
 		if (lng >= width && first != last) // If first == last, we write beyond line
@@ -192,7 +190,7 @@ int CFont::AutoDistanceN(int rel_val) const {
 
 // -------------------- draw (x, y, text) -----------------------------
 
-void CFont::DrawText(float x, float y, const sf::String& text, std::size_t font, unsigned int size) const {
+void CFont::DrawText(float x, float y, const std::string& text, std::size_t font, unsigned int size) const {
 	if (font >= fonts.size()) return;
 
 	sf::Text temp(text, *fonts[font], size);
@@ -204,18 +202,18 @@ void CFont::DrawText(float x, float y, const sf::String& text, std::size_t font,
 	Winsys.draw(temp);
 }
 
-void CFont::DrawString(float x, float y, const sf::String &s) const {
+void CFont::DrawString(float x, float y, const std::string &s) const {
 	DrawText(x, y, s, curr_font, curr_size);
 }
 
-void CFont::DrawString(float x, float y, const sf::String& s, const std::string &fontname, unsigned int size) const {
+void CFont::DrawString(float x, float y, const std::string& s, const std::string &fontname, unsigned int size) const {
 	DrawText(x, y, s, GetFontIdx(fontname), size);
 }
 
 
 // --------------------- metrics --------------------------------------
 
-void CFont::GetTextSize(const sf::String& text, float &x, float &y, std::size_t font, unsigned int size) const {
+void CFont::GetTextSize(const std::string& text, float &x, float &y, std::size_t font, unsigned int size) const {
 	if (font >= fonts.size()) { x = 0; y = 0; return; }
 
 	sf::Text temp(text, *fonts[font], size);
@@ -223,21 +221,21 @@ void CFont::GetTextSize(const sf::String& text, float &x, float &y, std::size_t 
 	y = temp.getGlobalBounds().height;
 }
 
-void CFont::GetTextSize(const sf::String& text, float &x, float &y, const std::string &fontname, unsigned int size) const {
+void CFont::GetTextSize(const std::string& text, float &x, float &y, const std::string &fontname, unsigned int size) const {
 	GetTextSize(text, x, y, GetFontIdx(fontname), size);
 }
 
-void CFont::GetTextSize(const sf::String& text, float &x, float &y) const {
+void CFont::GetTextSize(const std::string& text, float &x, float &y) const {
 	GetTextSize(text, x, y, curr_font, curr_size);
 }
 
-float CFont::GetTextWidth(const sf::String& text) const {
+float CFont::GetTextWidth(const std::string& text) const {
 	float x, y;
 	GetTextSize(text, x, y, curr_font, curr_size);
 	return x;
 }
 
-float CFont::GetTextWidth(const sf::String& text, const std::string &fontname, unsigned int size) const {
+float CFont::GetTextWidth(const std::string& text, const std::string &fontname, unsigned int size) const {
 	std::size_t temp_font = GetFontIdx(fontname);
 	float x, y;
 	GetTextSize(text, x, y, temp_font, size);

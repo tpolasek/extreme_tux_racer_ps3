@@ -52,7 +52,7 @@ TWidget::TWidget(int x, int y, int width, int height, bool interactive_)
 }
 
 
-TLabel::TLabel(const sf::String& string, int x, int y, const sf::Color& color)
+TLabel::TLabel(const std::string& string, int x, int y, const sf::Color& color)
 	: TWidget(x, y, 0, 0, false)
 	, text(string, FT.getCurrentFont(), FT.GetSize()) {
 	if (x == CENTER)
@@ -83,12 +83,12 @@ sf::Vector2f TLabel::GetSize() const {
 
 }
 
-TLabel* AddLabel(const sf::String& string, int x, int y, const sf::Color& color) {
+TLabel* AddLabel(const std::string& string, int x, int y, const sf::Color& color) {
 	return static_cast<TLabel*>(AddWidget(new TLabel(string, x, y, color)));
 }
 
 
-TFramedText::TFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const sf::String& string, unsigned int ftsize, bool borderFocus_)
+TFramedText::TFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_)
 	: TWidget(x, y, width, height, false)
 	, frame(sf::Vector2f(width - line * 2, height - line * 2))
 	, text(string, FT.getCurrentFont(), ftsize)
@@ -142,11 +142,11 @@ void TFramedText::Draw() const {
 	Winsys.draw(text);
 }
 
-TFramedText* AddFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const sf::String& text, unsigned int ftsize, bool borderFocus) {
+TFramedText* AddFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus) {
 	return static_cast<TFramedText*>(AddWidget(new TFramedText(x, y, width, height, line, backcol, text, ftsize, borderFocus)));
 }
 
-TTextButton::TTextButton(int x, int y, const sf::String& text_, int ftsize)
+TTextButton::TTextButton(int x, int y, const std::string& text_, int ftsize)
 	: TWidget(x, y, 0, 0)
 	, text(text_, FT.getCurrentFont(), ftsize) {
 	if (ftsize < 0) text.setCharacterSize(FT.AutoSizeN(4));
@@ -171,11 +171,11 @@ void TTextButton::Draw() const {
 	Winsys.draw(text);
 }
 
-TTextButton* AddTextButton(const sf::String& text, int x, int y, int ftsize) {
+TTextButton* AddTextButton(const std::string& text, int x, int y, int ftsize) {
 	return static_cast<TTextButton*>(AddWidget(new TTextButton(x, y, text, ftsize)));
 }
 
-TTextButton* AddTextButtonN(const sf::String& text, int x, int y, int rel_ftsize) {
+TTextButton* AddTextButtonN(const std::string& text, int x, int y, int rel_ftsize) {
 	unsigned int siz = FT.AutoSizeN(rel_ftsize);
 	return AddTextButton(text, x, y, siz);
 }

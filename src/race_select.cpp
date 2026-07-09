@@ -130,7 +130,7 @@ void CRaceSelect::Loop(float time_step) {
 
 	if (g_game.force_treemap) {
 		FT.AutoSizeN(4);
-		static const sf::String forcetrees = "Load trees.png";
+		static const std::string forcetrees = "Load trees.png";
 		std::string sizevar = "Size: ";
 		sizevar += Int_StrN(g_game.treesize);
 		sizevar += " Variation: ";

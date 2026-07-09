@@ -31,19 +31,19 @@ Name convention:
 
 struct TLang {
 	std::string lang;
-	sf::String language;
+	std::string language;
 };
 
 class CTranslation {
 private:
-	sf::String texts[NUM_COMMON_TEXTS];
+	std::string texts[NUM_COMMON_TEXTS];
 public:
 	std::vector<TLang> languages;
 
 	void LoadLanguages();
-	const sf::String& GetLanguage(std::size_t idx) const;
+	const std::string& GetLanguage(std::size_t idx) const;
 	void SetDefaultTranslations();
-	const sf::String& Text(std::size_t idx) const;
+	const std::string& Text(std::size_t idx) const;
 	void LoadTranslations(std::size_t langidx);
 	void ChangeLanguage(std::size_t langidx);
 	static std::string GetSystemDefaultLang();

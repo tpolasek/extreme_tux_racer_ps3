@@ -77,35 +77,35 @@ public:
 class TLabel : public TWidget {
 	sf::Text text;
 public:
-	TLabel(const sf::String& string, int x, int y, const sf::Color& color);
+	TLabel(const std::string& string, int x, int y, const sf::Color& color);
 	void Focussed(bool masterFocus);
 	void Draw() const;
 	sf::Vector2f GetSize() const;
 };
-TLabel* AddLabel(const sf::String& string, int x, int y, const sf::Color& color);
+TLabel* AddLabel(const std::string& string, int x, int y, const sf::Color& color);
 
 class TFramedText : public TWidget {
 	sf::RectangleShape frame;
 	sf::Text text;
 	bool borderFocus;
 public:
-	TFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const sf::String& string, unsigned int ftsize, bool borderFocus_ = false);
+	TFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_ = false);
 	void Focussed(bool masterFocus);
 	void Activated();
 	void Draw() const;
-	void SetString(const sf::String& string) { text.setString(string); }
+	void SetString(const std::string& string) { text.setString(string); }
 };
-TFramedText* AddFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const sf::String& text, unsigned int ftsize, bool borderFocus = false);
+TFramedText* AddFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus = false);
 
 class TTextButton : public TWidget {
 	sf::Text text;
 public:
-	TTextButton(int x, int y, const sf::String& text_, int ftsize);
+	TTextButton(int x, int y, const std::string& text_, int ftsize);
 	void Focussed();
 	void Draw() const;
 };
-TTextButton* AddTextButton(const sf::String& text, int x, int y, int ftsize);
-TTextButton* AddTextButtonN(const sf::String& text, int x, int y, int rel_ftsize);
+TTextButton* AddTextButton(const std::string& text, int x, int y, int ftsize);
+TTextButton* AddTextButtonN(const std::string& text, int x, int y, int rel_ftsize);
 
 class TArrow : public TWidget {
 	sf::Sprite sprite;

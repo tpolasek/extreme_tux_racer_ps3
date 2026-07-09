@@ -6,6 +6,7 @@
 #include <malloc.h>
 #include <ppu-types.h>
 #include <sys/process.h>
+#include <sys/tty.h>
 #include <io/pad.h>
 #include <rsx/rsx.h>
 #include <sysutil/sysutil.h>
@@ -14,6 +15,11 @@
 #include "mesh.h"
 #include "mathutils.h"
 #include "texture_data.h"
+
+static inline void ttyTrace(const char *msg) {
+	u32 w = 0;
+	sysTtyWrite(0, msg, __builtin_strlen(msg), &w);
+}
 
 SYS_PROCESS_PARAM(1001, 0x100000);
 
@@ -72,8 +78,12 @@ static void init_texture()
 	u8 *buffer;
 	const u8 *data = checkerboard.pixel_data;
 
+	ttyTrace("[trace] init_texture: enter\n");
 	texture_buffer = (u32*)rsxMemalign(128, checkerboard.width * checkerboard.height * 4);
-	if (!texture_buffer) return;
+	if (!texture_buffer) {
+		ttyTrace("[trace] init_texture: rsxMemalign FAILED\n");
+		return;
+	}
 
 	rsxAddressToOffset(texture_buffer, &texture_offset);
 
@@ -84,6 +94,7 @@ static void init_texture()
 		buffer[i + 2] = *data++;
 		buffer[i + 3] = *data++;
 	}
+	ttyTrace("[trace] init_texture: done\n");
 }
 
 static void setTexture(u8 texUnit)
@@ -157,12 +168,17 @@ void init_shader()
 {
 	u32 fpsize = 0, vpsize = 0;
 
+	ttyTrace("[trace] init_shader: loading vertex program\n");
 	vpo = (rsxVertexProgram*)etr_vp_vpo;
 	rsxVertexProgramGetUCode(vpo, &vp_ucode, &vpsize);
 
 	projMatrix = rsxVertexProgramGetConst(vpo, "projMatrix");
 	mvMatrix = rsxVertexProgramGetConst(vpo, "modelViewMatrix");
 
+	if (!projMatrix) ttyTrace("[trace] init_shader: projMatrix is NULL!\n");
+	if (!mvMatrix) ttyTrace("[trace] init_shader: mvMatrix is NULL!\n");
+
+	ttyTrace("[trace] init_shader: loading fragment program\n");
 	fpo = (rsxFragmentProgram*)etr_fp_fpo;
 	rsxFragmentProgramGetUCode(fpo, &fp_ucode, &fpsize);
 
@@ -178,17 +194,28 @@ void init_shader()
 	spec          = rsxFragmentProgramGetConst(fpo, "shininess");
 	Ks            = rsxFragmentProgramGetConst(fpo, "Ks");
 	Kd            = rsxFragmentProgramGetConst(fpo, "Kd");
+
+	if (!textureUnit) ttyTrace("[trace] init_shader: textureUnit is NULL!\n");
+	if (!eyePosition) ttyTrace("[trace] init_shader: eyePosition is NULL!\n");
+	if (!globalAmbient) ttyTrace("[trace] init_shader: globalAmbient is NULL!\n");
+	if (!litPosition) ttyTrace("[trace] init_shader: litPosition is NULL!\n");
+	if (!litColor) ttyTrace("[trace] init_shader: litColor is NULL!\n");
+	if (!spec) ttyTrace("[trace] init_shader: spec is NULL!\n");
+	if (!Ks) ttyTrace("[trace] init_shader: Ks is NULL!\n");
+	if (!Kd) ttyTrace("[trace] init_shader: Kd is NULL!\n");
+
+	ttyTrace("[trace] init_shader: done\n");
 }
 
 static void drawMesh(SMeshBuffer *mesh, const Matrix4& modelMatrix)
 {
 	u32 offset;
-	Matrix4 viewMatrix = makeLookAt(eye_pos, eye_target, up_vec);
+	Matrix4 viewMatrix = Matrix4::lookAt(eye_pos, eye_target, up_vec);
 	Matrix4 modelViewMatrix = transpose(viewMatrix * modelMatrix);
 
 	Matrix4 modelMatrixIT = inverse(modelMatrix);
-	Vector4 objEyePos = modelMatrixIT * Vector4(eye_pos.getX(), eye_pos.getY(), eye_pos.getZ(), 1.0f);
-	Vector4 objLightPos = modelMatrixIT * Vector4(5.0f, 10.0f, 5.0f, 1.0f);
+	Vector4 objEyePos = modelMatrixIT * eye_pos;
+	Vector4 objLightPos = modelMatrixIT * Point3(5.0f, 10.0f, 5.0f);
 
 	float globalAmbientColor[3] = {0.15f, 0.15f, 0.15f};
 	float lightColorVal[3] = {0.9f, 0.9f, 0.9f};
@@ -233,6 +260,7 @@ static void drawMesh(SMeshBuffer *mesh, const Matrix4& modelMatrix)
 void drawFrame()
 {
 	static float rot = 0.0f;
+	static int frameCount = 0;
 
 	setDrawEnv();
 	setTexture(textureUnit->index);
@@ -253,6 +281,11 @@ void drawFrame()
 
 	rot += 1.5f;
 	if (rot >= 360.0f) rot -= 360.0f;
+
+	if (frameCount == 0) {
+		ttyTrace("[trace] drawFrame: first frame drawn\n");
+	}
+	frameCount++;
 }
 
 int main(int argc, const char *argv[])
@@ -261,9 +294,12 @@ int main(int argc, const char *argv[])
 	padData paddata;
 	void *host_addr = memalign(HOST_ADDR_ALIGNMENT, HOSTBUFFER_SIZE);
 
+	ttyTrace("[trace] main: starting\n");
 	printf("ETR PS3 Demo started...\n");
 
 	init_screen(host_addr, HOSTBUFFER_SIZE);
+	ttyTrace("[trace] main: init_screen done\n");
+
 	ioPadInit(7);
 	init_shader();
 	init_texture();
@@ -271,15 +307,19 @@ int main(int argc, const char *argv[])
 	sphere = createSphere(2.0f, 24, 24);
 	ground = createQuad(20.0f);
 
+	ttyTrace("[trace] main: meshes created\n");
+
 	atexit(program_exit_callback);
 	sysUtilRegisterCallback(0, sysutil_exit_callback, NULL);
 
-	P = makePerspective(DEGTORAD(45.0f), aspect_ratio, 0.1f, 100.0f);
+	P = transpose(Matrix4::perspective(DEGTORAD(45.0f), aspect_ratio, 1.0f, 3000.0f));
+	ttyTrace("[trace] main: perspective matrix set\n");
 
 	setDrawEnv();
 	setRenderTarget(curr_fb);
 
 	running = 1;
+	ttyTrace("[trace] main: entering main loop\n");
 	while (running) {
 		sysUtilCheckCallback();
 
@@ -302,6 +342,7 @@ int main(int argc, const char *argv[])
 	}
 
 done:
+	ttyTrace("[trace] main: exiting\n");
 	printf("ETR PS3 Demo done.\n");
 	program_exit_callback();
 	return 0;

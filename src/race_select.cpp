@@ -30,15 +30,13 @@ GNU General Public License for more details.
 #include "font.h"
 #include "translation.h"
 #include "spx.h"
-#include "game_type_select.h"
+#include "regist.h"
 #include "loading.h"
 #include "winsys.h"
 
 CRaceSelect RaceSelect;
 
-static TUpDown* courseGroup;
 static TUpDown* course;
-static TFramedText* courseGroupName;
 static TFramedText* courseName;
 static TIconButton* light;
 static TIconButton* snow;
@@ -47,7 +45,6 @@ static TIconButton* mirror;
 static TIconButton* random_btn;
 static TWidget* textbuttons[2];
 static sf::String info;
-static int prevGroup = 0;
 
 static void UpdateInfo() {
 	if (mirror->focus && mirror->GetValue() < 2)
@@ -72,7 +69,6 @@ void SetRaceConditions() {
 
 	g_game.course = &(*Course.currentCourseList)[course->GetValue()];
 	g_game.theme_id = (*Course.currentCourseList)[course->GetValue()].music_theme;
-	g_game.game_type = PRACTICING;
 	State::manager.RequestEnterState(Loading);
 }
 
@@ -91,7 +87,7 @@ void CRaceSelect::Mouse(int button, int state, int x, int y) {
 		if (textbuttons[0]->focussed())
 			SetRaceConditions();
 		else if (textbuttons[1]->focussed())
-			State::manager.RequestEnterState(GameTypeSelect);
+			State::manager.RequestEnterState(Regist);
 
 		if (random_btn->focussed()) {
 			mirror->SetValue(IRandom(0, 1));
@@ -110,7 +106,7 @@ void CRaceSelect::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
 	UpdateInfo();
 	switch (key) {
 		case sf::Keyboard::Escape:
-			State::manager.RequestEnterState(GameTypeSelect);
+			State::manager.RequestEnterState(Regist);
 			break;
 		case sf::Keyboard::U:
 			param.ui_snow = !param.ui_snow;
@@ -128,12 +124,56 @@ void CRaceSelect::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
 			break;
 		case sf::Keyboard::Return:
 			if (textbuttons[1]->focussed())
-				State::manager.RequestEnterState(GameTypeSelect);
+				State::manager.RequestEnterState(Regist);
 			else
 				SetRaceConditions();
 			break;
 		default:
 			break;
+	}
+}
+
+void CRaceSelect::Jbutt(int button, bool pressed) {
+	if (!pressed) return;
+	switch (button) {
+		case 0: // A / Confirm
+			if (textbuttons[1]->focussed())
+				State::manager.RequestEnterState(Regist);
+			else
+				SetRaceConditions();
+			break;
+		case 1: // B / Back
+			State::manager.RequestEnterState(Regist);
+			break;
+	}
+}
+
+void CRaceSelect::Jaxis(int axis, float value) {
+	// Map digital / analog stick movement to menu navigation.
+	if (axis == 1) { // vertical
+		if (value < -0.3) {
+			if (course->focussed())
+				course->Key(sf::Keyboard::Up, false);
+			else
+				KeyGUI(sf::Keyboard::Up, false);
+		} else if (value > 0.3) {
+			if (course->focussed())
+				course->Key(sf::Keyboard::Down, false);
+			else
+				KeyGUI(sf::Keyboard::Down, false);
+		}
+	} else if (axis == 0) { // horizontal
+		if (value < -0.3) {
+			if (course->focussed())
+				course->Key(sf::Keyboard::Up, false);
+			else
+				KeyGUI(sf::Keyboard::Left, false);
+		} else if (value > 0.3) {
+			if (course->focussed())
+				course->Key(sf::Keyboard::Down, false);
+			else
+				KeyGUI(sf::Keyboard::Right, false);
+		}
 	}
 }
 
@@ -177,8 +217,6 @@ void CRaceSelect::Enter() {
 	textbuttons[1] = AddTextButton(Trans.Text(8), area.left + 50, AutoYPosN(85), siz);
 	FT.AutoSizeN(4);
 
-	courseGroup = AddUpDown(area.left + framewidth + 8, frametop, 0, (int)Course.CourseLists.size() - 1, prevGroup);
-	courseGroupName = AddFramedText(area.left, frametop, framewidth, frameheight, 3, colMBackgr, Course.currentCourseList->name, FT.GetSize(), true);
 	course = AddUpDown(area.left + framewidth + 8, frametop + frameheight + 20, 0, (int)Course.currentCourseList->size() - 1, g_game.course ? (int)Course.GetCourseIdx(g_game.course) : 0);
 	courseName = AddFramedText(area.left, frametop + frameheight + 20, framewidth, frameheight, 3, colMBackgr, "", FT.GetSize(), true);
 
@@ -196,16 +234,6 @@ void CRaceSelect::Loop(float time_step) {
 
 	DrawGUIBackground(Winsys.scale);
 
-	if (courseGroup->GetValue() != prevGroup) {
-		prevGroup = courseGroup->GetValue();
-		Course.currentCourseList = Course.getGroup((std::size_t)courseGroup->GetValue());
-		g_game.course = nullptr;
-		course->SetValue(0);
-		course->SetMaximum((int)Course.currentCourseList->size()-1);
-		courseGroupName->SetString(Course.currentCourseList->name);
-	}
-	// selected course
-	courseGroupName->Focussed(courseGroup->focussed());
 	courseName->Focussed(course->focussed());
 	courseName->SetString((*Course.currentCourseList)[course->GetValue()].name);
 

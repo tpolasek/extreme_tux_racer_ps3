@@ -639,6 +639,11 @@ bool CCourseList::Load(const std::string& dir) {
 		return false;
 	}
 
+	// Determine the group name from the directory's basename.
+	std::string groupName = dir;
+	std::size_t slashPos = dir.find_last_of("/\\");
+	if (slashPos != std::string::npos) groupName = dir.substr(slashPos + 1);
+
 	CSPList paramlist;
 
 	courses.resize(list.size());
@@ -646,6 +651,7 @@ bool CCourseList::Load(const std::string& dir) {
 	for (CSPList::const_iterator line1 = list.cbegin(); line1 != list.cend(); ++line1, i++) {
 		courses[i].name = SPStrN(*line1, "name");
 		courses[i].dir = SPStrN(*line1, "dir", "nodir");
+		courses[i].group = groupName;
 
 		std::string coursepath = MakePathStr(dir, courses[i].dir);
 		if (DirExists(coursepath.c_str())) {
@@ -705,12 +711,26 @@ bool CCourse::LoadCourseList() {
 		return false;
 	}
 
+	// Merge all course groups (e.g. "default" and "extras") into a single
+	// flat list named "all" so the player only needs one selector.
+	CCourseList merged;
+	merged.name = "all";
+
 	for (CSPList::const_iterator line = list.cbegin(); line != list.cend(); ++line) {
 		std::string dir = SPStrN(*line, "dir", "nodir");
-		CourseLists[dir].Load(MakePathStr(param.common_course_dir, dir));
-		CourseLists[dir].name = dir;
+		std::string groupPath = MakePathStr(param.common_course_dir, dir);
+		CCourseList group;
+		group.Load(groupPath);
+		for (std::size_t i = 0; i < group.size(); i++) {
+			// Transfer ownership of the preview texture to avoid double-free.
+			merged.courses.push_back(group.courses[i]);
+			group.courses[i].preview = nullptr;
+		}
 	}
-	currentCourseList = &CourseLists["default"];
+
+	CourseLists.clear();
+	CourseLists["all"] = std::move(merged);
+	currentCourseList = &CourseLists["all"];
 	return true;
 }
 
@@ -740,7 +760,7 @@ bool CCourse::LoadCourse(TCourse* course) {
 	if (course != curr_course || g_game.force_treemap) {
 		ResetCourse();
 		curr_course = course;
-		CourseDir = param.common_course_dir + SEP + currentCourseList->name + SEP + curr_course->dir;
+		CourseDir = param.common_course_dir + SEP + curr_course->group + SEP + curr_course->dir;
 
 		start_pt.x = course->start.x;
 		start_pt.y = -course->start.y;

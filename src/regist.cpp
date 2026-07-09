@@ -28,24 +28,25 @@ GNU General Public License for more details.
 #include "font.h"
 #include "game_ctrl.h"
 #include "translation.h"
-#include "game_type_select.h"
-#include "newplayer.h"
+#include "race_select.h"
 #include "winsys.h"
 
 CRegist Regist;
 
-static TWidget* textbuttons[2];
-static TUpDown* player;
 static TUpDown* character;
+static TWidget* textbutton;
+
+// The single hardcoded player name.
+static const std::string hardcodedName = "bunny";
 
 void QuitRegistration() {
 	Players.ResetControls();
-	Players.AllocControl(player->GetValue());
-	g_game.player = Players.GetPlayer(player->GetValue());
+	Players.AllocControl(0);
+	g_game.player = Players.GetPlayer(0);
 
 	g_game.character = &Char.CharList[character->GetValue()];
 	Char.FreeCharacterPreviews(); // From here on, character previews are no longer required
-	State::manager.RequestEnterState(GameTypeSelect);
+	State::manager.RequestEnterState(RaceSelect);
 }
 
 void CRegist::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
@@ -56,10 +57,7 @@ void CRegist::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
 			State::manager.RequestQuit();
 			break;
 		case sf::Keyboard::Return:
-			if (focussed == textbuttons[1]) {
-				g_game.player = Players.GetPlayer(player->GetValue());
-				State::manager.RequestEnterState(NewPlayer);
-			} else QuitRegistration();
+			QuitRegistration();
 			break;
 		default:
 			break;
@@ -69,12 +67,8 @@ void CRegist::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
 void CRegist::Mouse(int button, int state, int x, int y) {
 	if (state == 1) {
 		TWidget* focussed = ClickGUI(x, y);
-		if (focussed == textbuttons[0])
+		if (focussed == textbutton)
 			QuitRegistration();
-		else if (focussed == textbuttons[1]) {
-			g_game.player = Players.GetPlayer(player->GetValue());
-			State::manager.RequestEnterState(NewPlayer);
-		}
 	}
 }
 
@@ -84,12 +78,34 @@ void CRegist::Motion(int x, int y) {
 	if (param.ui_snow) push_ui_snow(cursor_pos);
 }
 
+void CRegist::Jbutt(int button, bool pressed) {
+	if (!pressed) return;
+	switch (button) {
+		case 0: // A / Confirm
+			QuitRegistration();
+			break;
+		case 1: // B / Back
+			State::manager.RequestQuit();
+			break;
+	}
+}
+
+void CRegist::Jaxis(int axis, float value) {
+	if (axis == 1) { // vertical axis (D-pad / left stick up-down)
+		if (value < -0.3) {
+			// Up navigation: previous character
+			character->Key(sf::Keyboard::Up, false);
+		} else if (value > 0.3) {
+			// Down navigation: next character
+			character->Key(sf::Keyboard::Down, false);
+		}
+	}
+}
+
 static int framewidth, frameheight, arrowwidth;
 static TArea area;
 static double texsize;
-static TLabel* sHelpPlayer;
 static TLabel* sHelpCharacter;
-static TFramedText* sPlayerFrame;
 static TFramedText* sCharFrame;
 
 void CRegist::Enter() {
@@ -99,25 +115,25 @@ void CRegist::Enter() {
 	framewidth = (int)(Winsys.scale * 280);
 	frameheight = (int)(Winsys.scale * 50);
 	arrowwidth = 70*Winsys.scale;
-	int sumwidth = framewidth * 2 + arrowwidth * 2;
-	area = AutoAreaN(30, 80, sumwidth);
+	area = AutoAreaN(30, 80, framewidth);
 	texsize = 128 * Winsys.scale;
 
 	ResetGUI();
-	player = AddUpDown(area.left + framewidth + 8, area.top, 0, (int)Players.numPlayers() - 1, (int)g_game.start_player);
-	character = AddUpDown(area.left + framewidth * 2 + arrowwidth + 8, area.top, 0, (int)Char.CharList.size() - 1, 0);
+	character = AddUpDown(area.left + framewidth + 8, area.top, 0, (int)Char.CharList.size() - 1, 0);
 	int siz = FT.AutoSizeN(5);
-	textbuttons[0] = AddTextButton(Trans.Text(60), CENTER, AutoYPosN(62), siz);
-	textbuttons[1] = AddTextButton(Trans.Text(61), CENTER, AutoYPosN(70), siz);
+	textbutton = AddTextButton(Trans.Text(60), CENTER, AutoYPosN(70), siz);
 
 	FT.AutoSizeN(3);
 	int top = AutoYPosN(24);
-	sHelpPlayer = AddLabel(Trans.Text(58), area.left, top, colWhite);
-	sHelpCharacter = AddLabel(Trans.Text(59), area.left + framewidth + arrowwidth, top, colWhite);
+	sHelpCharacter = AddLabel(Trans.Text(59), area.left, top, colWhite);
 
 	FT.AutoSizeN(4);
-	sPlayerFrame = AddFramedText(area.left, area.top, framewidth, frameheight, 3, colMBackgr, "", FT.GetSize());
-	sCharFrame = AddFramedText(area.left + framewidth + arrowwidth, area.top, framewidth, frameheight, 3, colMBackgr, "", FT.GetSize());
+	sCharFrame = AddFramedText(area.left, area.top, framewidth, frameheight, 3, colMBackgr, "", FT.GetSize());
+
+	// Hardcode the single player name as "bunny".
+	Players.SetSinglePlayer(hardcodedName);
+
+	SetFocus(textbutton);
 }
 
 void CRegist::Loop(float time_step) {
@@ -130,12 +146,6 @@ void CRegist::Loop(float time_step) {
 	}
 
 	DrawGUIBackground(Winsys.scale);
-
-	const TPlayer* tplayer = Players.GetPlayer(player->GetValue());
-	sPlayerFrame->SetString(tplayer->name);
-	sPlayerFrame->Focussed(player->focussed());
-	tplayer->avatar->texture->DrawFrame(
-	    area.left + 60, AutoYPosN(40), texsize, texsize, 3, colWhite);
 
 	sCharFrame->SetString(Char.CharList[character->GetValue()].name);
 	sCharFrame->Focussed(character->focussed());

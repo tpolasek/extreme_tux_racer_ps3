@@ -30,7 +30,6 @@ GNU General Public License for more details.
 #include "font.h"
 #include "game_ctrl.h"
 #include "translation.h"
-#include "score.h"
 #include "regist.h"
 #include "winsys.h"
 
@@ -82,11 +81,8 @@ void CSplashScreen::Loop(float time_step) {
 			reason += Trans.Text(95) + "\n";
 		if (Env.LoadEnvironmentList()) {
 			if (Course.LoadCourseList()) {
-				Score.LoadHighScore();  // after LoadCourseList !!!
-				Events.LoadEventList();
-
-				if (Players.LoadAvatars()) {  // before LoadPlayers !!!
-					Players.LoadPlayers();
+				if (Players.LoadAvatars()) {
+					// Player list will be set on the Regist screen.
 				} else
 					reason += Trans.Text(96) + "\n";
 			} else

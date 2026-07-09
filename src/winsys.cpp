@@ -24,7 +24,6 @@ GNU General Public License for more details.
 #include "winsys.h"
 #include "course.h"
 #include "game_ctrl.h"
-#include "score.h"
 #include "ogl.h"
 #include "translation.h"
 #include <iostream>
@@ -136,9 +135,7 @@ void CWinsys::KeyRepeat(bool repeat) {
 }
 
 void CWinsys::Quit() {
-	Score.SaveHighScore();
 	SaveMessages();
-	if (g_game.argument < 1) Players.SavePlayers();
 	window.close();
 }
 

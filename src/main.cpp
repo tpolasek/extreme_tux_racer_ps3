@@ -47,14 +47,12 @@ void InitGame(int argc, char **argv) {
 	}
 
 	g_game.player = nullptr;
-	g_game.start_player = 0;
 	g_game.course = nullptr;
 	g_game.mirrorred = false;
 	g_game.character = nullptr;
 	g_game.location_id = 0;
 	g_game.light_id = 0;
 	g_game.snow_id = 0;
-	g_game.cup = 0;
 	g_game.theme_id = 0;
 	g_game.force_treemap = false;
 	g_game.treesize = 3;

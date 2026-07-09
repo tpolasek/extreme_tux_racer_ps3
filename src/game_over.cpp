@@ -24,6 +24,7 @@ GNU General Public License for more details.
 #include "ogl.h"
 #include "view.h"
 #include "course_render.h"
+#include "course.h"
 #include "env.h"
 #include "hud.h"
 #include "track_marks.h"
@@ -33,9 +34,7 @@ GNU General Public License for more details.
 #include "spx.h"
 #include "game_ctrl.h"
 #include "translation.h"
-#include "score.h"
 #include "race_select.h"
-#include "event.h"
 #include "winsys.h"
 #include "physics.h"
 #include "tux.h"
@@ -43,14 +42,9 @@ GNU General Public License for more details.
 CGameOver GameOver;
 
 static CKeyframe *final_frame;
-static int highscore_pos = MAX_SCORES;
 
 void QuitGameOver() {
-	if (g_game.game_type == PRACTICING) {
-		State::manager.RequestEnterState(RaceSelect);
-	} else {
-		State::manager.RequestEnterState(Event);
-	}
+	State::manager.RequestEnterState(RaceSelect);
 }
 
 void CGameOver::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
@@ -60,6 +54,10 @@ void CGameOver::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
 
 void CGameOver::Mouse(int button, int state, int x, int y) {
 	QuitGameOver();
+}
+
+void CGameOver::Jbutt(int button, bool pressed) {
+	if (pressed && button == 0) QuitGameOver();
 }
 
 
@@ -85,8 +83,7 @@ void GameOverMessage(const CControl *ctrl) {
 
 		if (param.use_papercut_font > 0) FT.SetSize(20);
 		else FT.SetSize(14);
-		if (g_game.race_result >= 0 || g_game.game_type != CUPRACING) FT.SetColor(colDBlue);
-		else FT.SetColor(colDRed);
+		FT.SetColor(colDBlue);
 
 		sf::String line = Trans.Text(84) + ":  ";
 		FT.DrawString(firstMarker, topframe + 15, line);
@@ -97,22 +94,12 @@ void GameOverMessage(const CControl *ctrl) {
 		line = Trans.Text(85) + ":  ";
 		FT.DrawString(firstMarker, topframe + 40, line);
 		line = Int_StrN(g_game.herring);
-		if (g_game.game_type == CUPRACING) {
-			line += "  (";
-			line += Int_StrN(g_game.race->herrings.x);
-			line += ')';
-		}
 		FT.DrawString(secondMarker, topframe + 40, line);
 
 		line = Trans.Text(86) + ":  ";
 		FT.DrawString(firstMarker, topframe + 65, line);
 		line = Float_StrN(g_game.time, 2);
 		line += "  s";
-		if (g_game.game_type == CUPRACING) {
-			line += "  (";
-			line += Float_StrN(g_game.race->time.x, 2);
-			line += ')';
-		}
 		FT.DrawString(secondMarker, topframe + 65, line);
 
 		line = Trans.Text(87) + ":  ";
@@ -126,49 +113,26 @@ void GameOverMessage(const CControl *ctrl) {
 		line = Float_StrN(ctrl->way / g_game.time * 3.6, 2);
 		line += "  km/h";
 		FT.DrawString(secondMarker, topframe + 115, line);
-
-		if (param.use_papercut_font > 0) FT.SetSize(28);
-		else FT.SetSize(22);
-		if (g_game.game_type == CUPRACING) {
-			FT.DrawString(CENTER, topframe + 150, Trans.Text(22 + g_game.race_result)); // Text IDs 21 - 24; race_results is in [-1; 2]
-		} else {
-			if (highscore_pos < MAX_SCORES) {
-				line = Trans.Text(89) + ' ';
-				line += Int_StrN(highscore_pos + 1);
-				line += ' ' + Trans.Text(90);
-				FT.DrawString(CENTER, topframe+150, line);
-			}
-		}
 	}
 }
 
 // =========================================================================
 void CGameOver::Enter() {
-	if (!g_game.raceaborted) highscore_pos = Score.CalcRaceResult();
+	g_game.score = g_game.herring * 10;
+	double timept = Course.GetDimensions().y - (g_game.time * 10);
+	g_game.score += (int)timept;
+	if (g_game.score < 0) g_game.score = 0;
 
-	if (g_game.game_type == CUPRACING) {
-		if (g_game.race_result >= 0) {
-			Music.PlayTheme(g_game.theme_id, MUS_WONRACE);
-		} else {
-			Music.PlayTheme(g_game.theme_id, MUS_LOSTRACE);
-		}
+	if (g_game.raceaborted) {
+		Music.PlayTheme(g_game.theme_id, MUS_LOSTRACE);
 	} else {
-		if (g_game.raceaborted) {
-			Music.PlayTheme(g_game.theme_id, MUS_LOSTRACE);
-		} else {
-			Music.PlayTheme(g_game.theme_id, MUS_WONRACE);
-		}
+		Music.PlayTheme(g_game.theme_id, MUS_WONRACE);
 	}
-
 
 	if (g_game.raceaborted || !g_game.use_keyframe) {
 		final_frame = nullptr;
 	} else {
-		if (g_game.game_type == CUPRACING) {
-			if (g_game.race_result < 0)
-				final_frame = g_game.character->GetKeyframe(LOSTRACE);
-			else final_frame = g_game.character->GetKeyframe(WONRACE);
-		} else final_frame = g_game.character->GetKeyframe(FINISH);
+		final_frame = g_game.character->GetKeyframe(FINISH);
 
 		if (!g_game.raceaborted) {
 			const CControl *ctrl = g_game.player->ctrl;

@@ -95,6 +95,7 @@ struct TItem : public TObject {
 struct TCourse {
 	sf::String name;
 	std::string dir;
+	std::string group;
 	std::string author;
 	sf::String desc[MAX_DESCRIPTION_LINES];
 	std::size_t num_lines;
@@ -120,9 +121,9 @@ struct CourseFields {
 };
 
 class CCourseList {
+public:
 	std::vector<TCourse> courses;
 	std::unordered_map<std::string, std::size_t>  index;
-public:
 	std::string name;
 
 	bool Load(const std::string& dir);

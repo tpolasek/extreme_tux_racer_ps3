@@ -104,23 +104,19 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_etr_OBJECTS = audio.$(OBJEXT) common.$(OBJEXT) \
-	config_screen.$(OBJEXT) course.$(OBJEXT) \
-	course_render.$(OBJEXT) credits.$(OBJEXT) env.$(OBJEXT) \
-	event.$(OBJEXT) event_select.$(OBJEXT) font.$(OBJEXT) \
+am_etr_OBJECTS = audio.$(OBJEXT) common.$(OBJEXT) course.$(OBJEXT) \
+	course_render.$(OBJEXT) env.$(OBJEXT) font.$(OBJEXT) \
 	game_config.$(OBJEXT) game_ctrl.$(OBJEXT) game_over.$(OBJEXT) \
-	game_type_select.$(OBJEXT) gui.$(OBJEXT) help.$(OBJEXT) \
-	hud.$(OBJEXT) intro.$(OBJEXT) keyframe.$(OBJEXT) \
+	gui.$(OBJEXT) hud.$(OBJEXT) intro.$(OBJEXT) keyframe.$(OBJEXT) \
 	loading.$(OBJEXT) main.$(OBJEXT) mathlib.$(OBJEXT) \
-	matrices.$(OBJEXT) newplayer.$(OBJEXT) ogl.$(OBJEXT) \
-	ogl_test.$(OBJEXT) particles.$(OBJEXT) paused.$(OBJEXT) \
-	physics.$(OBJEXT) quadtree.$(OBJEXT) race_select.$(OBJEXT) \
-	racing.$(OBJEXT) regist.$(OBJEXT) reset.$(OBJEXT) \
-	score.$(OBJEXT) splash_screen.$(OBJEXT) spx.$(OBJEXT) \
-	states.$(OBJEXT) textures.$(OBJEXT) tool_char.$(OBJEXT) \
-	tool_frame.$(OBJEXT) tools.$(OBJEXT) track_marks.$(OBJEXT) \
-	translation.$(OBJEXT) tux.$(OBJEXT) vectors.$(OBJEXT) \
-	view.$(OBJEXT) winsys.$(OBJEXT)
+	matrices.$(OBJEXT) ogl.$(OBJEXT) ogl_test.$(OBJEXT) \
+	particles.$(OBJEXT) paused.$(OBJEXT) physics.$(OBJEXT) \
+	quadtree.$(OBJEXT) race_select.$(OBJEXT) racing.$(OBJEXT) \
+	regist.$(OBJEXT) reset.$(OBJEXT) splash_screen.$(OBJEXT) \
+	spx.$(OBJEXT) states.$(OBJEXT) textures.$(OBJEXT) \
+	tool_char.$(OBJEXT) tool_frame.$(OBJEXT) tools.$(OBJEXT) \
+	track_marks.$(OBJEXT) translation.$(OBJEXT) tux.$(OBJEXT) \
+	vectors.$(OBJEXT) view.$(OBJEXT) winsys.$(OBJEXT)
 etr_OBJECTS = $(am_etr_OBJECTS)
 etr_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_$(V))
@@ -139,22 +135,18 @@ DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/audio.Po ./$(DEPDIR)/common.Po \
-	./$(DEPDIR)/config_screen.Po ./$(DEPDIR)/course.Po \
-	./$(DEPDIR)/course_render.Po ./$(DEPDIR)/credits.Po \
-	./$(DEPDIR)/env.Po ./$(DEPDIR)/event.Po \
-	./$(DEPDIR)/event_select.Po ./$(DEPDIR)/font.Po \
+	./$(DEPDIR)/course.Po ./$(DEPDIR)/course_render.Po \
+	./$(DEPDIR)/env.Po ./$(DEPDIR)/font.Po \
 	./$(DEPDIR)/game_config.Po ./$(DEPDIR)/game_ctrl.Po \
-	./$(DEPDIR)/game_over.Po ./$(DEPDIR)/game_type_select.Po \
-	./$(DEPDIR)/gui.Po ./$(DEPDIR)/help.Po ./$(DEPDIR)/hud.Po \
+	./$(DEPDIR)/game_over.Po ./$(DEPDIR)/gui.Po ./$(DEPDIR)/hud.Po \
 	./$(DEPDIR)/intro.Po ./$(DEPDIR)/keyframe.Po \
 	./$(DEPDIR)/loading.Po ./$(DEPDIR)/main.Po \
 	./$(DEPDIR)/mathlib.Po ./$(DEPDIR)/matrices.Po \
-	./$(DEPDIR)/newplayer.Po ./$(DEPDIR)/ogl.Po \
-	./$(DEPDIR)/ogl_test.Po ./$(DEPDIR)/particles.Po \
-	./$(DEPDIR)/paused.Po ./$(DEPDIR)/physics.Po \
-	./$(DEPDIR)/quadtree.Po ./$(DEPDIR)/race_select.Po \
-	./$(DEPDIR)/racing.Po ./$(DEPDIR)/regist.Po \
-	./$(DEPDIR)/reset.Po ./$(DEPDIR)/score.Po \
+	./$(DEPDIR)/ogl.Po ./$(DEPDIR)/ogl_test.Po \
+	./$(DEPDIR)/particles.Po ./$(DEPDIR)/paused.Po \
+	./$(DEPDIR)/physics.Po ./$(DEPDIR)/quadtree.Po \
+	./$(DEPDIR)/race_select.Po ./$(DEPDIR)/racing.Po \
+	./$(DEPDIR)/regist.Po ./$(DEPDIR)/reset.Po \
 	./$(DEPDIR)/splash_screen.Po ./$(DEPDIR)/spx.Po \
 	./$(DEPDIR)/states.Po ./$(DEPDIR)/textures.Po \
 	./$(DEPDIR)/tool_char.Po ./$(DEPDIR)/tool_frame.Po \
@@ -317,20 +309,14 @@ top_srcdir = ..
 etr_SOURCES = \
 	audio.cpp	\
 	common.cpp	\
-	config_screen.cpp \
 	course.cpp	\
 	course_render.cpp \
-	credits.cpp	\
 	env.cpp		\
-	event.cpp	\
-	event_select.cpp \
 	font.cpp	\
 	game_config.cpp	\
 	game_ctrl.cpp	\
 	game_over.cpp	\
-	game_type_select.cpp \
 	gui.cpp		\
-	help.cpp	\
 	hud.cpp		\
 	intro.cpp	\
 	keyframe.cpp	\
@@ -338,7 +324,6 @@ etr_SOURCES = \
 	main.cpp	\
 	mathlib.cpp	\
 	matrices.cpp	\
-	newplayer.cpp	\
 	ogl.cpp		\
 	ogl_test.cpp	\
 	particles.cpp	\
@@ -349,7 +334,6 @@ etr_SOURCES = \
 	racing.cpp	\
 	regist.cpp	\
 	reset.cpp	\
-	score.cpp	\
 	splash_screen.cpp \
 	spx.cpp		\
 	states.cpp	\
@@ -368,28 +352,21 @@ noinst_HEADERS = \
 	audio.h		\
 	bh.h		\
 	common.h	\
-	config_screen.h	\
 	course.h	\
 	course_render.h	\
-	credits.h	\
 	env.h		\
 	etr_types.h	\
-	event.h		\
-	event_select.h	\
 	font.h		\
 	game_config.h	\
 	game_ctrl.h	\
 	game_over.h	\
-	game_type_select.h \
 	gui.h		\
-	help.h		\
 	hud.h		\
 	intro.h		\
 	keyframe.h	\
 	loading.h	\
 	mathlib.h	\
 	matrices.h	\
-	newplayer.h	\
 	ogl.h		\
 	ogl_test.h	\
 	particles.h	\
@@ -400,7 +377,6 @@ noinst_HEADERS = \
 	racing.h	\
 	regist.h	\
 	reset.h		\
-	score.h		\
 	splash_screen.h	\
 	spx.h		\
 	states.h	\
@@ -504,20 +480,14 @@ distclean-compile:
 
 include ./$(DEPDIR)/audio.Po # am--include-marker
 include ./$(DEPDIR)/common.Po # am--include-marker
-include ./$(DEPDIR)/config_screen.Po # am--include-marker
 include ./$(DEPDIR)/course.Po # am--include-marker
 include ./$(DEPDIR)/course_render.Po # am--include-marker
-include ./$(DEPDIR)/credits.Po # am--include-marker
 include ./$(DEPDIR)/env.Po # am--include-marker
-include ./$(DEPDIR)/event.Po # am--include-marker
-include ./$(DEPDIR)/event_select.Po # am--include-marker
 include ./$(DEPDIR)/font.Po # am--include-marker
 include ./$(DEPDIR)/game_config.Po # am--include-marker
 include ./$(DEPDIR)/game_ctrl.Po # am--include-marker
 include ./$(DEPDIR)/game_over.Po # am--include-marker
-include ./$(DEPDIR)/game_type_select.Po # am--include-marker
 include ./$(DEPDIR)/gui.Po # am--include-marker
-include ./$(DEPDIR)/help.Po # am--include-marker
 include ./$(DEPDIR)/hud.Po # am--include-marker
 include ./$(DEPDIR)/intro.Po # am--include-marker
 include ./$(DEPDIR)/keyframe.Po # am--include-marker
@@ -525,7 +495,6 @@ include ./$(DEPDIR)/loading.Po # am--include-marker
 include ./$(DEPDIR)/main.Po # am--include-marker
 include ./$(DEPDIR)/mathlib.Po # am--include-marker
 include ./$(DEPDIR)/matrices.Po # am--include-marker
-include ./$(DEPDIR)/newplayer.Po # am--include-marker
 include ./$(DEPDIR)/ogl.Po # am--include-marker
 include ./$(DEPDIR)/ogl_test.Po # am--include-marker
 include ./$(DEPDIR)/particles.Po # am--include-marker
@@ -536,7 +505,6 @@ include ./$(DEPDIR)/race_select.Po # am--include-marker
 include ./$(DEPDIR)/racing.Po # am--include-marker
 include ./$(DEPDIR)/regist.Po # am--include-marker
 include ./$(DEPDIR)/reset.Po # am--include-marker
-include ./$(DEPDIR)/score.Po # am--include-marker
 include ./$(DEPDIR)/splash_screen.Po # am--include-marker
 include ./$(DEPDIR)/spx.Po # am--include-marker
 include ./$(DEPDIR)/states.Po # am--include-marker
@@ -701,20 +669,14 @@ clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/audio.Po
 	-rm -f ./$(DEPDIR)/common.Po
-	-rm -f ./$(DEPDIR)/config_screen.Po
 	-rm -f ./$(DEPDIR)/course.Po
 	-rm -f ./$(DEPDIR)/course_render.Po
-	-rm -f ./$(DEPDIR)/credits.Po
 	-rm -f ./$(DEPDIR)/env.Po
-	-rm -f ./$(DEPDIR)/event.Po
-	-rm -f ./$(DEPDIR)/event_select.Po
 	-rm -f ./$(DEPDIR)/font.Po
 	-rm -f ./$(DEPDIR)/game_config.Po
 	-rm -f ./$(DEPDIR)/game_ctrl.Po
 	-rm -f ./$(DEPDIR)/game_over.Po
-	-rm -f ./$(DEPDIR)/game_type_select.Po
 	-rm -f ./$(DEPDIR)/gui.Po
-	-rm -f ./$(DEPDIR)/help.Po
 	-rm -f ./$(DEPDIR)/hud.Po
 	-rm -f ./$(DEPDIR)/intro.Po
 	-rm -f ./$(DEPDIR)/keyframe.Po
@@ -722,7 +684,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
-	-rm -f ./$(DEPDIR)/newplayer.Po
 	-rm -f ./$(DEPDIR)/ogl.Po
 	-rm -f ./$(DEPDIR)/ogl_test.Po
 	-rm -f ./$(DEPDIR)/particles.Po
@@ -733,7 +694,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/racing.Po
 	-rm -f ./$(DEPDIR)/regist.Po
 	-rm -f ./$(DEPDIR)/reset.Po
-	-rm -f ./$(DEPDIR)/score.Po
 	-rm -f ./$(DEPDIR)/splash_screen.Po
 	-rm -f ./$(DEPDIR)/spx.Po
 	-rm -f ./$(DEPDIR)/states.Po
@@ -794,20 +754,14 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/audio.Po
 	-rm -f ./$(DEPDIR)/common.Po
-	-rm -f ./$(DEPDIR)/config_screen.Po
 	-rm -f ./$(DEPDIR)/course.Po
 	-rm -f ./$(DEPDIR)/course_render.Po
-	-rm -f ./$(DEPDIR)/credits.Po
 	-rm -f ./$(DEPDIR)/env.Po
-	-rm -f ./$(DEPDIR)/event.Po
-	-rm -f ./$(DEPDIR)/event_select.Po
 	-rm -f ./$(DEPDIR)/font.Po
 	-rm -f ./$(DEPDIR)/game_config.Po
 	-rm -f ./$(DEPDIR)/game_ctrl.Po
 	-rm -f ./$(DEPDIR)/game_over.Po
-	-rm -f ./$(DEPDIR)/game_type_select.Po
 	-rm -f ./$(DEPDIR)/gui.Po
-	-rm -f ./$(DEPDIR)/help.Po
 	-rm -f ./$(DEPDIR)/hud.Po
 	-rm -f ./$(DEPDIR)/intro.Po
 	-rm -f ./$(DEPDIR)/keyframe.Po
@@ -815,7 +769,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
-	-rm -f ./$(DEPDIR)/newplayer.Po
 	-rm -f ./$(DEPDIR)/ogl.Po
 	-rm -f ./$(DEPDIR)/ogl_test.Po
 	-rm -f ./$(DEPDIR)/particles.Po
@@ -826,7 +779,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/racing.Po
 	-rm -f ./$(DEPDIR)/regist.Po
 	-rm -f ./$(DEPDIR)/reset.Po
-	-rm -f ./$(DEPDIR)/score.Po
 	-rm -f ./$(DEPDIR)/splash_screen.Po
 	-rm -f ./$(DEPDIR)/spx.Po
 	-rm -f ./$(DEPDIR)/states.Po

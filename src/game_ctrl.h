@@ -20,7 +20,6 @@ GNU General Public License for more details.
 #include "bh.h"
 #include "keyframe.h"
 #include "spx.h"
-#include <unordered_map>
 
 
 enum TFrameType {
@@ -34,67 +33,6 @@ enum TFrameType {
 
 class TTexture;
 
-struct TRace {
-	TCourse* course;
-	std::size_t light;
-	int snow;
-	int wind;
-	TVector3i herrings;
-	TVector3d time;
-	std::size_t music_theme;
-
-	TRace(TCourse* course_, std::size_t light_, int snow_, int wind_, const TVector3i& herrings_, const TVector3d& time_, std::size_t music_theme_)
-		: course(course_), light(light_), snow(snow_), wind(wind_), herrings(herrings_), time(time_), music_theme(music_theme_)
-	{}
-};
-
-struct TCup {
-	std::string cup;
-	std::string name;
-	std::string desc;
-	std::vector<TRace*> races;
-	bool Unlocked;
-
-	TCup(const std::string& cup_, const std::string& name_, const std::string& desc_)
-		: cup(cup_), name(name_), desc(desc_), Unlocked(false)
-	{}
-};
-
-struct TEvent {
-	std::string name;
-	std::vector<TCup*> cups;
-
-	explicit TEvent(const std::string& name_)
-		: name(name_)
-	{}
-};
-
-class CEvents {
-private:
-	std::unordered_map<std::string, std::size_t> RaceIndex;
-	std::unordered_map<std::string, std::size_t> CupIndex;
-	std::unordered_map<std::string, std::size_t> EventIndex;
-public:
-	std::vector<TRace> RaceList;
-	std::vector<TCup> CupList;
-	std::vector<TEvent> EventList;
-	bool LoadEventList();
-	std::size_t GetRaceIdx(const std::string& race) const;
-	std::size_t GetCupIdx(const std::string& cup) const;
-	std::size_t GetEventIdx(const std::string& event) const;
-	const std::string& GetCup(std::size_t event, std::size_t cup) const;
-	const std::string& GetCupTrivialName(std::size_t event, std::size_t cup) const;
-
-	void MakeUnlockList(const std::string& unlockstr);
-	bool IsUnlocked(std::size_t event, std::size_t cup) const;
-};
-
-extern CEvents Events;
-
-// --------------------------------------------------------------------
-//				player
-// --------------------------------------------------------------------
-
 struct TAvatar {
 	std::string filename;
 	TTexture* texture;
@@ -107,7 +45,6 @@ struct TAvatar {
 struct TPlayer {
 	std::string name;
 	CControl *ctrl;
-	std::string funlocked;
 	const TAvatar* avatar;
 
 	TPlayer(const std::string& name_ = emptyString, const TAvatar* avatar_ = nullptr)
@@ -118,7 +55,6 @@ struct TPlayer {
 class CPlayers {
 private:
 	std::vector<TPlayer> plyr;
-	void SetDefaultPlayers();
 	std::vector<TAvatar> avatars;
 
 	const TAvatar* FindAvatar(const std::string& name) const;
@@ -126,10 +62,7 @@ public:
 	~CPlayers();
 
 	TPlayer* GetPlayer(std::size_t index) { return &plyr[index]; }
-	void AddPassedCup(const std::string& cup);
-	void AddPlayer(const std::string& name, const std::string& avatar);
-	bool LoadPlayers();
-	void SavePlayers() const;
+	void SetSinglePlayer(const std::string& name);
 	void ResetControls();
 	void AllocControl(std::size_t player);
 	bool LoadAvatars();

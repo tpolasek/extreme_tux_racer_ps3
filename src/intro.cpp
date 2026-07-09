@@ -67,7 +67,6 @@ void CIntro::Enter() {
 	g_game.herring = 0;
 	g_game.score = 0;
 	g_game.time = 0.f;
-	g_game.race_result = -1;
 	g_game.raceaborted = false;
 
 	ctrl->Init();

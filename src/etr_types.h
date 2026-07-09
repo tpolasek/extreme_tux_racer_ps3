@@ -28,11 +28,6 @@ enum TToolMode {
 	LEARN,
 };
 
-enum TGameType {
-	PRACTICING,
-	CUPRACING
-};
-
 enum TViewMode {
 	BEHIND,
 	FOLLOW,
@@ -40,16 +35,13 @@ enum TViewMode {
 	NUM_VIEW_MODES
 };
 
-struct TCup;
 struct TPlayer;
 struct TCourse;
-struct TRace;
 struct TCharacter;
 
 struct TGameData {
 	TToolMode toolmode;
 	float time_step;
-	TGameType game_type;
 	double finish_brake;
 	int argument;
 	int treesize;
@@ -58,13 +50,10 @@ struct TGameData {
 	bool use_keyframe;
 	bool force_treemap;
 
-	// course and race params
+	// course params
 	bool mirrorred;
 	TPlayer* player;
 	TCharacter* character;
-	std::size_t start_player;
-	TCup* cup;
-	TRace* race; // Only valid if not in practice mode
 	TCourse* course;
 	std::size_t location_id;
 	std::size_t light_id;
@@ -76,7 +65,6 @@ struct TGameData {
 	float time;				// reached time
 	int score;				// reached score
 	int herring;			// catched herrings during the race
-	int race_result;		// tuxlifes, only for a single race, see game_ctrl
 	bool raceaborted;
 };
 

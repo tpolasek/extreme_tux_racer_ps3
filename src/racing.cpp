@@ -99,7 +99,6 @@ void CRacing::Keyb(sf::Keyboard::Key key, bool release, int x, int y) {
 		case sf::Keyboard::Escape:
 			if (!release) {
 				g_game.raceaborted = true;
-				g_game.race_result = -1;
 				State::manager.RequestEnterState(GameOver);
 			}
 			break;

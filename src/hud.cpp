@@ -392,28 +392,8 @@ void DrawHud(const CControl *ctrl) {
 	ScopedRenderMode rm(TEXFONT);
 
 
-	if (g_game.game_type == CUPRACING) {
-		if (g_game.time < g_game.race->time.z)
-			draw_time(g_game.race->time.z - g_game.time, colGold);
-		else if (g_game.time < g_game.race->time.y)
-			draw_time(g_game.race->time.y - g_game.time, colSilver);
-		else if (g_game.time < g_game.race->time.x)
-			draw_time(g_game.race->time.x - g_game.time, colBronze);
-		else
-			draw_time(g_game.time, colDRed);
-
-		if (g_game.herring < g_game.race->herrings.x)
-			draw_herring_count(g_game.race->herrings.x - g_game.herring, colBronze);
-		else if (g_game.herring < g_game.race->herrings.y)
-			draw_herring_count(g_game.race->herrings.y - g_game.herring, colSilver);
-		else if (g_game.herring < g_game.race->herrings.z)
-			draw_herring_count(g_game.race->herrings.z - g_game.herring, colGold);
-		else
-			draw_herring_count(g_game.herring, colGreen);
-	} else {
-		draw_time(g_game.time, param.use_papercut_font < 2 ? colWhite : colDYell);
-		draw_herring_count(g_game.herring, param.use_papercut_font < 2 ? colWhite : colDYell);
-	}
+	draw_time(g_game.time, param.use_papercut_font < 2 ? colWhite : colDYell);
+	draw_herring_count(g_game.herring, param.use_papercut_font < 2 ? colWhite : colDYell);
 
 	// rpm
 	double rpm_mult = 1.0;

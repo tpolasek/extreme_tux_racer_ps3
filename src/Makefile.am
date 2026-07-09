@@ -3,20 +3,14 @@ bin_PROGRAMS = etr
 etr_SOURCES =		\
 	audio.cpp	\
 	common.cpp	\
-	config_screen.cpp \
 	course.cpp	\
 	course_render.cpp \
-	credits.cpp	\
 	env.cpp		\
-	event.cpp	\
-	event_select.cpp \
 	font.cpp	\
 	game_config.cpp	\
 	game_ctrl.cpp	\
 	game_over.cpp	\
-	game_type_select.cpp \
 	gui.cpp		\
-	help.cpp	\
 	hud.cpp		\
 	intro.cpp	\
 	keyframe.cpp	\
@@ -24,7 +18,6 @@ etr_SOURCES =		\
 	main.cpp	\
 	mathlib.cpp	\
 	matrices.cpp	\
-	newplayer.cpp	\
 	ogl.cpp		\
 	ogl_test.cpp	\
 	particles.cpp	\
@@ -35,7 +28,6 @@ etr_SOURCES =		\
 	racing.cpp	\
 	regist.cpp	\
 	reset.cpp	\
-	score.cpp	\
 	splash_screen.cpp \
 	spx.cpp		\
 	states.cpp	\
@@ -54,28 +46,21 @@ noinst_HEADERS =	\
 	audio.h		\
 	bh.h		\
 	common.h	\
-	config_screen.h	\
 	course.h	\
 	course_render.h	\
-	credits.h	\
 	env.h		\
 	etr_types.h	\
-	event.h		\
-	event_select.h	\
 	font.h		\
 	game_config.h	\
 	game_ctrl.h	\
 	game_over.h	\
-	game_type_select.h \
 	gui.h		\
-	help.h		\
 	hud.h		\
 	intro.h		\
 	keyframe.h	\
 	loading.h	\
 	mathlib.h	\
 	matrices.h	\
-	newplayer.h	\
 	ogl.h		\
 	ogl_test.h	\
 	particles.h	\
@@ -86,7 +71,6 @@ noinst_HEADERS =	\
 	racing.h	\
 	regist.h	\
 	reset.h		\
-	score.h		\
 	splash_screen.h	\
 	spx.h		\
 	states.h	\

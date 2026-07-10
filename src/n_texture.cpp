@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Texture implementation - libpng decode (via Image) + glTexImage2D upload.
 ---------------------------------------------------------------------*/

@@ -1,12 +1,12 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
-2D drawing primitives: Drawable2D (replaces sf::Drawable, renamed to
-dodge X11), RenderStates, Sprite, RectangleShape.
+2D drawing primitives: Drawable2D (named to avoid X11's global
+`Drawable` typedef), RenderStates, Sprite, RectangleShape.
 
 Each Drawable renders into a self-contained y-down ortho projection
 queried from the current GL viewport, so it is independent of the
-caller's matrix state (matching SFML's robustness).
+caller's matrix state.
 ---------------------------------------------------------------------*/
 #ifndef N_DRAW_H
 #define N_DRAW_H
@@ -18,7 +18,7 @@ caller's matrix state (matching SFML's robustness).
 
 class Texture;
 
-// Replaces sf::Drawable (X11 owns global `Drawable`).
+// Named to avoid X11's global `Drawable` typedef.
 class Drawable2D {
 public:
 	virtual ~Drawable2D() {}

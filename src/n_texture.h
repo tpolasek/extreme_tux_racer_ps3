@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
-Texture - GL 2D texture backed by libpng loading. Replaces sf::Texture.
+Texture - GL 2D texture backed by libpng loading.
 ---------------------------------------------------------------------*/
 #ifndef N_TEXTURE_H
 #define N_TEXTURE_H

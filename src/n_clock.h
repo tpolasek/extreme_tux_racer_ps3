@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
-Clock - monotonic timer, replaces sf::Clock. Backed by clock_gettime.
+Clock - monotonic timer. Backed by clock_gettime.
 ---------------------------------------------------------------------*/
 #ifndef N_CLOCK_H
 #define N_CLOCK_H

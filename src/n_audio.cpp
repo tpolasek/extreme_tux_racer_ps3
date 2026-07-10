@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native audio (SFML removal), Linux backend.
+EXTREME TUXRACER - native audio, Linux backend.
 
 Audio thread pattern mirrors PS3 snd_ps3.c: wait → mix block → write.
 On Linux: snd_pcm_wait/snd_pcm_writei drain the device.

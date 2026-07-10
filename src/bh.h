@@ -28,7 +28,7 @@ GNU General Public License for more details.
 
 #include <GL/gl.h>
 
-// Native replacement types — SFML has been fully removed.
+// Native window/graphics/audio types.
 #include "n_color.h"
 #include "n_geom.h"
 #include "n_clock.h"

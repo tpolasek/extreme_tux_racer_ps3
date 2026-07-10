@@ -3,6 +3,18 @@
 ===============================================================================
 
 
+Version 0.8.4 (unreleased, Linux-native port)                        2026
+-------------------------------------------------------------------------------
+- Removed SFML dependency entirely. Windowing, GL context, fonts, images,
+  sprites and audio are now implemented natively on top of libpng,
+  FreeType2, X11+GLX and ALSA + libvorbisfile.
+- Dedicated audio thread + block-based mixer (mirrors the PS3 libaudio
+  event-queue / DMA pattern; groundwork for a future PS3 backend).
+- Native font API mirrors the PS3 font.h shape (Typeface / FontRenderer /
+  RenderSurface / GlyphMetrics), backed by FreeType2 on Linux.
+- Removed unused dev tool sources (tool_frame, tool_char, ogl_test, tools).
+
+
 Version 0.8.4                                                 10th of May, 2024
 -------------------------------------------------------------------------------
 - A, D, W, and S keys work as alternative to cursor keys

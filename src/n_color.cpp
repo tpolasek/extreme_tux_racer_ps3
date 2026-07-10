@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Color static constant definitions (out-of-line for C++14 odr-use).
 ---------------------------------------------------------------------*/

@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Clock implementation - clock_gettime(CLOCK_MONOTONIC).
 ---------------------------------------------------------------------*/

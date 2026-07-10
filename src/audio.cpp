@@ -60,7 +60,7 @@ struct TSound {
 	void setVolume(int v) { volume = v; }
 
 	void Play(bool loop_) {
-		// Match original SFML semantics: no-op if already playing.
+		// No-op if already playing.
 		if (voice_id >= 0 && audioDevice().isPlaying(voice_id)) return;
 		loop = loop_;
 		voice_id = audioDevice().play(data, volume, loop_);
@@ -162,7 +162,7 @@ void CSound::Play(const std::string& name, bool loop, int volume) {
 void CSound::Halt(std::size_t soundid) {
 	if (soundid >= sounds.size()) return;
 
-	// Original SFML semantics: only looping sounds are halted by Halt().
+	// Only looping sounds are halted by Halt().
 	if (sounds[soundid]->loop)
 		sounds[soundid]->stop();
 }

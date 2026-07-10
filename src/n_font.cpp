@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native font system (SFML removal)
+EXTREME TUXRACER - native font system
 
 Linux backend: FreeType2 + CPU RGBA RenderSurface + GL texture.
 PS3 backend (future): replaces the FontRenderer impl with the

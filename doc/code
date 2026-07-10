@@ -13,7 +13,10 @@ recent versions of GCC, Clang and MSVC.
 Extreme Tux Racer has - though aiming to not have more dependencies than
 necessary - the following dependencies:
 - OpenGL
-- SFML 2.4 or later (modules: system, graphics, audio and window)
+- libpng (texture/image loading)
+- FreeType2 (font rasterization)
+- X11 + GLX (window + GL context)
+- ALSA + libvorbisfile (audio output + OGG streaming)
 
 The code is prepared to be compiled on Windows and Unix environments. For
 Windows, there exists a solution for Microsoft Visual Studio (see /build); on

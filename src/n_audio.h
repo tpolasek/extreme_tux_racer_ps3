@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native audio system (SFML removal)
+EXTREME TUXRACER - native audio system
 
 Designed to mirror the PS3 libaudio + event-queue pattern
 (see chocolate-quake/src/sound/src/snd_ps3.c). One dedicated

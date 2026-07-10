@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Window / event / input: RenderWindow (X11+GLX), Event, Joystick
 (/dev/input/js*), VideoMode, ContextSettings, Style.
@@ -17,7 +17,7 @@ propagate through bh.h.
 #include <cstdint>
 #include <string>
 
-// Window styles (SFML-compatible names). Note: bare `None` is an X11
+// Window styles. Note: bare `None` is an X11
 // macro, so it is intentionally omitted here.
 struct Style {
 	static constexpr Uint32 Titlebar   = 1;
@@ -51,7 +51,7 @@ struct ContextSettings {
 		  majorVersion(major), minorVersion(minor) {}
 };
 
-// Joystick API mirrors sf::Joystick (static methods, nested Axis enum).
+// Joystick API (static methods, nested Axis enum).
 class Joystick {
 public:
 	enum Axis { X, Y, Z, R, U, V, PovX, PovY };
@@ -66,7 +66,7 @@ public:
 	static void         update() {} // no-op (events polled directly)
 };
 
-// Event mirrors the subset of sf::Event used by the game.
+// Event types used by the game.
 class Event {
 public:
 	enum EventType {

@@ -51,7 +51,7 @@ public:
 	// Native 2D drawables self-render via GL.
 	void draw(const Drawable2D& drawable, const RenderStates& = RenderStates::Default) { drawable.draw(); }
 	void clear() { window.clear(colBackgr); }
-	// Save/restore GL state around 2D overlay rendering (was beginSFML/endSFML).
+	// Save/restore GL state around 2D overlay rendering.
 	void begin2D() { if (!glStatesPushed) window.pushGLStates(); glStatesPushed = true; }
 	void end2D()   { if (glStatesPushed)  window.popGLStates();  glStatesPushed = false; }
 	bool PollEvent(Event& event) { return window.pollEvent(event); }

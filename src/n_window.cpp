@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 RenderWindow (X11 + GLX), Event dispatch, Joystick (/dev/input/js*).
 ---------------------------------------------------------------------*/

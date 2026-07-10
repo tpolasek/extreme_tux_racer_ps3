@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Image implementation - libpng decode/encode to RGBA8.
 ---------------------------------------------------------------------*/

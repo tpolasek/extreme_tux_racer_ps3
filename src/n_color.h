@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
-Color POD type + integer typedefs. Replaces sf::Color / sf::Uint8/32.
+Color POD type + integer typedefs.
 ---------------------------------------------------------------------*/
 #ifndef N_COLOR_H
 #define N_COLOR_H

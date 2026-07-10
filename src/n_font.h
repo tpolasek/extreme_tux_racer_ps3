@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Font system designed to mirror the PS3 `font.h` API exactly so the
 Linux backend (FreeType2 + CPU RGBA surface + GL texture) maps 1:1 to
@@ -142,7 +142,7 @@ private:
 // path works on PS3 (CPU buffer → RSX texture → quad); only the
 // FontRenderer backend differs.
 //
-// API mirrors the subset of sf::Text used by the game so callers
+// API mirrors the subset of the old text API used by the game so callers
 // (CFont::DrawText, TLabel, TFramedText, ...) don't change shape.
 // --------------------------------------------------------------------
 class Text : public Drawable2D {

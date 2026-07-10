@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Sprite / RectangleShape rendering via fixed-function GL quads.
 ---------------------------------------------------------------------*/

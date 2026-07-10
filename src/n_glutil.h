@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
 Internal GL helper: a scoped y-down ortho projection set up from the
 current GL viewport, used by the 2D drawables so they are independent

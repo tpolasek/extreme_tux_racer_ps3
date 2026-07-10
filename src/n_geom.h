@@ -1,8 +1,8 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
-Geometry POD types + Duration (replaces sf::Time, renamed to dodge
-X11's global `typedef ... Time`).
+Geometry POD types + Duration (named to dodge X11's global
+`typedef ... Time`).
 ---------------------------------------------------------------------*/
 #ifndef N_GEOM_H
 #define N_GEOM_H
@@ -37,7 +37,7 @@ struct Rect {
 using IntRect   = Rect<int>;
 using FloatRect = Rect<float>;
 
-// Duration replaces sf::Time. X11 typedefs `Time` globally so it is renamed.
+// Duration avoids the name `Time` (X11 typedefs it globally).
 class Duration {
 	int64_t us_;
 public:

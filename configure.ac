@@ -49,7 +49,7 @@ esac
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([floor getcwd memmove memset mkdir pow sqrt strchr strdup])
 
-# Native replacement libraries — SFML fully removed.
+# Native libraries.
 PKG_CHECK_MODULES([PNG], [libpng],
   [ CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS" ],
   [ AC_MSG_ERROR([libpng not found]) ])

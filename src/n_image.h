@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------
-EXTREME TUXRACER - native replacement types (SFML removal)
+EXTREME TUXRACER - native replacement types
 
-Image - raw RGBA pixel buffer with PNG load/save. Replaces sf::Image.
+Image - raw RGBA pixel buffer with PNG load/save.
 libpng is used internally (header has no libpng dependency).
 ---------------------------------------------------------------------*/
 #ifndef N_IMAGE_H

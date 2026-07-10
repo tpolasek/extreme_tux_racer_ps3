@@ -1,3 +1,4 @@
 *.o
 src/etr
 src/.deps/*
+*.self

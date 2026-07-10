@@ -651,14 +651,14 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
-SFML_GRAPHICS_LIBS
-SFML_GRAPHICS_CFLAGS
-SFML_WINDOW_LIBS
-SFML_WINDOW_CFLAGS
-SFML_AUDIO_LIBS
-SFML_AUDIO_CFLAGS
-SFML_SYSTEM_LIBS
-SFML_SYSTEM_CFLAGS
+VORBISFILE_LIBS
+VORBISFILE_CFLAGS
+ALSA_LIBS
+ALSA_CFLAGS
+FREETYPE_LIBS
+FREETYPE_CFLAGS
+PNG_LIBS
+PNG_CFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
@@ -784,14 +784,14 @@ CFLAGS
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
-SFML_SYSTEM_CFLAGS
-SFML_SYSTEM_LIBS
-SFML_AUDIO_CFLAGS
-SFML_AUDIO_LIBS
-SFML_WINDOW_CFLAGS
-SFML_WINDOW_LIBS
-SFML_GRAPHICS_CFLAGS
-SFML_GRAPHICS_LIBS'
+PNG_CFLAGS
+PNG_LIBS
+FREETYPE_CFLAGS
+FREETYPE_LIBS
+ALSA_CFLAGS
+ALSA_LIBS
+VORBISFILE_CFLAGS
+VORBISFILE_LIBS'
 
 
 # Initialize some variables set by options.
@@ -1442,22 +1442,18 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR 
               path overriding pkg-config's built-in search path
-  SFML_SYSTEM_CFLAGS 
-              C compiler flags for SFML_SYSTEM, overriding pkg-config
-  SFML_SYSTEM_LIBS 
-              linker flags for SFML_SYSTEM, overriding pkg-config
-  SFML_AUDIO_CFLAGS 
-              C compiler flags for SFML_AUDIO, overriding pkg-config
-  SFML_AUDIO_LIBS 
-              linker flags for SFML_AUDIO, overriding pkg-config
-  SFML_WINDOW_CFLAGS 
-              C compiler flags for SFML_WINDOW, overriding pkg-config
-  SFML_WINDOW_LIBS 
-              linker flags for SFML_WINDOW, overriding pkg-config
-  SFML_GRAPHICS_CFLAGS 
-              C compiler flags for SFML_GRAPHICS, overriding pkg-config
-  SFML_GRAPHICS_LIBS 
-              linker flags for SFML_GRAPHICS, overriding pkg-config
+  PNG_CFLAGS  C compiler flags for PNG, overriding pkg-config
+  PNG_LIBS    linker flags for PNG, overriding pkg-config
+  FREETYPE_CFLAGS 
+              C compiler flags for FREETYPE, overriding pkg-config
+  FREETYPE_LIBS 
+              linker flags for FREETYPE, overriding pkg-config
+  ALSA_CFLAGS C compiler flags for ALSA, overriding pkg-config
+  ALSA_LIBS   linker flags for ALSA, overriding pkg-config
+  VORBISFILE_CFLAGS 
+              C compiler flags for VORBISFILE, overriding pkg-config
+  VORBISFILE_LIBS 
+              linker flags for VORBISFILE, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -5962,6 +5958,7 @@ then :
 fi
 
 
+# Native replacement libraries — SFML fully removed.
 
 
 
@@ -6094,19 +6091,19 @@ printf "%s\n" "no" >&6; }
 fi
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for sfml-system >= 2.4" >&5
-printf %s "checking for sfml-system >= 2.4... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for libpng" >&5
+printf %s "checking for libpng... " >&6; }
 
-if test -n "$SFML_SYSTEM_CFLAGS"; then
-    pkg_cv_SFML_SYSTEM_CFLAGS="$SFML_SYSTEM_CFLAGS"
+if test -n "$PNG_CFLAGS"; then
+    pkg_cv_PNG_CFLAGS="$PNG_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-system >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-system >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpng\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpng") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_SYSTEM_CFLAGS=`$PKG_CONFIG --cflags "sfml-system >= 2.4" 2>/dev/null`
+  pkg_cv_PNG_CFLAGS=`$PKG_CONFIG --cflags "libpng" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6114,16 +6111,16 @@ fi
  else
     pkg_failed=untried
 fi
-if test -n "$SFML_SYSTEM_LIBS"; then
-    pkg_cv_SFML_SYSTEM_LIBS="$SFML_SYSTEM_LIBS"
+if test -n "$PNG_LIBS"; then
+    pkg_cv_PNG_LIBS="$PNG_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-system >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-system >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpng\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpng") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_SYSTEM_LIBS=`$PKG_CONFIG --libs "sfml-system >= 2.4" 2>/dev/null`
+  pkg_cv_PNG_LIBS=`$PKG_CONFIG --libs "libpng" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6144,44 +6141,40 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        SFML_SYSTEM_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "sfml-system >= 2.4" 2>&1`
+	        PNG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libpng" 2>&1`
         else
-	        SFML_SYSTEM_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "sfml-system >= 2.4" 2>&1`
+	        PNG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libpng" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
-	echo "$SFML_SYSTEM_PKG_ERRORS" >&5
+	echo "$PNG_PKG_ERRORS" >&5
 
-	as_fn_error $? "sfml-system not found" "$LINENO" 5
+	 as_fn_error $? "libpng not found" "$LINENO" 5 
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	as_fn_error $? "sfml-system not found" "$LINENO" 5
+	 as_fn_error $? "libpng not found" "$LINENO" 5 
 else
-	SFML_SYSTEM_CFLAGS=$pkg_cv_SFML_SYSTEM_CFLAGS
-	SFML_SYSTEM_LIBS=$pkg_cv_SFML_SYSTEM_LIBS
+	PNG_CFLAGS=$pkg_cv_PNG_CFLAGS
+	PNG_LIBS=$pkg_cv_PNG_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-	
-  CPPFLAGS="${CPPFLAGS} $SFML_SYSTEM_CFLAGS"
-  LIBS="${LIBS} $SFML_SYSTEM_LIBS"
-
+	 CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS" 
 fi
-
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for sfml-audio >= 2.4" >&5
-printf %s "checking for sfml-audio >= 2.4... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for freetype2" >&5
+printf %s "checking for freetype2... " >&6; }
 
-if test -n "$SFML_AUDIO_CFLAGS"; then
-    pkg_cv_SFML_AUDIO_CFLAGS="$SFML_AUDIO_CFLAGS"
+if test -n "$FREETYPE_CFLAGS"; then
+    pkg_cv_FREETYPE_CFLAGS="$FREETYPE_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-audio >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-audio >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"freetype2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "freetype2") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_AUDIO_CFLAGS=`$PKG_CONFIG --cflags "sfml-audio >= 2.4" 2>/dev/null`
+  pkg_cv_FREETYPE_CFLAGS=`$PKG_CONFIG --cflags "freetype2" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6189,16 +6182,16 @@ fi
  else
     pkg_failed=untried
 fi
-if test -n "$SFML_AUDIO_LIBS"; then
-    pkg_cv_SFML_AUDIO_LIBS="$SFML_AUDIO_LIBS"
+if test -n "$FREETYPE_LIBS"; then
+    pkg_cv_FREETYPE_LIBS="$FREETYPE_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-audio >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-audio >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"freetype2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "freetype2") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_AUDIO_LIBS=`$PKG_CONFIG --libs "sfml-audio >= 2.4" 2>/dev/null`
+  pkg_cv_FREETYPE_LIBS=`$PKG_CONFIG --libs "freetype2" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6219,44 +6212,126 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        SFML_AUDIO_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "sfml-audio >= 2.4" 2>&1`
+	        FREETYPE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "freetype2" 2>&1`
         else
-	        SFML_AUDIO_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "sfml-audio >= 2.4" 2>&1`
+	        FREETYPE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "freetype2" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
-	echo "$SFML_AUDIO_PKG_ERRORS" >&5
+	echo "$FREETYPE_PKG_ERRORS" >&5
 
-	as_fn_error $? "sfml-audio not found" "$LINENO" 5
+	 as_fn_error $? "freetype2 not found" "$LINENO" 5 
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	as_fn_error $? "sfml-audio not found" "$LINENO" 5
+	 as_fn_error $? "freetype2 not found" "$LINENO" 5 
 else
-	SFML_AUDIO_CFLAGS=$pkg_cv_SFML_AUDIO_CFLAGS
-	SFML_AUDIO_LIBS=$pkg_cv_SFML_AUDIO_LIBS
+	FREETYPE_CFLAGS=$pkg_cv_FREETYPE_CFLAGS
+	FREETYPE_LIBS=$pkg_cv_FREETYPE_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-	
-  CPPFLAGS="${CPPFLAGS} $SFML_AUDIO_CFLAGS"
-  LIBS="${LIBS} $SFML_AUDIO_LIBS"
+	 CPPFLAGS="${CPPFLAGS} $FREETYPE_CFLAGS"; LIBS="${LIBS} $FREETYPE_LIBS" 
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for XOpenDisplay in -lX11" >&5
+printf %s "checking for XOpenDisplay in -lX11... " >&6; }
+if test ${ac_cv_lib_X11_XOpenDisplay+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lX11  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
 
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char XOpenDisplay ();
+int
+main (void)
+{
+return XOpenDisplay ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_X11_XOpenDisplay=yes
+else $as_nop
+  ac_cv_lib_X11_XOpenDisplay=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_X11_XOpenDisplay" >&5
+printf "%s\n" "$ac_cv_lib_X11_XOpenDisplay" >&6; }
+if test "x$ac_cv_lib_X11_XOpenDisplay" = xyes
+then :
+   LIBS="$LIBS -lX11" 
+else $as_nop
+   as_fn_error $? "libX11 not found" "$LINENO" 5 
 fi
 
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for glXChooseFBConfig in -lGL" >&5
+printf %s "checking for glXChooseFBConfig in -lGL... " >&6; }
+if test ${ac_cv_lib_GL_glXChooseFBConfig+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lGL  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char glXChooseFBConfig ();
+int
+main (void)
+{
+return glXChooseFBConfig ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_GL_glXChooseFBConfig=yes
+else $as_nop
+  ac_cv_lib_GL_glXChooseFBConfig=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_GL_glXChooseFBConfig" >&5
+printf "%s\n" "$ac_cv_lib_GL_glXChooseFBConfig" >&6; }
+if test "x$ac_cv_lib_GL_glXChooseFBConfig" = xyes
+then :
+   LIBS="$LIBS -lGL" 
+else $as_nop
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: libGL (GLX) not found" >&5
+printf "%s\n" "$as_me: WARNING: libGL (GLX) not found" >&2;} 
+fi
+
+LIBS="$LIBS -lpthread -ldl -lm"
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for sfml-window >= 2.4" >&5
-printf %s "checking for sfml-window >= 2.4... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for alsa" >&5
+printf %s "checking for alsa... " >&6; }
 
-if test -n "$SFML_WINDOW_CFLAGS"; then
-    pkg_cv_SFML_WINDOW_CFLAGS="$SFML_WINDOW_CFLAGS"
+if test -n "$ALSA_CFLAGS"; then
+    pkg_cv_ALSA_CFLAGS="$ALSA_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-window >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-window >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"alsa\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "alsa") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_WINDOW_CFLAGS=`$PKG_CONFIG --cflags "sfml-window >= 2.4" 2>/dev/null`
+  pkg_cv_ALSA_CFLAGS=`$PKG_CONFIG --cflags "alsa" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6264,16 +6339,16 @@ fi
  else
     pkg_failed=untried
 fi
-if test -n "$SFML_WINDOW_LIBS"; then
-    pkg_cv_SFML_WINDOW_LIBS="$SFML_WINDOW_LIBS"
+if test -n "$ALSA_LIBS"; then
+    pkg_cv_ALSA_LIBS="$ALSA_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-window >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-window >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"alsa\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "alsa") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_WINDOW_LIBS=`$PKG_CONFIG --libs "sfml-window >= 2.4" 2>/dev/null`
+  pkg_cv_ALSA_LIBS=`$PKG_CONFIG --libs "alsa" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6294,44 +6369,40 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        SFML_WINDOW_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "sfml-window >= 2.4" 2>&1`
+	        ALSA_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "alsa" 2>&1`
         else
-	        SFML_WINDOW_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "sfml-window >= 2.4" 2>&1`
+	        ALSA_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "alsa" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
-	echo "$SFML_WINDOW_PKG_ERRORS" >&5
+	echo "$ALSA_PKG_ERRORS" >&5
 
-	as_fn_error $? "sfml-window not found" "$LINENO" 5
+	 as_fn_error $? "alsa not found" "$LINENO" 5 
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	as_fn_error $? "sfml-window not found" "$LINENO" 5
+	 as_fn_error $? "alsa not found" "$LINENO" 5 
 else
-	SFML_WINDOW_CFLAGS=$pkg_cv_SFML_WINDOW_CFLAGS
-	SFML_WINDOW_LIBS=$pkg_cv_SFML_WINDOW_LIBS
+	ALSA_CFLAGS=$pkg_cv_ALSA_CFLAGS
+	ALSA_LIBS=$pkg_cv_ALSA_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-	
-  CPPFLAGS="${CPPFLAGS} $SFML_WINDOW_CFLAGS"
-  LIBS="${LIBS} $SFML_WINDOW_LIBS"
-
+	 CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS" 
 fi
-
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for sfml-graphics >= 2.4" >&5
-printf %s "checking for sfml-graphics >= 2.4... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for vorbisfile vorbis" >&5
+printf %s "checking for vorbisfile vorbis... " >&6; }
 
-if test -n "$SFML_GRAPHICS_CFLAGS"; then
-    pkg_cv_SFML_GRAPHICS_CFLAGS="$SFML_GRAPHICS_CFLAGS"
+if test -n "$VORBISFILE_CFLAGS"; then
+    pkg_cv_VORBISFILE_CFLAGS="$VORBISFILE_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-graphics >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-graphics >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"vorbisfile vorbis\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "vorbisfile vorbis") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_GRAPHICS_CFLAGS=`$PKG_CONFIG --cflags "sfml-graphics >= 2.4" 2>/dev/null`
+  pkg_cv_VORBISFILE_CFLAGS=`$PKG_CONFIG --cflags "vorbisfile vorbis" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6339,16 +6410,16 @@ fi
  else
     pkg_failed=untried
 fi
-if test -n "$SFML_GRAPHICS_LIBS"; then
-    pkg_cv_SFML_GRAPHICS_LIBS="$SFML_GRAPHICS_LIBS"
+if test -n "$VORBISFILE_LIBS"; then
+    pkg_cv_VORBISFILE_LIBS="$VORBISFILE_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"sfml-graphics >= 2.4\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "sfml-graphics >= 2.4") 2>&5
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"vorbisfile vorbis\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "vorbisfile vorbis") 2>&5
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_SFML_GRAPHICS_LIBS=`$PKG_CONFIG --libs "sfml-graphics >= 2.4" 2>/dev/null`
+  pkg_cv_VORBISFILE_LIBS=`$PKG_CONFIG --libs "vorbisfile vorbis" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes 
 else
   pkg_failed=yes
@@ -6369,27 +6440,24 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        SFML_GRAPHICS_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "sfml-graphics >= 2.4" 2>&1`
+	        VORBISFILE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "vorbisfile vorbis" 2>&1`
         else
-	        SFML_GRAPHICS_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "sfml-graphics >= 2.4" 2>&1`
+	        VORBISFILE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "vorbisfile vorbis" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
-	echo "$SFML_GRAPHICS_PKG_ERRORS" >&5
+	echo "$VORBISFILE_PKG_ERRORS" >&5
 
-	as_fn_error $? "sfml-graphics not found" "$LINENO" 5
+	 as_fn_error $? "vorbisfile not found" "$LINENO" 5 
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	as_fn_error $? "sfml-graphics not found" "$LINENO" 5
+	 as_fn_error $? "vorbisfile not found" "$LINENO" 5 
 else
-	SFML_GRAPHICS_CFLAGS=$pkg_cv_SFML_GRAPHICS_CFLAGS
-	SFML_GRAPHICS_LIBS=$pkg_cv_SFML_GRAPHICS_LIBS
+	VORBISFILE_CFLAGS=$pkg_cv_VORBISFILE_CFLAGS
+	VORBISFILE_LIBS=$pkg_cv_VORBISFILE_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-	
-  CPPFLAGS="${CPPFLAGS} $SFML_GRAPHICS_CFLAGS"
-  LIBS="${LIBS} $SFML_GRAPHICS_LIBS"
-
+	 CPPFLAGS="${CPPFLAGS} $VORBISFILE_CFLAGS"; LIBS="${LIBS} $VORBISFILE_LIBS" 
 fi
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gluBeginCurve in -lGLU" >&5

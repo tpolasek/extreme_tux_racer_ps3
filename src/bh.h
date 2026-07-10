@@ -27,13 +27,8 @@ GNU General Public License for more details.
 #include <string>
 
 #include <GL/gl.h>
-#include <SFML/System.hpp>
-#include <SFML/Window.hpp>
-#include <SFML/Graphics.hpp>
 
-// Native replacement types (SFML removal in progress). These coexist
-// with the SFML headers above during migration; SFML is removed in a
-// later phase once no sf:: references remain.
+// Native replacement types — SFML has been fully removed.
 #include "n_color.h"
 #include "n_geom.h"
 #include "n_clock.h"

@@ -23,14 +23,6 @@ struct Color {
 	constexpr Color() noexcept : r(0), g(0), b(0), a(255) {}
 	constexpr Color(Uint8 R, Uint8 G, Uint8 B, Uint8 A = 255) noexcept : r(R), g(G), b(B), a(A) {}
 
-#if defined(SFML_GRAPHICS_HPP)
-	// Coexistence bridge: allows the migrated native Color to flow into
-	// not-yet-migrated SFML APIs (sf::Text::setFillColor, sf::RenderWindow::clear,
-	// ...). This block disappears once SFML is removed.
-	Color(const sf::Color& c) noexcept : r(c.r), g(c.g), b(c.b), a(c.a) {}
-	operator sf::Color() const noexcept { return sf::Color(r, g, b, a); }
-#endif
-
 	static const Color Transparent; // 0,0,0,0
 	static const Color White;       // 255,255,255,255
 	static const Color Black;       // 0,0,0,255

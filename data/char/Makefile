@@ -220,7 +220,7 @@ AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
-CPPFLAGS =      -I/usr/include/libpng16  -I/usr/include/freetype2 -I/usr/include/libpng16    -DETR_DATA_DIR=\"${datarootdir}\"
+CPPFLAGS =  -I/usr/include/libpng16  -I/usr/include/freetype2 -I/usr/include/libpng16    -DETR_DATA_DIR=\"${datarootdir}\"
 CSCOPE = cscope
 CTAGS = ctags
 CXX = g++
@@ -243,7 +243,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS = 
-LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lpng16  -lfreetype  -lX11 -lGL -lpthread -ldl -lm -lasound  -lvorbisfile -lvorbis  -lOpenGL -lGLU
+LIBS =  -lpng16  -lfreetype  -lX11 -lGL -lpthread -ldl -lm -lasound  -lvorbisfile -lvorbis  -lOpenGL -lGLU
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/thomas/code/etr-0.8.4/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
@@ -262,14 +262,6 @@ PKG_CONFIG_PATH =
 PNG_CFLAGS = -I/usr/include/libpng16 
 PNG_LIBS = -lpng16 
 SET_MAKE = 
-SFML_AUDIO_CFLAGS = 
-SFML_AUDIO_LIBS = -lsfml-audio -lsfml-system 
-SFML_GRAPHICS_CFLAGS = 
-SFML_GRAPHICS_LIBS = -lsfml-graphics -lsfml-window -lsfml-system 
-SFML_SYSTEM_CFLAGS = 
-SFML_SYSTEM_LIBS = -lsfml-system 
-SFML_WINDOW_CFLAGS = 
-SFML_WINDOW_LIBS = -lsfml-window -lsfml-system 
 SHELL = /bin/bash
 STRIP = 
 VERSION = 0.8.4

@@ -2,7 +2,7 @@
 EXTREME TUXRACER - native replacement types (SFML removal)
 
 Window / event / input: RenderWindow (X11+GLX), Event, Joystick
-(/dev/input/js*), Keyboard, VideoMode, ContextSettings, Style.
+(/dev/input/js*), VideoMode, ContextSettings, Style.
 
 X11 is kept out of this header (opaque handles) so it does not
 propagate through bh.h.
@@ -64,24 +64,6 @@ public:
 	static bool         hasAxis(unsigned int joystick, Axis axis);
 	static int          getAxisPosition(unsigned int joystick, Axis axis); // -100..100
 	static void         update() {} // no-op (events polled directly)
-};
-
-// Keyboard mirrors sf::Keyboard (dev tools only; not in the main game loop).
-class Keyboard {
-public:
-	enum Key {
-		Unknown = -1,
-		A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-		Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
-		Escape,
-		LControl, RControl, LShift, RShift, LAlt, RAlt, LSystem, RSystem, Menu,
-		LBracket, RBracket, Semicolon, Comma, Period, Quote, Slash, Backslash, Tilde, Equal, Dash, Space, Return, Backspace, Tab,
-		PageUp, PageDown, End, Home, Insert, Delete,
-		Add, Subtract, Multiply, Divide, Left, Right, Up, Down,
-		Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
-		F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, F13, F14, F15,
-		Pause, KeyCount
-	};
 };
 
 // Event mirrors the subset of sf::Event used by the game.

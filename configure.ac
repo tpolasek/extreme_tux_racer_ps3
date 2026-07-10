@@ -49,37 +49,7 @@ esac
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([floor getcwd memmove memset mkdir pow sqrt strchr strdup])
 
-PKG_CHECK_MODULES([SFML_SYSTEM], [sfml-system >= 2.4],
-[
-  CPPFLAGS="${CPPFLAGS} $SFML_SYSTEM_CFLAGS"
-  LIBS="${LIBS} $SFML_SYSTEM_LIBS"
-],
-[AC_MSG_ERROR([sfml-system not found])])
-
-PKG_CHECK_MODULES([SFML_AUDIO], [sfml-audio >= 2.4],
-[
-  CPPFLAGS="${CPPFLAGS} $SFML_AUDIO_CFLAGS"
-  LIBS="${LIBS} $SFML_AUDIO_LIBS"
-],
-[AC_MSG_ERROR([sfml-audio not found])])
-
-PKG_CHECK_MODULES([SFML_WINDOW], [sfml-window >= 2.4],
-[
-  CPPFLAGS="${CPPFLAGS} $SFML_WINDOW_CFLAGS"
-  LIBS="${LIBS} $SFML_WINDOW_LIBS"
-],
-[AC_MSG_ERROR([sfml-window not found])])
-
-PKG_CHECK_MODULES([SFML_GRAPHICS], [sfml-graphics >= 2.4],
-[
-  CPPFLAGS="${CPPFLAGS} $SFML_GRAPHICS_CFLAGS"
-  LIBS="${LIBS} $SFML_GRAPHICS_LIBS"
-],
-[AC_MSG_ERROR([sfml-graphics not found])])
-
-# Native replacement libraries (SFML removal in progress). These coexist
-# with SFML during migration; SFML PKG checks above are removed in a
-# later phase once no sf:: references remain.
+# Native replacement libraries — SFML fully removed.
 PKG_CHECK_MODULES([PNG], [libpng],
   [ CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS" ],
   [ AC_MSG_ERROR([libpng not found]) ])
@@ -90,9 +60,8 @@ AC_CHECK_LIB([X11], [XOpenDisplay], [ LIBS="$LIBS -lX11" ], [ AC_MSG_ERROR([libX
 dnl libGL provides GLX (glX* symbols) which libOpenGL lacks.
 AC_CHECK_LIB([GL], [glXChooseFBConfig], [ LIBS="$LIBS -lGL" ], [ AC_MSG_WARN([libGL (GLX) not found]) ])
 LIBS="$LIBS -lpthread -ldl -lm"
-dnl Native audio backend (SFML removal in progress). ALSA drains the mix
-dnl buffer to the device; libvorbisfile decodes OGG music streams. Both
-dnl coexist with sfml-audio above until SFML is fully unlinked.
+dnl Native audio backend. ALSA drains the mix buffer to the device;
+dnl libvorbisfile decodes OGG music streams.
 PKG_CHECK_MODULES([ALSA], [alsa],
   [ CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS" ],
   [ AC_MSG_ERROR([alsa not found]) ])

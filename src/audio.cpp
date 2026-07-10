@@ -97,7 +97,11 @@ void CSound::LoadSoundList() {
 			std::string name = SPStrN(*line, "name");
 			std::string soundfile = SPStrN(*line, "file");
 			std::string path = MakePathStr(param.sounds_dir, soundfile);
-			LoadChunk(name, path);
+			if (LoadChunk(name, path)) {
+				// Per-entry [vol] scales the global sound_volume (0..1 multiplier).
+				float vol = SPFloatN(*line, "vol", 1.0f);
+				sounds.back()->setVolume(static_cast<int>(param.sound_volume * vol));
+			}
 		}
 	}
 }

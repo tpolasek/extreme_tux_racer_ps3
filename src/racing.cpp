@@ -142,9 +142,9 @@ static int CalcSoundVol(float fact) {
 }
 
 static void SetSoundVolumes() {
-	Sound.SetVolume("pickup1",    CalcSoundVol(1.0f));
-	Sound.SetVolume("pickup2",    CalcSoundVol(0.8f));
-	Sound.SetVolume("pickup3",    CalcSoundVol(0.8f));
+	Sound.SetVolume("pickup1",    CalcSoundVol(0.3f));
+	Sound.SetVolume("pickup2",    CalcSoundVol(0.24f));
+	Sound.SetVolume("pickup3",    CalcSoundVol(0.24f));
 	Sound.SetVolume("snow_sound", CalcSoundVol(1.5f));
 	Sound.SetVolume("ice_sound",  CalcSoundVol(0.6f));
 	Sound.SetVolume("rock_sound", CalcSoundVol(1.1f));

@@ -313,12 +313,11 @@ target_alias =
 top_build_prefix = 
 top_builddir = .
 top_srcdir = .
-SUBDIRS = src build data resources doc
+SUBDIRS = src data resources doc
 AM_DIST_FORMATS = xz zip
 EXTRA_DIST = \
 	autogen.sh	\
-	m4/pkg.m4	\
-	version.rc
+	m4/pkg.m4
 
 all: etr_config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive

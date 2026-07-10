@@ -1,8 +1,7 @@
-SUBDIRS = src build data resources doc
+SUBDIRS = src data resources doc
 
 AM_DIST_FORMATS = xz zip
 
 EXTRA_DIST = \
 	autogen.sh	\
-	m4/pkg.m4	\
-	version.rc
+	m4/pkg.m4

@@ -77,9 +77,6 @@
 /* Mac OS X build */
 /* #undef OS_MAC */
 
-/* MinGW build */
-/* #undef OS_WIN32_MINGW */
-
 /* Name of package */
 #define PACKAGE "etr"
 
@@ -105,9 +102,6 @@
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
-
-/* Use unicode functions */
-/* #undef UNICODE */
 
 /* Version number of package */
 #define VERSION "0.8.4"

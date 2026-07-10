@@ -176,7 +176,6 @@ bool FileExists(const std::string& dir, const std::string& filename) {
 	return FileExists(MakePathStr(dir, filename));
 }
 
-#ifndef OS_WIN32_MSC
 bool DirExists(const char *dirname) {
 	DIR *xdir;
 	if ((xdir = opendir(dirname)) == 0)
@@ -184,15 +183,6 @@ bool DirExists(const char *dirname) {
 	if (closedir(xdir) != 0) Message("Couldn't close directory", dirname);
 	return true;
 }
-#else
-bool DirExists(const char *dirname) {
-	DWORD typ = GetFileAttributesA(dirname);
-	if (typ == INVALID_FILE_ATTRIBUTES)
-		return false; // Doesn't exist
-
-	return (typ & FILE_ATTRIBUTE_DIRECTORY) != 0; // Is directory?
-}
-#endif
 
 // --------------------------------------------------------------------
 //				date and time

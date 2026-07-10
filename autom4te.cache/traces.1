@@ -1128,71 +1128,69 @@ m4trace:configure.ac:30: -1- m4_pattern_allow([^HAVE_UNISTD_H$])
 m4trace:configure.ac:33: -1- m4_pattern_allow([^HAVE__BOOL$])
 m4trace:configure.ac:35: -1- m4_pattern_allow([^size_t$])
 m4trace:configure.ac:40: -1- m4_pattern_allow([^OS_LINUX$])
-m4trace:configure.ac:42: -1- m4_pattern_allow([^OS_WIN32_MINGW$])
-m4trace:configure.ac:43: -1- m4_pattern_allow([^UNICODE$])
-m4trace:configure.ac:45: -1- m4_pattern_allow([^OS_MAC$])
-m4trace:configure.ac:49: -1- m4_pattern_allow([^HAVE_MALLOC$])
-m4trace:configure.ac:49: -1- m4_pattern_allow([^HAVE_MALLOC$])
-m4trace:configure.ac:49: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:49: -1- m4_pattern_allow([^malloc$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_FLOOR$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_GETCWD$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_MEMMOVE$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_MEMSET$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_MKDIR$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_POW$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_SQRT$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_STRCHR$])
-m4trace:configure.ac:50: -1- m4_pattern_allow([^HAVE_STRDUP$])
-m4trace:configure.ac:53: -1- PKG_CHECK_MODULES([PNG], [libpng], [ CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS" ], [ AC_MSG_ERROR([libpng not found]) ])
-m4trace:configure.ac:53: -1- PKG_PROG_PKG_CONFIG
-m4trace:configure.ac:53: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PKG_CONFIG(_(PATH|LIBDIR|SYSROOT_DIR|ALLOW_SYSTEM_(CFLAGS|LIBS)))?$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PKG_CONFIG_(DISABLE_UNINSTALLED|TOP_BUILD_DIR|DEBUG_SPEW)$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PKG_CONFIG_PATH$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PKG_CONFIG_LIBDIR$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PNG_CFLAGS$])
-m4trace:configure.ac:53: -1- m4_pattern_allow([^PNG_LIBS$])
-m4trace:configure.ac:53: -1- PKG_CHECK_EXISTS([libpng], [pkg_cv_[]PNG_CFLAGS=`$PKG_CONFIG --[]cflags "libpng" 2>/dev/null`
+m4trace:configure.ac:42: -1- m4_pattern_allow([^OS_MAC$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^HAVE_MALLOC$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^HAVE_MALLOC$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^LIB@&t@OBJS$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^malloc$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_FLOOR$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_GETCWD$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_MEMMOVE$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_MEMSET$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_MKDIR$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_POW$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_SQRT$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_STRCHR$])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_STRDUP$])
+m4trace:configure.ac:50: -1- PKG_CHECK_MODULES([PNG], [libpng], [ CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS" ], [ AC_MSG_ERROR([libpng not found]) ])
+m4trace:configure.ac:50: -1- PKG_PROG_PKG_CONFIG
+m4trace:configure.ac:50: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PKG_CONFIG(_(PATH|LIBDIR|SYSROOT_DIR|ALLOW_SYSTEM_(CFLAGS|LIBS)))?$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PKG_CONFIG_(DISABLE_UNINSTALLED|TOP_BUILD_DIR|DEBUG_SPEW)$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PKG_CONFIG_PATH$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PKG_CONFIG_LIBDIR$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PNG_CFLAGS$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PNG_LIBS$])
+m4trace:configure.ac:50: -1- PKG_CHECK_EXISTS([libpng], [pkg_cv_[]PNG_CFLAGS=`$PKG_CONFIG --[]cflags "libpng" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
-m4trace:configure.ac:53: -1- PKG_CHECK_EXISTS([libpng], [pkg_cv_[]PNG_LIBS=`$PKG_CONFIG --[]libs "libpng" 2>/dev/null`
+m4trace:configure.ac:50: -1- PKG_CHECK_EXISTS([libpng], [pkg_cv_[]PNG_LIBS=`$PKG_CONFIG --[]libs "libpng" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
+m4trace:configure.ac:50: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:53: -1- PKG_CHECK_MODULES([FREETYPE], [freetype2], [ CPPFLAGS="${CPPFLAGS} $FREETYPE_CFLAGS"; LIBS="${LIBS} $FREETYPE_LIBS" ], [ AC_MSG_ERROR([freetype2 not found]) ])
+m4trace:configure.ac:53: -1- m4_pattern_allow([^FREETYPE_CFLAGS$])
+m4trace:configure.ac:53: -1- m4_pattern_allow([^FREETYPE_LIBS$])
+m4trace:configure.ac:53: -1- PKG_CHECK_EXISTS([freetype2], [pkg_cv_[]FREETYPE_CFLAGS=`$PKG_CONFIG --[]cflags "freetype2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
+m4trace:configure.ac:53: -1- PKG_CHECK_EXISTS([freetype2], [pkg_cv_[]FREETYPE_LIBS=`$PKG_CONFIG --[]libs "freetype2" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
 m4trace:configure.ac:53: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:56: -1- PKG_CHECK_MODULES([FREETYPE], [freetype2], [ CPPFLAGS="${CPPFLAGS} $FREETYPE_CFLAGS"; LIBS="${LIBS} $FREETYPE_LIBS" ], [ AC_MSG_ERROR([freetype2 not found]) ])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^FREETYPE_CFLAGS$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^FREETYPE_LIBS$])
-m4trace:configure.ac:56: -1- PKG_CHECK_EXISTS([freetype2], [pkg_cv_[]FREETYPE_CFLAGS=`$PKG_CONFIG --[]cflags "freetype2" 2>/dev/null`
+m4trace:configure.ac:62: -1- PKG_CHECK_MODULES([ALSA], [alsa], [ CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS" ], [ AC_MSG_ERROR([alsa not found]) ])
+m4trace:configure.ac:62: -1- m4_pattern_allow([^ALSA_CFLAGS$])
+m4trace:configure.ac:62: -1- m4_pattern_allow([^ALSA_LIBS$])
+m4trace:configure.ac:62: -1- PKG_CHECK_EXISTS([alsa], [pkg_cv_[]ALSA_CFLAGS=`$PKG_CONFIG --[]cflags "alsa" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
-m4trace:configure.ac:56: -1- PKG_CHECK_EXISTS([freetype2], [pkg_cv_[]FREETYPE_LIBS=`$PKG_CONFIG --[]libs "freetype2" 2>/dev/null`
+m4trace:configure.ac:62: -1- PKG_CHECK_EXISTS([alsa], [pkg_cv_[]ALSA_LIBS=`$PKG_CONFIG --[]libs "alsa" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
-m4trace:configure.ac:56: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:65: -1- PKG_CHECK_MODULES([ALSA], [alsa], [ CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS" ], [ AC_MSG_ERROR([alsa not found]) ])
-m4trace:configure.ac:65: -1- m4_pattern_allow([^ALSA_CFLAGS$])
-m4trace:configure.ac:65: -1- m4_pattern_allow([^ALSA_LIBS$])
-m4trace:configure.ac:65: -1- PKG_CHECK_EXISTS([alsa], [pkg_cv_[]ALSA_CFLAGS=`$PKG_CONFIG --[]cflags "alsa" 2>/dev/null`
+m4trace:configure.ac:62: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:65: -1- PKG_CHECK_MODULES([VORBISFILE], [vorbisfile vorbis], [ CPPFLAGS="${CPPFLAGS} $VORBISFILE_CFLAGS"; LIBS="${LIBS} $VORBISFILE_LIBS" ], [ AC_MSG_ERROR([vorbisfile not found]) ])
+m4trace:configure.ac:65: -1- m4_pattern_allow([^VORBISFILE_CFLAGS$])
+m4trace:configure.ac:65: -1- m4_pattern_allow([^VORBISFILE_LIBS$])
+m4trace:configure.ac:65: -1- PKG_CHECK_EXISTS([vorbisfile vorbis], [pkg_cv_[]VORBISFILE_CFLAGS=`$PKG_CONFIG --[]cflags "vorbisfile vorbis" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
-m4trace:configure.ac:65: -1- PKG_CHECK_EXISTS([alsa], [pkg_cv_[]ALSA_LIBS=`$PKG_CONFIG --[]libs "alsa" 2>/dev/null`
+m4trace:configure.ac:65: -1- PKG_CHECK_EXISTS([vorbisfile vorbis], [pkg_cv_[]VORBISFILE_LIBS=`$PKG_CONFIG --[]libs "vorbisfile vorbis" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
 m4trace:configure.ac:65: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:68: -1- PKG_CHECK_MODULES([VORBISFILE], [vorbisfile vorbis], [ CPPFLAGS="${CPPFLAGS} $VORBISFILE_CFLAGS"; LIBS="${LIBS} $VORBISFILE_LIBS" ], [ AC_MSG_ERROR([vorbisfile not found]) ])
-m4trace:configure.ac:68: -1- m4_pattern_allow([^VORBISFILE_CFLAGS$])
-m4trace:configure.ac:68: -1- m4_pattern_allow([^VORBISFILE_LIBS$])
-m4trace:configure.ac:68: -1- PKG_CHECK_EXISTS([vorbisfile vorbis], [pkg_cv_[]VORBISFILE_CFLAGS=`$PKG_CONFIG --[]cflags "vorbisfile vorbis" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
-m4trace:configure.ac:68: -1- PKG_CHECK_EXISTS([vorbisfile vorbis], [pkg_cv_[]VORBISFILE_LIBS=`$PKG_CONFIG --[]libs "vorbisfile vorbis" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
-m4trace:configure.ac:68: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:190: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^LTLIBOBJS$])
-m4trace:configure.ac:190: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
-m4trace:configure.ac:190: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
-m4trace:configure.ac:190: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
-m4trace:configure.ac:190: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
-m4trace:configure.ac:190: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
-m4trace:configure.ac:190: -1- AM_RUN_LOG([cd "$am_dirpart" \
+m4trace:configure.ac:185: -1- m4_pattern_allow([^LIB@&t@OBJS$])
+m4trace:configure.ac:185: -1- m4_pattern_allow([^LTLIBOBJS$])
+m4trace:configure.ac:185: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
+m4trace:configure.ac:185: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
+m4trace:configure.ac:185: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
+m4trace:configure.ac:185: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
+m4trace:configure.ac:185: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
+m4trace:configure.ac:185: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
+m4trace:configure.ac:185: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
+m4trace:configure.ac:185: -1- AM_RUN_LOG([cd "$am_dirpart" \
       && sed -e '/# am--include-marker/d' "$am_filepart" \
         | $MAKE -f - am--depfiles])

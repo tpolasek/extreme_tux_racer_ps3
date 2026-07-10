@@ -79,15 +79,6 @@ void CWinsys::SetupVideoMode(const TScreenRes& res) {
 	window.create(VideoMode(resolution.width, resolution.height, bpp), WINDOW_TITLE, style, ctx);
 	if (param.framerate)
 		window.setFramerateLimit(param.framerate);
-#ifdef _WIN32
-#ifdef UNICODE
-	HICON icon = LoadIcon(GetModuleHandle(NULL), (LPCWSTR)IDI_APPLICATION);
-#else
-	HICON icon = LoadIcon(GetModuleHandle(NULL), (LPCSTR)IDI_APPLICATION);
-#endif
-	SendMessageW(window.getSystemHandle(), WM_SETICON, ICON_BIG, (LPARAM)icon);
-	SendMessageW(window.getSystemHandle(), WM_SETICON, ICON_SMALL, (LPARAM)icon);
-#endif
 
 	scale = CalcScreenScale();
 	if (param.use_quad_scale) scale = std::sqrt(scale);
@@ -145,13 +136,11 @@ void CWinsys::TakeScreenshot() const {
 
 	std::string path = param.screenshot_dir;
 
-#if !defined (OS_WIN32_MINGW) && !defined (OS_WIN32_MSC)
 	const char *cpath = path.c_str();
 
 	if (!DirExists(cpath)) {
 		mkdir(cpath, 0775);
 	}
-#endif /* WIN32 */
 
 	path += SEP;
 	path += g_game.course->dir;

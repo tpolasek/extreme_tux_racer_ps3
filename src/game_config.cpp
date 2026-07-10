@@ -257,33 +257,6 @@ void SaveConfigFile() {
 void InitConfig() {
 	int config_exist = 0;
 
-#if defined (OS_WIN32_MINGW) || defined (OS_WIN32_MSC)
-	// the progdir is always the current dir
-	param.config_dir = "config";
-	param.data_dir = "data";
-	param.save_dir = "data";
-	param.configfile = param.config_dir + SEP "options.txt";
-	if (FileExists(param.configfile)) {
-		config_exist = 1;
-	}
-#else /* WIN32 */
-
-#if 0
-	char buff[256];
-
-	if (std::strcmp(arg0, "./etr") == 0) {		// start from work directory
-		char *s = getcwd(buff, 256);
-		if (s==nullptr) {};
-	} else {								// start with full path
-		std::strcpy(buff, arg0);
-		if (std::strlen(buff) > 5) {
-			buff[std::strlen(buff)-3] = 0;
-		}
-	}
-
-	param.prog_dir = buff;
-#endif /* 0 */
-
 	struct passwd *pwent = getpwuid(getuid());
 	std::string halfway_dir;
 
@@ -303,7 +276,6 @@ void InitConfig() {
 		}
 		param.config_dir += SEP "etr";
 	}
-	// or: param.config_dir = param.prog_dir + SEP "config";
 	if (!DirExists(param.config_dir.c_str())) {
 		// TODO: Support generic multi-part path directory creation
 		if (!halfway_dir.empty()) {
@@ -326,7 +298,6 @@ void InitConfig() {
 			config_exist = 2;
 		}
 	}
-#endif /* WIN32 */
 
 	param.screenshot_dir = param.save_dir + SEP "screenshots";
 	param.obj_dir = param.data_dir + SEP "objects";

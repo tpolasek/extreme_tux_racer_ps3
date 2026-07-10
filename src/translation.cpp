@@ -222,18 +222,7 @@ void CTranslation::ChangeLanguage(std::size_t langidx) {
 }
 
 std::string CTranslation::GetSystemDefaultLang() {
-#ifdef _WIN32
-	wchar_t buf[10] = {0};
-	GetUserDefaultLocaleName(buf, 10);
-	char buf2[10] = {0};
-	WideCharToMultiByte(CP_ACP, 0, buf, -1, buf2, 10, nullptr, nullptr);
-	std::string ret = buf2;
-	while (ret.find('-') != std::string::npos)
-		ret[ret.find('-')] = '_';
-	return ret;
-#else
 	return "";
-#endif
 }
 
 std::size_t CTranslation::GetSystemDefaultLangIdx() const {

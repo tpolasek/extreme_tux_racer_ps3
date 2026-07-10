@@ -16,9 +16,6 @@ icon_DATA =		\
 	etr.svg
 
 EXTRA_DIST = 		\
-	banner.bmp	\
-	dialog.bmp	\
-	etracericon.ico	\
 	net.sourceforge.extremetuxracer.metainfo.xml	\
 	etr.svg	        \
 	net.sourceforge.extremetuxracer.desktop	\

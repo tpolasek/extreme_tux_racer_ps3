@@ -38,9 +38,6 @@ AC_TYPE_SIZE_T
 case "$host_os" in
   *linux*)
      AC_DEFINE([OS_LINUX], [1], [Linux build]) ;;
-  *mingw32*)
-     AC_DEFINE([OS_WIN32_MINGW], [1], [MinGW build])
-     AC_DEFINE([UNICODE], [1], [Use unicode functions]) ;;
   *darwin*)
      AC_DEFINE([OS_MAC], [1], [Mac OS X build]) ;;
 esac
@@ -108,8 +105,6 @@ CXXFLAGS="${CXXFLAGS} -std=c++14"
 AC_CONFIG_FILES([
         Makefile
         src/Makefile
-        build/Makefile
-        build/Installer/Makefile
         data/Makefile
         data/char/Makefile
         data/char/beastie/Makefile

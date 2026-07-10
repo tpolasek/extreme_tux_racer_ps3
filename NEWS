@@ -13,6 +13,8 @@ Version 0.8.4 (unreleased, Linux-native port)                        2026
 - Native font API mirrors the PS3 font.h shape (Typeface / FontRenderer /
   RenderSurface / GlyphMetrics), backed by FreeType2 on Linux.
 - Removed unused dev tool sources (tool_frame, tool_char, ogl_test, tools).
+- Removed all Windows/MSVC/MinGW code and build files (build/ directory,
+  version.rc, installer bitmaps, #ifdef _WIN32 blocks). Linux-only now.
 
 
 Version 0.8.4                                                 10th of May, 2024

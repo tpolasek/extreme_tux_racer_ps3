@@ -76,9 +76,6 @@
 /* Mac OS X build */
 #undef OS_MAC
 
-/* MinGW build */
-#undef OS_WIN32_MINGW
-
 /* Name of package */
 #undef PACKAGE
 
@@ -104,9 +101,6 @@
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #undef STDC_HEADERS
-
-/* Use unicode functions */
-#undef UNICODE
 
 /* Version number of package */
 #undef VERSION

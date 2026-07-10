@@ -39,45 +39,21 @@ GNU General Public License for more details.
 #include "n_window.h"
 
 #ifndef HAVE_CONFIG_H
-#	ifdef _WIN32 // Windows platform
-#		ifdef _MSC_VER // MSVC compiler
-#			define OS_WIN32_MSC
-#		else // Assume MinGW compiler
-#			define OS_WIN32_MINGW
-#		endif
-#	else // Assume Unix platform (Linux, Mac OS X, BSD, ...)
-#		ifdef __APPLE__
-#			define OS_MAC
-#		elif defined(__linux__)
-#			define OS_LINUX
-#		endif
+#	ifdef __APPLE__
+#		define OS_MAC
+#	elif defined(__linux__)
+#		define OS_LINUX
 #	endif
 #endif // CONFIG_H
 
-#if defined OS_WIN32_MSC // Windows platform
-#	include <windows.h>
-#	include "glext.h"
-#	pragma warning (disable:4244)
-#	pragma warning (disable:4305)
-#	define SEP "\\"
-#	undef DrawText
-#	undef GetObject
-#	if _MSC_VER < 1900 // VS 2013 or older
-#		define constexpr
-#	endif
-#elif defined OS_WIN32_MINGW
-#	include <dirent.h>
-#	include <GL/glext.h>
-#	define SEP "/"
-#else // Assume Unix platform (Linux, Mac OS X, BSD, ...)
-#	include <unistd.h>
-#	include <sys/types.h>
-#	include <pwd.h>
-#	include <dirent.h>
-#	include <sys/time.h>
-#	include <GL/glx.h>
-#	define SEP "/"
-#endif
+// Unix platform (Linux, Mac OS X, BSD, ...)
+#include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <dirent.h>
+#include <sys/time.h>
+#include <GL/glx.h>
+#define SEP "/"
 
 
 #define USE_STENCIL_BUFFER

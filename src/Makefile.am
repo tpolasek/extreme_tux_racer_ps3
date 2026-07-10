@@ -36,7 +36,14 @@ etr_SOURCES =		\
 	tux.cpp		\
 	vectors.cpp	\
 	view.cpp	\
-	winsys.cpp
+	winsys.cpp \
+	n_color.cpp \
+	n_clock.cpp \
+	n_image.cpp \
+	n_texture.cpp \
+	n_font.cpp \
+	n_draw.cpp \
+	n_window.cpp
 
 noinst_HEADERS =	\
 	audio.h		\
@@ -76,4 +83,13 @@ noinst_HEADERS =	\
 	vectors.h	\
 	version.h	\
 	view.h		\
-	winsys.h
+	winsys.h	\
+	n_color.h	\
+	n_geom.h	\
+	n_clock.h	\
+	n_glutil.h	\
+	n_image.h	\
+	n_texture.h	\
+	n_font.h	\
+	n_draw.h	\
+	n_window.h

@@ -31,6 +31,18 @@ GNU General Public License for more details.
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
 
+// Native replacement types (SFML removal in progress). These coexist
+// with the SFML headers above during migration; SFML is removed in a
+// later phase once no sf:: references remain.
+#include "n_color.h"
+#include "n_geom.h"
+#include "n_clock.h"
+#include "n_image.h"
+#include "n_texture.h"
+#include "n_font.h"
+#include "n_draw.h"
+#include "n_window.h"
+
 #ifndef HAVE_CONFIG_H
 #	ifdef _WIN32 // Windows platform
 #		ifdef _MSC_VER // MSVC compiler

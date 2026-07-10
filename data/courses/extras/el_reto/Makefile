@@ -160,7 +160,7 @@ AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
-CPPFLAGS =      -DETR_DATA_DIR=\"${datarootdir}\"
+CPPFLAGS =      -I/usr/include/libpng16  -I/usr/include/freetype2 -I/usr/include/libpng16  -DETR_DATA_DIR=\"${datarootdir}\"
 CSCOPE = cscope
 CTAGS = ctags
 CXX = g++
@@ -174,6 +174,8 @@ ECHO_N = -n
 ECHO_T = 
 ETAGS = etags
 EXEEXT = 
+FREETYPE_CFLAGS = -I/usr/include/freetype2 -I/usr/include/libpng16 
+FREETYPE_LIBS = -lfreetype 
 INSTALL = /usr/bin/install -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
@@ -181,7 +183,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS = 
-LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lOpenGL -lGLU
+LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lpng16  -lfreetype  -lX11 -lGL -lpthread -ldl -lm -lOpenGL -lGLU
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/thomas/code/etr-0.8.4/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
@@ -197,6 +199,8 @@ PATH_SEPARATOR = :
 PKG_CONFIG = /usr/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
 PKG_CONFIG_PATH = 
+PNG_CFLAGS = -I/usr/include/libpng16 
+PNG_LIBS = -lpng16 
 SET_MAKE = 
 SFML_AUDIO_CFLAGS = 
 SFML_AUDIO_LIBS = -lsfml-audio -lsfml-system 

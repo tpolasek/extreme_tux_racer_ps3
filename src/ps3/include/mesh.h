@@ -21,9 +21,12 @@ struct S3DVertex
 
 struct SMeshBuffer
 {
-	SMeshBuffer() : indices(NULL), cnt_indices(0), vertices(NULL), cnt_vertices(0) {}
+	SMeshBuffer() : indices(NULL), indices32(NULL), use32(false),
+	                cnt_indices(0), vertices(NULL), cnt_vertices(0) {}
 
 	u16 *indices;
+	u32 *indices32;     // 32-bit index path (T0 spike / terrain)
+	bool use32;         // true -> draw via indices32 with GCM_INDEX_TYPE_32B
 	u32 cnt_indices;
 	S3DVertex *vertices;
 	u32 cnt_vertices;
@@ -145,6 +148,57 @@ inline SMeshBuffer* createQuad(float size)
 
 	buffer->indices[0] = 0; buffer->indices[1] = 1; buffer->indices[2] = 2;
 	buffer->indices[3] = 0; buffer->indices[4] = 2; buffer->indices[5] = 3;
+
+	return buffer;
+}
+
+// T0 spike: a side x side vertex grid that exceeds the 16-bit index ceiling
+// (side=300 -> 90,000 verts, > 65,535) to validate GCM_INDEX_TYPE_32B.
+inline SMeshBuffer* createBigGrid(u32 side)
+{
+	SMeshBuffer *buffer = new SMeshBuffer();
+	buffer->use32 = true;
+
+	buffer->cnt_vertices = side * side;
+	buffer->vertices = (S3DVertex*)rsxMemalign(128, buffer->cnt_vertices * sizeof(S3DVertex));
+
+	const u32 cells = side - 1;
+	buffer->cnt_indices = cells * cells * 6;
+	buffer->indices32 = (u32*)rsxMemalign(128, buffer->cnt_indices * sizeof(u32));
+
+	const float span = 60.0f;        // world units across the full grid
+	const float half = span * 0.5f;
+	const float step = span / cells;
+	// UVs span [0,1] so the shared CLAMP_TO_EDGE texture (setTexture) doesn't
+	// smear edge texels; the 8x8 checker stretches cleanly across the whole grid.
+	const float tileRepeat = 1.0f;
+
+	u32 v = 0;
+	for (u32 row = 0; row < side; row++) {
+		for (u32 col = 0; col < side; col++) {
+			float x = -half + col * step;
+			float z = -half + row * step;
+			float u = (float)col / cells * tileRepeat;
+			float vv = (float)row / cells * tileRepeat;
+			buffer->vertices[v++] = S3DVertex(x, 0.0f, z, 0.0f, 1.0f, 0.0f, u, vv);
+		}
+	}
+
+	u32 i = 0;
+	for (u32 row = 0; row < cells; row++) {
+		for (u32 col = 0; col < cells; col++) {
+			u32 curr  = row * side + col;
+			u32 right = curr + 1;
+			u32 down  = curr + side;
+			u32 diag  = down + 1;
+			buffer->indices32[i++] = curr;
+			buffer->indices32[i++] = down;
+			buffer->indices32[i++] = diag;
+			buffer->indices32[i++] = curr;
+			buffer->indices32[i++] = diag;
+			buffer->indices32[i++] = right;
+		}
+	}
 
 	return buffer;
 }

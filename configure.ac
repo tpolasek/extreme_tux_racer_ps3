@@ -77,6 +77,20 @@ PKG_CHECK_MODULES([SFML_GRAPHICS], [sfml-graphics >= 2.4],
 ],
 [AC_MSG_ERROR([sfml-graphics not found])])
 
+# Native replacement libraries (SFML removal in progress). These coexist
+# with SFML during migration; SFML PKG checks above are removed in a
+# later phase once no sf:: references remain.
+PKG_CHECK_MODULES([PNG], [libpng],
+  [ CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS" ],
+  [ AC_MSG_ERROR([libpng not found]) ])
+PKG_CHECK_MODULES([FREETYPE], [freetype2],
+  [ CPPFLAGS="${CPPFLAGS} $FREETYPE_CFLAGS"; LIBS="${LIBS} $FREETYPE_LIBS" ],
+  [ AC_MSG_ERROR([freetype2 not found]) ])
+AC_CHECK_LIB([X11], [XOpenDisplay], [ LIBS="$LIBS -lX11" ], [ AC_MSG_ERROR([libX11 not found]) ])
+dnl libGL provides GLX (glX* symbols) which libOpenGL lacks.
+AC_CHECK_LIB([GL], [glXChooseFBConfig], [ LIBS="$LIBS -lGL" ], [ AC_MSG_WARN([libGL (GLX) not found]) ])
+LIBS="$LIBS -lpthread -ldl -lm"
+
 AC_CHECK_LIB([GLU], [gluBeginCurve],
 [
   AC_CHECK_LIB([OpenGL], [glBegin],

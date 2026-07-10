@@ -651,6 +651,10 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+FREETYPE_LIBS
+FREETYPE_CFLAGS
+PNG_LIBS
+PNG_CFLAGS
 SFML_GRAPHICS_LIBS
 SFML_GRAPHICS_CFLAGS
 SFML_WINDOW_LIBS
@@ -791,7 +795,11 @@ SFML_AUDIO_LIBS
 SFML_WINDOW_CFLAGS
 SFML_WINDOW_LIBS
 SFML_GRAPHICS_CFLAGS
-SFML_GRAPHICS_LIBS'
+SFML_GRAPHICS_LIBS
+PNG_CFLAGS
+PNG_LIBS
+FREETYPE_CFLAGS
+FREETYPE_LIBS'
 
 
 # Initialize some variables set by options.
@@ -1458,6 +1466,12 @@ Some influential environment variables:
               C compiler flags for SFML_GRAPHICS, overriding pkg-config
   SFML_GRAPHICS_LIBS
               linker flags for SFML_GRAPHICS, overriding pkg-config
+  PNG_CFLAGS  C compiler flags for PNG, overriding pkg-config
+  PNG_LIBS    linker flags for PNG, overriding pkg-config
+  FREETYPE_CFLAGS
+              C compiler flags for FREETYPE, overriding pkg-config
+  FREETYPE_LIBS
+              linker flags for FREETYPE, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -6391,6 +6405,238 @@ printf "%s\n" "yes" >&6; }
   LIBS="${LIBS} $SFML_GRAPHICS_LIBS"
 
 fi
+
+# Native replacement libraries (SFML removal in progress). These coexist
+# with SFML during migration; SFML PKG checks above are removed in a
+# later phase once no sf:: references remain.
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for libpng" >&5
+printf %s "checking for libpng... " >&6; }
+
+if test -n "$PNG_CFLAGS"; then
+    pkg_cv_PNG_CFLAGS="$PNG_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpng\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpng") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_PNG_CFLAGS=`$PKG_CONFIG --cflags "libpng" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$PNG_LIBS"; then
+    pkg_cv_PNG_LIBS="$PNG_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpng\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpng") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_PNG_LIBS=`$PKG_CONFIG --libs "libpng" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        PNG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libpng" 2>&1`
+        else
+	        PNG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libpng" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$PNG_PKG_ERRORS" >&5
+
+	 as_fn_error $? "libpng not found" "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+	 as_fn_error $? "libpng not found" "$LINENO" 5
+else
+	PNG_CFLAGS=$pkg_cv_PNG_CFLAGS
+	PNG_LIBS=$pkg_cv_PNG_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+	 CPPFLAGS="${CPPFLAGS} $PNG_CFLAGS"; LIBS="${LIBS} $PNG_LIBS"
+fi
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for freetype2" >&5
+printf %s "checking for freetype2... " >&6; }
+
+if test -n "$FREETYPE_CFLAGS"; then
+    pkg_cv_FREETYPE_CFLAGS="$FREETYPE_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"freetype2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "freetype2") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_FREETYPE_CFLAGS=`$PKG_CONFIG --cflags "freetype2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$FREETYPE_LIBS"; then
+    pkg_cv_FREETYPE_LIBS="$FREETYPE_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"freetype2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "freetype2") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_FREETYPE_LIBS=`$PKG_CONFIG --libs "freetype2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        FREETYPE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "freetype2" 2>&1`
+        else
+	        FREETYPE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "freetype2" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$FREETYPE_PKG_ERRORS" >&5
+
+	 as_fn_error $? "freetype2 not found" "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+	 as_fn_error $? "freetype2 not found" "$LINENO" 5
+else
+	FREETYPE_CFLAGS=$pkg_cv_FREETYPE_CFLAGS
+	FREETYPE_LIBS=$pkg_cv_FREETYPE_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+	 CPPFLAGS="${CPPFLAGS} $FREETYPE_CFLAGS"; LIBS="${LIBS} $FREETYPE_LIBS"
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for XOpenDisplay in -lX11" >&5
+printf %s "checking for XOpenDisplay in -lX11... " >&6; }
+if test ${ac_cv_lib_X11_XOpenDisplay+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lX11  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char XOpenDisplay ();
+int
+main (void)
+{
+return XOpenDisplay ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_X11_XOpenDisplay=yes
+else $as_nop
+  ac_cv_lib_X11_XOpenDisplay=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_X11_XOpenDisplay" >&5
+printf "%s\n" "$ac_cv_lib_X11_XOpenDisplay" >&6; }
+if test "x$ac_cv_lib_X11_XOpenDisplay" = xyes
+then :
+   LIBS="$LIBS -lX11"
+else $as_nop
+   as_fn_error $? "libX11 not found" "$LINENO" 5
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for glXChooseFBConfig in -lGL" >&5
+printf %s "checking for glXChooseFBConfig in -lGL... " >&6; }
+if test ${ac_cv_lib_GL_glXChooseFBConfig+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lGL  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char glXChooseFBConfig ();
+int
+main (void)
+{
+return glXChooseFBConfig ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_GL_glXChooseFBConfig=yes
+else $as_nop
+  ac_cv_lib_GL_glXChooseFBConfig=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_GL_glXChooseFBConfig" >&5
+printf "%s\n" "$ac_cv_lib_GL_glXChooseFBConfig" >&6; }
+if test "x$ac_cv_lib_GL_glXChooseFBConfig" = xyes
+then :
+   LIBS="$LIBS -lGL"
+else $as_nop
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: libGL (GLX) not found" >&5
+printf "%s\n" "$as_me: WARNING: libGL (GLX) not found" >&2;}
+fi
+
+LIBS="$LIBS -lpthread -ldl -lm"
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gluBeginCurve in -lGLU" >&5
 printf %s "checking for gluBeginCurve in -lGLU... " >&6; }

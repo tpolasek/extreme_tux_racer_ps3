@@ -115,7 +115,9 @@ am_etr_OBJECTS = audio.$(OBJEXT) common.$(OBJEXT) course.$(OBJEXT) \
 	reset.$(OBJEXT) splash_screen.$(OBJEXT) spx.$(OBJEXT) \
 	states.$(OBJEXT) textures.$(OBJEXT) track_marks.$(OBJEXT) \
 	translation.$(OBJEXT) tux.$(OBJEXT) vectors.$(OBJEXT) \
-	view.$(OBJEXT) winsys.$(OBJEXT)
+	view.$(OBJEXT) winsys.$(OBJEXT) n_color.$(OBJEXT) \
+	n_clock.$(OBJEXT) n_image.$(OBJEXT) n_texture.$(OBJEXT) \
+	n_font.$(OBJEXT) n_draw.$(OBJEXT) n_window.$(OBJEXT)
 etr_OBJECTS = $(am_etr_OBJECTS)
 etr_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_$(V))
@@ -141,15 +143,18 @@ am__depfiles_remade = ./$(DEPDIR)/audio.Po ./$(DEPDIR)/common.Po \
 	./$(DEPDIR)/intro.Po ./$(DEPDIR)/keyframe.Po \
 	./$(DEPDIR)/loading.Po ./$(DEPDIR)/main.Po \
 	./$(DEPDIR)/mathlib.Po ./$(DEPDIR)/matrices.Po \
-	./$(DEPDIR)/ogl.Po ./$(DEPDIR)/particles.Po \
-	./$(DEPDIR)/paused.Po ./$(DEPDIR)/physics.Po \
-	./$(DEPDIR)/quadtree.Po ./$(DEPDIR)/race_select.Po \
-	./$(DEPDIR)/racing.Po ./$(DEPDIR)/regist.Po \
-	./$(DEPDIR)/reset.Po ./$(DEPDIR)/splash_screen.Po \
-	./$(DEPDIR)/spx.Po ./$(DEPDIR)/states.Po \
-	./$(DEPDIR)/textures.Po ./$(DEPDIR)/track_marks.Po \
-	./$(DEPDIR)/translation.Po ./$(DEPDIR)/tux.Po \
-	./$(DEPDIR)/vectors.Po ./$(DEPDIR)/view.Po \
+	./$(DEPDIR)/n_clock.Po ./$(DEPDIR)/n_color.Po \
+	./$(DEPDIR)/n_draw.Po ./$(DEPDIR)/n_font.Po \
+	./$(DEPDIR)/n_image.Po ./$(DEPDIR)/n_texture.Po \
+	./$(DEPDIR)/n_window.Po ./$(DEPDIR)/ogl.Po \
+	./$(DEPDIR)/particles.Po ./$(DEPDIR)/paused.Po \
+	./$(DEPDIR)/physics.Po ./$(DEPDIR)/quadtree.Po \
+	./$(DEPDIR)/race_select.Po ./$(DEPDIR)/racing.Po \
+	./$(DEPDIR)/regist.Po ./$(DEPDIR)/reset.Po \
+	./$(DEPDIR)/splash_screen.Po ./$(DEPDIR)/spx.Po \
+	./$(DEPDIR)/states.Po ./$(DEPDIR)/textures.Po \
+	./$(DEPDIR)/track_marks.Po ./$(DEPDIR)/translation.Po \
+	./$(DEPDIR)/tux.Po ./$(DEPDIR)/vectors.Po ./$(DEPDIR)/view.Po \
 	./$(DEPDIR)/winsys.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -202,7 +207,7 @@ AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
-CPPFLAGS =      -DETR_DATA_DIR=\"${datarootdir}\"
+CPPFLAGS =      -I/usr/include/libpng16  -I/usr/include/freetype2 -I/usr/include/libpng16  -DETR_DATA_DIR=\"${datarootdir}\"
 CSCOPE = cscope
 CTAGS = ctags
 CXX = g++
@@ -216,6 +221,8 @@ ECHO_N = -n
 ECHO_T = 
 ETAGS = etags
 EXEEXT = 
+FREETYPE_CFLAGS = -I/usr/include/freetype2 -I/usr/include/libpng16 
+FREETYPE_LIBS = -lfreetype 
 INSTALL = /usr/bin/install -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
@@ -223,7 +230,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS = 
-LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lOpenGL -lGLU
+LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lpng16  -lfreetype  -lX11 -lGL -lpthread -ldl -lm -lOpenGL -lGLU
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/thomas/code/etr-0.8.4/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
@@ -239,6 +246,8 @@ PATH_SEPARATOR = :
 PKG_CONFIG = /usr/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
 PKG_CONFIG_PATH = 
+PNG_CFLAGS = -I/usr/include/libpng16 
+PNG_LIBS = -lpng16 
 SET_MAKE = 
 SFML_AUDIO_CFLAGS = 
 SFML_AUDIO_LIBS = -lsfml-audio -lsfml-system 
@@ -339,7 +348,14 @@ etr_SOURCES = \
 	tux.cpp		\
 	vectors.cpp	\
 	view.cpp	\
-	winsys.cpp
+	winsys.cpp \
+	n_color.cpp \
+	n_clock.cpp \
+	n_image.cpp \
+	n_texture.cpp \
+	n_font.cpp \
+	n_draw.cpp \
+	n_window.cpp
 
 noinst_HEADERS = \
 	audio.h		\
@@ -379,7 +395,16 @@ noinst_HEADERS = \
 	vectors.h	\
 	version.h	\
 	view.h		\
-	winsys.h
+	winsys.h	\
+	n_color.h	\
+	n_geom.h	\
+	n_clock.h	\
+	n_glutil.h	\
+	n_image.h	\
+	n_texture.h	\
+	n_font.h	\
+	n_draw.h	\
+	n_window.h
 
 all: all-am
 
@@ -484,6 +509,13 @@ include ./$(DEPDIR)/loading.Po # am--include-marker
 include ./$(DEPDIR)/main.Po # am--include-marker
 include ./$(DEPDIR)/mathlib.Po # am--include-marker
 include ./$(DEPDIR)/matrices.Po # am--include-marker
+include ./$(DEPDIR)/n_clock.Po # am--include-marker
+include ./$(DEPDIR)/n_color.Po # am--include-marker
+include ./$(DEPDIR)/n_draw.Po # am--include-marker
+include ./$(DEPDIR)/n_font.Po # am--include-marker
+include ./$(DEPDIR)/n_image.Po # am--include-marker
+include ./$(DEPDIR)/n_texture.Po # am--include-marker
+include ./$(DEPDIR)/n_window.Po # am--include-marker
 include ./$(DEPDIR)/ogl.Po # am--include-marker
 include ./$(DEPDIR)/particles.Po # am--include-marker
 include ./$(DEPDIR)/paused.Po # am--include-marker
@@ -669,6 +701,13 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
+	-rm -f ./$(DEPDIR)/n_clock.Po
+	-rm -f ./$(DEPDIR)/n_color.Po
+	-rm -f ./$(DEPDIR)/n_draw.Po
+	-rm -f ./$(DEPDIR)/n_font.Po
+	-rm -f ./$(DEPDIR)/n_image.Po
+	-rm -f ./$(DEPDIR)/n_texture.Po
+	-rm -f ./$(DEPDIR)/n_window.Po
 	-rm -f ./$(DEPDIR)/ogl.Po
 	-rm -f ./$(DEPDIR)/particles.Po
 	-rm -f ./$(DEPDIR)/paused.Po
@@ -750,6 +789,13 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
+	-rm -f ./$(DEPDIR)/n_clock.Po
+	-rm -f ./$(DEPDIR)/n_color.Po
+	-rm -f ./$(DEPDIR)/n_draw.Po
+	-rm -f ./$(DEPDIR)/n_font.Po
+	-rm -f ./$(DEPDIR)/n_image.Po
+	-rm -f ./$(DEPDIR)/n_texture.Po
+	-rm -f ./$(DEPDIR)/n_window.Po
 	-rm -f ./$(DEPDIR)/ogl.Po
 	-rm -f ./$(DEPDIR)/particles.Po
 	-rm -f ./$(DEPDIR)/paused.Po

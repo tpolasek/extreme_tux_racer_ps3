@@ -21,7 +21,7 @@ static inline void ttyTrace(const char *msg) {
 	sysTtyWrite(0, msg, __builtin_strlen(msg), &w);
 }
 
-SYS_PROCESS_PARAM(1001, 0x100000);
+SYS_PROCESS_PARAM(1001, 0x400000);
 
 u32 running = 0;
 
@@ -53,6 +53,7 @@ rsxFragmentProgram *fpo = NULL;
 static Matrix4 P;
 static SMeshBuffer *sphere = NULL;
 static SMeshBuffer *ground = NULL;
+static SMeshBuffer *bigGrid = NULL;   // T0: 32-bit-indexed (>64K verts) grid
 
 extern "C" {
 static void program_exit_callback()
@@ -257,6 +258,68 @@ static void drawMesh(SMeshBuffer *mesh, const Matrix4& modelMatrix)
 	rsxDrawIndexArray(context, GCM_TYPE_TRIANGLES, offset, mesh->cnt_indices, GCM_INDEX_TYPE_16B, GCM_LOCATION_RSX);
 }
 
+// T0 spike: same as drawMesh but drives the 32-bit index path (GCM_INDEX_TYPE_32B)
+// to validate that indices > 65,535 address correctly on this PSL1GHT build.
+static void drawMesh32(SMeshBuffer *mesh, const Matrix4& modelMatrix)
+{
+	u32 offset;
+	Matrix4 viewMatrix = Matrix4::lookAt(eye_pos, eye_target, up_vec);
+	Matrix4 modelViewMatrix = transpose(viewMatrix * modelMatrix);
+
+	Matrix4 modelMatrixIT = inverse(modelMatrix);
+	Vector4 objEyePos = modelMatrixIT * eye_pos;
+	Vector4 objLightPos = modelMatrixIT * Point3(5.0f, 10.0f, 5.0f);
+
+	// Red tint so the 32-bit-indexed grid is visually distinct from the ground.
+	float globalAmbientColor[3] = {0.15f, 0.15f, 0.15f};
+	float lightColorVal[3] = {0.9f, 0.9f, 0.9f};
+	float materialColorDiffuse[3] = {0.9f, 0.2f, 0.2f};
+	float materialColorSpecular[3] = {0.0f, 0.0f, 0.0f};
+	float shininessVal = 1.0f;
+
+	rsxAddressToOffset(&mesh->vertices[0].pos, &offset);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, offset, sizeof(S3DVertex), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+
+	rsxAddressToOffset(&mesh->vertices[0].nrm, &offset);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_NORMAL, 0, offset, sizeof(S3DVertex), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+
+	rsxAddressToOffset(&mesh->vertices[0].u, &offset);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0, offset, sizeof(S3DVertex), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+
+	rsxLoadVertexProgram(context, vpo, vp_ucode);
+	rsxSetVertexProgramParameter(context, vpo, projMatrix, (float*)&P);
+	rsxSetVertexProgramParameter(context, vpo, mvMatrix, (float*)&modelViewMatrix);
+
+	float eyePosArr[3] = {objEyePos.getX(), objEyePos.getY(), objEyePos.getZ()};
+	float lightPosArr[3] = {objLightPos.getX(), objLightPos.getY(), objLightPos.getZ()};
+
+	rsxSetFragmentProgramParameter(context, fpo, eyePosition, eyePosArr, fp_offset, GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameter(context, fpo, globalAmbient, globalAmbientColor, fp_offset, GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameter(context, fpo, litPosition, lightPosArr, fp_offset, GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameter(context, fpo, litColor, lightColorVal, fp_offset, GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameter(context, fpo, spec, &shininessVal, fp_offset, GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameter(context, fpo, Kd, materialColorDiffuse, fp_offset, GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameter(context, fpo, Ks, materialColorSpecular, fp_offset, GCM_LOCATION_RSX);
+
+	rsxLoadFragmentProgramLocation(context, fpo, fp_offset, GCM_LOCATION_RSX);
+
+	rsxSetUserClipPlaneControl(context,
+		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE,
+		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE);
+
+	rsxAddressToOffset(&mesh->indices32[0], &offset);
+	rsxDrawIndexArray(context, GCM_TYPE_TRIANGLES, offset, mesh->cnt_indices, GCM_INDEX_TYPE_32B, GCM_LOCATION_RSX);
+
+	static u32 draw32Count = 0;
+	if (draw32Count == 0) {
+		char buf[80];
+		__builtin_snprintf(buf, sizeof(buf), "[trace] drawMesh32: drew %lu indices (32-bit)\n",
+		                   (unsigned long)mesh->cnt_indices);
+		ttyTrace(buf);
+	}
+	draw32Count++;
+}
+
 void drawFrame()
 {
 	static float rot = 0.0f;
@@ -278,6 +341,10 @@ void drawFrame()
 
 	Matrix4 sphereModel = makeTranslation(0.0f, 2.0f, 0.0f) * makeRotationY(DEGTORAD(rot)) * makeRotationX(DEGTORAD(20.0f));
 	drawMesh(sphere, sphereModel);
+
+	// T0: 32-bit-indexed big grid as a large red floor below the scene.
+	Matrix4 bigGridModel = makeTranslation(0.0f, -3.0f, 0.0f);
+	drawMesh32(bigGrid, bigGridModel);
 
 	rot += 1.5f;
 	if (rot >= 360.0f) rot -= 360.0f;
@@ -306,6 +373,7 @@ int main(int argc, const char *argv[])
 
 	sphere = createSphere(2.0f, 24, 24);
 	ground = createQuad(20.0f);
+	bigGrid = createBigGrid(300);
 
 	ttyTrace("[trace] main: meshes created\n");
 

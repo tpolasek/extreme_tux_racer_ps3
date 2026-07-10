@@ -117,7 +117,8 @@ am_etr_OBJECTS = audio.$(OBJEXT) common.$(OBJEXT) course.$(OBJEXT) \
 	translation.$(OBJEXT) tux.$(OBJEXT) vectors.$(OBJEXT) \
 	view.$(OBJEXT) winsys.$(OBJEXT) n_color.$(OBJEXT) \
 	n_clock.$(OBJEXT) n_image.$(OBJEXT) n_texture.$(OBJEXT) \
-	n_font.$(OBJEXT) n_draw.$(OBJEXT) n_window.$(OBJEXT)
+	n_font.$(OBJEXT) n_draw.$(OBJEXT) n_window.$(OBJEXT) \
+	n_audio.$(OBJEXT)
 etr_OBJECTS = $(am_etr_OBJECTS)
 etr_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -143,18 +144,19 @@ am__depfiles_remade = ./$(DEPDIR)/audio.Po ./$(DEPDIR)/common.Po \
 	./$(DEPDIR)/intro.Po ./$(DEPDIR)/keyframe.Po \
 	./$(DEPDIR)/loading.Po ./$(DEPDIR)/main.Po \
 	./$(DEPDIR)/mathlib.Po ./$(DEPDIR)/matrices.Po \
-	./$(DEPDIR)/n_clock.Po ./$(DEPDIR)/n_color.Po \
-	./$(DEPDIR)/n_draw.Po ./$(DEPDIR)/n_font.Po \
-	./$(DEPDIR)/n_image.Po ./$(DEPDIR)/n_texture.Po \
-	./$(DEPDIR)/n_window.Po ./$(DEPDIR)/ogl.Po \
-	./$(DEPDIR)/particles.Po ./$(DEPDIR)/paused.Po \
-	./$(DEPDIR)/physics.Po ./$(DEPDIR)/quadtree.Po \
-	./$(DEPDIR)/race_select.Po ./$(DEPDIR)/racing.Po \
-	./$(DEPDIR)/regist.Po ./$(DEPDIR)/reset.Po \
-	./$(DEPDIR)/splash_screen.Po ./$(DEPDIR)/spx.Po \
-	./$(DEPDIR)/states.Po ./$(DEPDIR)/textures.Po \
-	./$(DEPDIR)/track_marks.Po ./$(DEPDIR)/translation.Po \
-	./$(DEPDIR)/tux.Po ./$(DEPDIR)/vectors.Po ./$(DEPDIR)/view.Po \
+	./$(DEPDIR)/n_audio.Po ./$(DEPDIR)/n_clock.Po \
+	./$(DEPDIR)/n_color.Po ./$(DEPDIR)/n_draw.Po \
+	./$(DEPDIR)/n_font.Po ./$(DEPDIR)/n_image.Po \
+	./$(DEPDIR)/n_texture.Po ./$(DEPDIR)/n_window.Po \
+	./$(DEPDIR)/ogl.Po ./$(DEPDIR)/particles.Po \
+	./$(DEPDIR)/paused.Po ./$(DEPDIR)/physics.Po \
+	./$(DEPDIR)/quadtree.Po ./$(DEPDIR)/race_select.Po \
+	./$(DEPDIR)/racing.Po ./$(DEPDIR)/regist.Po \
+	./$(DEPDIR)/reset.Po ./$(DEPDIR)/splash_screen.Po \
+	./$(DEPDIR)/spx.Po ./$(DEPDIR)/states.Po \
+	./$(DEPDIR)/textures.Po ./$(DEPDIR)/track_marks.Po \
+	./$(DEPDIR)/translation.Po ./$(DEPDIR)/tux.Po \
+	./$(DEPDIR)/vectors.Po ./$(DEPDIR)/view.Po \
 	./$(DEPDIR)/winsys.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -198,6 +200,8 @@ am__define_uniq_tagged_files = \
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ALSA_CFLAGS = @ALSA_CFLAGS@
+ALSA_LIBS = @ALSA_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AUTOCONF = @AUTOCONF@
@@ -260,6 +264,8 @@ SFML_WINDOW_LIBS = @SFML_WINDOW_LIBS@
 SHELL = @SHELL@
 STRIP = @STRIP@
 VERSION = @VERSION@
+VORBISFILE_CFLAGS = @VORBISFILE_CFLAGS@
+VORBISFILE_LIBS = @VORBISFILE_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -355,7 +361,8 @@ etr_SOURCES = \
 	n_texture.cpp \
 	n_font.cpp \
 	n_draw.cpp \
-	n_window.cpp
+	n_window.cpp \
+	n_audio.cpp
 
 noinst_HEADERS = \
 	audio.h		\
@@ -404,7 +411,8 @@ noinst_HEADERS = \
 	n_texture.h	\
 	n_font.h	\
 	n_draw.h	\
-	n_window.h
+	n_window.h \
+	n_audio.h
 
 all: all-am
 
@@ -509,6 +517,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mathlib.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrices.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/n_audio.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/n_clock.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/n_color.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/n_draw.Po@am__quote@ # am--include-marker
@@ -701,6 +710,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
+	-rm -f ./$(DEPDIR)/n_audio.Po
 	-rm -f ./$(DEPDIR)/n_clock.Po
 	-rm -f ./$(DEPDIR)/n_color.Po
 	-rm -f ./$(DEPDIR)/n_draw.Po
@@ -789,6 +799,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f ./$(DEPDIR)/mathlib.Po
 	-rm -f ./$(DEPDIR)/matrices.Po
+	-rm -f ./$(DEPDIR)/n_audio.Po
 	-rm -f ./$(DEPDIR)/n_clock.Po
 	-rm -f ./$(DEPDIR)/n_color.Po
 	-rm -f ./$(DEPDIR)/n_draw.Po

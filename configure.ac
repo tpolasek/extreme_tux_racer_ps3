@@ -90,6 +90,15 @@ AC_CHECK_LIB([X11], [XOpenDisplay], [ LIBS="$LIBS -lX11" ], [ AC_MSG_ERROR([libX
 dnl libGL provides GLX (glX* symbols) which libOpenGL lacks.
 AC_CHECK_LIB([GL], [glXChooseFBConfig], [ LIBS="$LIBS -lGL" ], [ AC_MSG_WARN([libGL (GLX) not found]) ])
 LIBS="$LIBS -lpthread -ldl -lm"
+dnl Native audio backend (SFML removal in progress). ALSA drains the mix
+dnl buffer to the device; libvorbisfile decodes OGG music streams. Both
+dnl coexist with sfml-audio above until SFML is fully unlinked.
+PKG_CHECK_MODULES([ALSA], [alsa],
+  [ CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS" ],
+  [ AC_MSG_ERROR([alsa not found]) ])
+PKG_CHECK_MODULES([VORBISFILE], [vorbisfile vorbis],
+  [ CPPFLAGS="${CPPFLAGS} $VORBISFILE_CFLAGS"; LIBS="${LIBS} $VORBISFILE_LIBS" ],
+  [ AC_MSG_ERROR([vorbisfile not found]) ])
 
 AC_CHECK_LIB([GLU], [gluBeginCurve],
 [

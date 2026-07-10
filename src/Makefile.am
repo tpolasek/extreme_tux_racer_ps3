@@ -43,7 +43,8 @@ etr_SOURCES =		\
 	n_texture.cpp \
 	n_font.cpp \
 	n_draw.cpp \
-	n_window.cpp
+	n_window.cpp \
+	n_audio.cpp
 
 noinst_HEADERS =	\
 	audio.h		\
@@ -92,4 +93,5 @@ noinst_HEADERS =	\
 	n_texture.h	\
 	n_font.h	\
 	n_draw.h	\
-	n_window.h
+	n_window.h \
+	n_audio.h

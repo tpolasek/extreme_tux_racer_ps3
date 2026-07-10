@@ -1212,15 +1212,31 @@ m4trace:configure.ac:86: -1- PKG_CHECK_EXISTS([freetype2], [pkg_cv_[]FREETYPE_CF
 m4trace:configure.ac:86: -1- PKG_CHECK_EXISTS([freetype2], [pkg_cv_[]FREETYPE_LIBS=`$PKG_CONFIG --[]libs "freetype2" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
 m4trace:configure.ac:86: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:212: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:212: -1- m4_pattern_allow([^LTLIBOBJS$])
-m4trace:configure.ac:212: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
-m4trace:configure.ac:212: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
-m4trace:configure.ac:212: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
-m4trace:configure.ac:212: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
-m4trace:configure.ac:212: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
-m4trace:configure.ac:212: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
-m4trace:configure.ac:212: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
-m4trace:configure.ac:212: -1- AM_RUN_LOG([cd "$am_dirpart" \
+m4trace:configure.ac:96: -1- PKG_CHECK_MODULES([ALSA], [alsa], [ CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS" ], [ AC_MSG_ERROR([alsa not found]) ])
+m4trace:configure.ac:96: -1- m4_pattern_allow([^ALSA_CFLAGS$])
+m4trace:configure.ac:96: -1- m4_pattern_allow([^ALSA_LIBS$])
+m4trace:configure.ac:96: -1- PKG_CHECK_EXISTS([alsa], [pkg_cv_[]ALSA_CFLAGS=`$PKG_CONFIG --[]cflags "alsa" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
+m4trace:configure.ac:96: -1- PKG_CHECK_EXISTS([alsa], [pkg_cv_[]ALSA_LIBS=`$PKG_CONFIG --[]libs "alsa" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
+m4trace:configure.ac:96: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:99: -1- PKG_CHECK_MODULES([VORBISFILE], [vorbisfile vorbis], [ CPPFLAGS="${CPPFLAGS} $VORBISFILE_CFLAGS"; LIBS="${LIBS} $VORBISFILE_LIBS" ], [ AC_MSG_ERROR([vorbisfile not found]) ])
+m4trace:configure.ac:99: -1- m4_pattern_allow([^VORBISFILE_CFLAGS$])
+m4trace:configure.ac:99: -1- m4_pattern_allow([^VORBISFILE_LIBS$])
+m4trace:configure.ac:99: -1- PKG_CHECK_EXISTS([vorbisfile vorbis], [pkg_cv_[]VORBISFILE_CFLAGS=`$PKG_CONFIG --[]cflags "vorbisfile vorbis" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
+m4trace:configure.ac:99: -1- PKG_CHECK_EXISTS([vorbisfile vorbis], [pkg_cv_[]VORBISFILE_LIBS=`$PKG_CONFIG --[]libs "vorbisfile vorbis" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes ], [pkg_failed=yes])
+m4trace:configure.ac:99: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:221: -1- m4_pattern_allow([^LIB@&t@OBJS$])
+m4trace:configure.ac:221: -1- m4_pattern_allow([^LTLIBOBJS$])
+m4trace:configure.ac:221: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
+m4trace:configure.ac:221: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
+m4trace:configure.ac:221: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
+m4trace:configure.ac:221: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
+m4trace:configure.ac:221: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
+m4trace:configure.ac:221: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
+m4trace:configure.ac:221: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
+m4trace:configure.ac:221: -1- AM_RUN_LOG([cd "$am_dirpart" \
       && sed -e '/# am--include-marker/d' "$am_filepart" \
         | $MAKE -f - am--depfiles])

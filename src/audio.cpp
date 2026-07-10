@@ -18,9 +18,8 @@ GNU General Public License for more details.
 #include <etr_config.h>
 #endif
 
-#include <SFML/Audio.hpp>
-
 #include "audio.h"
+#include "n_audio.h"
 #include "spx.h"
 
 // the global instances of the 2 audio classes
@@ -28,20 +27,48 @@ CSound Sound;
 CMusic Music;
 #define MIX_MAX_VOLUME 100
 
-struct TSound {
-	sf::SoundBuffer data;
-	sf::Sound player;
-	explicit TSound(int volume) {
-		setVolume(volume);
+// ---------------------------------------------------------------------------
+// AudioDevice singleton — initialized lazily on first use. Both CSound
+// (SFX voices) and CMusic (streamed music) share this single device +
+// audio thread. The audio thread drains the mix buffer to ALSA in
+// period-sized blocks (mirrors PS3 libaudio block-based DMA output).
+// ---------------------------------------------------------------------------
+namespace {
+AudioDevice& audioDevice() {
+	static AudioDevice dev;
+	static bool inited = false;
+	if (!inited) {
+		dev.init(44100);
+		inited = true;
 	}
-	void setVolume(int volume) {
-		player.setVolume(volume);
+	return dev;
+}
+} // namespace
+
+// ---------------------------------------------------------------------------
+// TSound — a decoded WAV held in memory (SoundData) plus per-id playback
+// state (currently active voice id, current volume, last loop flag).
+// ---------------------------------------------------------------------------
+struct TSound {
+	SoundData data;
+	int       voice_id; // -1 when not playing
+	int       volume;   // 0..100
+	bool      loop;     // last Play() loop argument (drives Halt semantics)
+
+	explicit TSound(int volume_) : voice_id(-1), volume(volume_), loop(false) {}
+
+	void setVolume(int v) { volume = v; }
+
+	void Play(bool loop_) {
+		// Match original SFML semantics: no-op if already playing.
+		if (voice_id >= 0 && audioDevice().isPlaying(voice_id)) return;
+		loop = loop_;
+		voice_id = audioDevice().play(data, volume, loop_);
 	}
 
-	void Play(bool loop) {
-		if (player.getStatus() == sf::Sound::Playing) return;
-		player.setLoop(loop);
-		player.play();
+	void stop() {
+		if (voice_id >= 0) audioDevice().stop(voice_id);
+		voice_id = -1;
 	}
 };
 
@@ -55,9 +82,9 @@ CSound::~CSound() {
 
 bool CSound::LoadChunk(const std::string& name, const std::string& filename) {
 	sounds.emplace_back(new TSound(param.sound_volume));
-	if (!sounds.back()->data.loadFromFile(filename)) // Try loading sound buffer
+	if (!sounds.back()->data.loadWav(filename)) {
 		return false;
-	sounds.back()->player.setBuffer(sounds.back()->data);
+	}
 	SoundIndex[name] = sounds.size()-1;
 	return true;
 }
@@ -96,6 +123,8 @@ void CSound::SetVolume(std::size_t soundid, int volume) {
 
 	volume = clamp(0, volume, MIX_MAX_VOLUME);
 	sounds[soundid]->setVolume(volume);
+	if (sounds[soundid]->voice_id >= 0)
+		audioDevice().setVolume(sounds[soundid]->voice_id, volume);
 }
 
 void CSound::SetVolume(const std::string& name, int volume) {
@@ -129,9 +158,9 @@ void CSound::Play(const std::string& name, bool loop, int volume) {
 void CSound::Halt(std::size_t soundid) {
 	if (soundid >= sounds.size()) return;
 
-	// loop_count must be -1 (endless loop) for halt
-	if (sounds[soundid]->player.getLoop())
-		sounds[soundid]->player.stop();
+	// Original SFML semantics: only looping sounds are halted by Halt().
+	if (sounds[soundid]->loop)
+		sounds[soundid]->stop();
 }
 
 void CSound::Halt(const std::string& name) {
@@ -140,7 +169,7 @@ void CSound::Halt(const std::string& name) {
 
 void CSound::HaltAll() {
 	for (std::size_t i = 0; i < sounds.size(); i++) {
-		sounds[i]->player.stop();
+		sounds[i]->stop();
 	}
 }
 
@@ -149,7 +178,7 @@ void CSound::HaltAll() {
 // --------------------------------------------------------------------
 
 CMusic::CMusic() {
-	curr_music = 0;
+	curr_music = nullptr;
 	curr_volume = 10;
 }
 CMusic::~CMusic() {
@@ -157,9 +186,10 @@ CMusic::~CMusic() {
 }
 
 bool CMusic::LoadPiece(const std::string& name, const std::string& filename) {
-	sf::Music* m = new sf::Music();
-	if (!m->openFromFile(filename)) {
+	MusicStream* m = new MusicStream();
+	if (!m->open(filename)) {
 		Message("could not load music", filename);
+		delete m;
 		return false;
 	}
 	MusicIndex[name] = musics.size();
@@ -233,30 +263,25 @@ std::size_t CMusic::GetThemeIdx(const std::string& theme) const {
 
 void CMusic::SetVolume(int volume) {
 	volume = clamp(0, volume, MIX_MAX_VOLUME);
-	if (curr_music)
-		curr_music->setVolume(volume);
+	audioDevice().setMusicVolume(volume);
 	curr_volume = volume;
 }
 
-bool CMusic::Play(sf::Music* music, bool loop, int volume) {
+bool CMusic::Play(MusicStream* music, bool loop, int volume) {
 	if (!music)
 		return false;
 
 	volume = clamp(0, volume, MIX_MAX_VOLUME);
 	if (music != curr_music) {
-		music->setVolume(volume);
-		music->setLoop(loop);
-		if (curr_music)
-			curr_music->stop();
+		audioDevice().playMusic(music, volume, loop);
 		curr_music = music;
-		music->play();
 	}
 	return true;
 }
 
 bool CMusic::Play(std::size_t musid, bool loop) {
 	if (musid >= musics.size()) return false;
-	sf::Music* music = musics[musid];
+	MusicStream* music = musics[musid];
 	return Play(music, loop, curr_volume);
 }
 
@@ -266,7 +291,7 @@ bool CMusic::Play(const std::string& name, bool loop) {
 
 bool CMusic::Play(std::size_t musid, bool loop, int volume) {
 	if (musid >= musics.size()) return false;
-	sf::Music* music = musics[musid];
+	MusicStream* music = musics[musid];
 	return Play(music, loop, volume);
 }
 
@@ -277,13 +302,13 @@ bool CMusic::Play(const std::string& name, bool loop, int volume) {
 bool CMusic::PlayTheme(std::size_t theme, ESituation situation) {
 	if (theme >= themes.size()) return false;
 	if (situation >= SITUATION_COUNT) return false;
-	sf::Music* music = themes[theme].situation[situation];
+	MusicStream* music = themes[theme].situation[situation];
 	return Play(music, true, curr_volume);
 }
 
 void CMusic::Halt() {
 	if (curr_music) {
-		curr_music->stop();
+		audioDevice().stopMusic();
 		curr_music = nullptr;
 	}
 }

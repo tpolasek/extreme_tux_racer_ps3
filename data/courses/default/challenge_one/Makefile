@@ -151,6 +151,8 @@ am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 pkgdatadir = $(datadir)/$(PACKAGE)/courses/default/challenge_one
 ACLOCAL = ${SHELL} '/home/thomas/code/etr-0.8.4/missing' aclocal-1.16
+ALSA_CFLAGS = 
+ALSA_LIBS = -lasound 
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 0
 AUTOCONF = ${SHELL} '/home/thomas/code/etr-0.8.4/missing' autoconf
@@ -160,7 +162,7 @@ AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
-CPPFLAGS =      -I/usr/include/libpng16  -I/usr/include/freetype2 -I/usr/include/libpng16  -DETR_DATA_DIR=\"${datarootdir}\"
+CPPFLAGS =      -I/usr/include/libpng16  -I/usr/include/freetype2 -I/usr/include/libpng16    -DETR_DATA_DIR=\"${datarootdir}\"
 CSCOPE = cscope
 CTAGS = ctags
 CXX = g++
@@ -183,7 +185,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS = 
-LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lpng16  -lfreetype  -lX11 -lGL -lpthread -ldl -lm -lOpenGL -lGLU
+LIBS =  -lsfml-system  -lsfml-audio -lsfml-system  -lsfml-window -lsfml-system  -lsfml-graphics -lsfml-window -lsfml-system  -lpng16  -lfreetype  -lX11 -lGL -lpthread -ldl -lm -lasound  -lvorbisfile -lvorbis  -lOpenGL -lGLU
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/thomas/code/etr-0.8.4/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
@@ -213,6 +215,8 @@ SFML_WINDOW_LIBS = -lsfml-window -lsfml-system
 SHELL = /bin/bash
 STRIP = 
 VERSION = 0.8.4
+VORBISFILE_CFLAGS = 
+VORBISFILE_LIBS = -lvorbisfile -lvorbis 
 abs_builddir = /home/thomas/code/etr-0.8.4/data/courses/default/challenge_one
 abs_srcdir = /home/thomas/code/etr-0.8.4/data/courses/default/challenge_one
 abs_top_builddir = /home/thomas/code/etr-0.8.4

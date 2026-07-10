@@ -651,6 +651,10 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+VORBISFILE_LIBS
+VORBISFILE_CFLAGS
+ALSA_LIBS
+ALSA_CFLAGS
 FREETYPE_LIBS
 FREETYPE_CFLAGS
 PNG_LIBS
@@ -799,7 +803,11 @@ SFML_GRAPHICS_LIBS
 PNG_CFLAGS
 PNG_LIBS
 FREETYPE_CFLAGS
-FREETYPE_LIBS'
+FREETYPE_LIBS
+ALSA_CFLAGS
+ALSA_LIBS
+VORBISFILE_CFLAGS
+VORBISFILE_LIBS'
 
 
 # Initialize some variables set by options.
@@ -1472,6 +1480,12 @@ Some influential environment variables:
               C compiler flags for FREETYPE, overriding pkg-config
   FREETYPE_LIBS
               linker flags for FREETYPE, overriding pkg-config
+  ALSA_CFLAGS C compiler flags for ALSA, overriding pkg-config
+  ALSA_LIBS   linker flags for ALSA, overriding pkg-config
+  VORBISFILE_CFLAGS
+              C compiler flags for VORBISFILE, overriding pkg-config
+  VORBISFILE_LIBS
+              linker flags for VORBISFILE, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -6637,6 +6651,148 @@ printf "%s\n" "$as_me: WARNING: libGL (GLX) not found" >&2;}
 fi
 
 LIBS="$LIBS -lpthread -ldl -lm"
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for alsa" >&5
+printf %s "checking for alsa... " >&6; }
+
+if test -n "$ALSA_CFLAGS"; then
+    pkg_cv_ALSA_CFLAGS="$ALSA_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"alsa\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "alsa") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_ALSA_CFLAGS=`$PKG_CONFIG --cflags "alsa" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$ALSA_LIBS"; then
+    pkg_cv_ALSA_LIBS="$ALSA_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"alsa\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "alsa") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_ALSA_LIBS=`$PKG_CONFIG --libs "alsa" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        ALSA_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "alsa" 2>&1`
+        else
+	        ALSA_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "alsa" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$ALSA_PKG_ERRORS" >&5
+
+	 as_fn_error $? "alsa not found" "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+	 as_fn_error $? "alsa not found" "$LINENO" 5
+else
+	ALSA_CFLAGS=$pkg_cv_ALSA_CFLAGS
+	ALSA_LIBS=$pkg_cv_ALSA_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+	 CPPFLAGS="${CPPFLAGS} $ALSA_CFLAGS"; LIBS="${LIBS} $ALSA_LIBS"
+fi
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for vorbisfile vorbis" >&5
+printf %s "checking for vorbisfile vorbis... " >&6; }
+
+if test -n "$VORBISFILE_CFLAGS"; then
+    pkg_cv_VORBISFILE_CFLAGS="$VORBISFILE_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"vorbisfile vorbis\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "vorbisfile vorbis") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_VORBISFILE_CFLAGS=`$PKG_CONFIG --cflags "vorbisfile vorbis" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$VORBISFILE_LIBS"; then
+    pkg_cv_VORBISFILE_LIBS="$VORBISFILE_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"vorbisfile vorbis\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "vorbisfile vorbis") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_VORBISFILE_LIBS=`$PKG_CONFIG --libs "vorbisfile vorbis" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        VORBISFILE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "vorbisfile vorbis" 2>&1`
+        else
+	        VORBISFILE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "vorbisfile vorbis" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$VORBISFILE_PKG_ERRORS" >&5
+
+	 as_fn_error $? "vorbisfile not found" "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+	 as_fn_error $? "vorbisfile not found" "$LINENO" 5
+else
+	VORBISFILE_CFLAGS=$pkg_cv_VORBISFILE_CFLAGS
+	VORBISFILE_LIBS=$pkg_cv_VORBISFILE_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+	 CPPFLAGS="${CPPFLAGS} $VORBISFILE_CFLAGS"; LIBS="${LIBS} $VORBISFILE_LIBS"
+fi
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gluBeginCurve in -lGLU" >&5
 printf %s "checking for gluBeginCurve in -lGLU... " >&6; }

@@ -21,10 +21,11 @@ GNU General Public License for more details.
 #include <vector>
 #include <unordered_map>
 
+class MusicStream; // defined in n_audio.h
+
 // --------------------------------------------------------------------
 //				class CSound
 // --------------------------------------------------------------------
-
 
 struct TSound;
 
@@ -64,23 +65,19 @@ enum ESituation {
 	SITUATION_COUNT
 };
 
-namespace sf {
-class Music;
-};
-
 class CMusic {
 private:
-	std::vector<sf::Music*> musics;
+	std::vector<MusicStream*> musics;
 	std::unordered_map<std::string, std::size_t> MusicIndex;
 
-	struct Situation { sf::Music* situation[SITUATION_COUNT]; };
+	struct Situation { MusicStream* situation[SITUATION_COUNT]; };
 	std::vector<Situation> themes;
 	std::unordered_map<std::string, std::size_t> ThemesIndex;
 
-	sf::Music* curr_music;	// current music piece
+	MusicStream* curr_music;	// current music piece
 	int curr_volume;
 
-	bool Play(sf::Music* music, bool loop, int volume);
+	bool Play(MusicStream* music, bool loop, int volume);
 public:
 	CMusic();
 	~CMusic();

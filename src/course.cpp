@@ -316,7 +316,7 @@ void CCourse::FreeObjectTextures() {
 // --------------------------------------------------------------------
 
 bool CCourse::LoadElevMap() {
-	sf::Image img;
+	Image img;
 
 	if (!img.loadFromFile(CourseDir + SEP "elev.png")) {
 		Message("unable to open elev.png");
@@ -428,7 +428,7 @@ static void CalcRandomTrees(double baseheight, double basediam, double &height, 
 }
 
 bool CCourse::LoadAndConvertObjectMap() {
-	sf::Image treeImg;
+	Image treeImg;
 
 	if (!treeImg.loadFromFile(CourseDir + SEP "trees.png")) {
 		Message("unable to open trees.png");
@@ -597,7 +597,7 @@ bool CCourse::LoadTerrainTypes() {
 // --------------------------------------------------------------------
 
 bool CCourse::LoadTerrainMap() {
-	sf::Image terrImage;
+	Image terrImage;
 
 	if (!terrImage.loadFromFile(CourseDir + SEP "terrain.png")) {
 		Message("unable to open terrain.png");

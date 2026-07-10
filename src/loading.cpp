@@ -48,7 +48,7 @@ void CLoading::Loop(float time_step) {
 		draw_ui_snow();
 	}
 
-	sf::Sprite logo(Tex.GetSFTexture(TEXLOGO));
+	Sprite logo(Tex.GetSFTexture(TEXLOGO));
 	logo.setScale(0.35f, 0.35f);
 	logo.setPosition((Winsys.resolution.width - logo.getTextureRect().width*0.35f) / 2, 40);
 	Winsys.draw(logo);

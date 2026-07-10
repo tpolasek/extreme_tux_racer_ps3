@@ -47,7 +47,7 @@ void CSplashScreen::Loop(float time_step) {
 	Winsys.clear();
 	Trans.LoadTranslations(param.language);  // Before first texts are being displayed
 
-	sf::Sprite logo(Tex.GetSFTexture(TEXLOGO));
+	Sprite logo(Tex.GetSFTexture(TEXLOGO));
 	logo.setScale(Winsys.scale/2.f, Winsys.scale/2.f);
 	logo.setPosition((Winsys.resolution.width - logo.getTextureRect().width*(Winsys.scale / 2)) / 2, 60);
 

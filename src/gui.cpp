@@ -78,8 +78,8 @@ void TLabel::Draw() const {
 	Winsys.draw(text);
 }
 
-sf::Vector2f TLabel::GetSize() const {
-	return sf::Vector2f(text.getLocalBounds().width, text.getLocalBounds().height);
+Vector2f TLabel::GetSize() const {
+	return Vector2f(text.getLocalBounds().width, text.getLocalBounds().height);
 
 }
 
@@ -90,7 +90,7 @@ TLabel* AddLabel(const std::string& string, int x, int y, const Color& color) {
 
 TFramedText::TFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_)
 	: TWidget(x, y, width, height, false)
-	, frame(sf::Vector2f(width - line * 2, height - line * 2))
+	, frame(Vector2f(width - line * 2, height - line * 2))
 	, text(string, FT.getCurrentFont(), ftsize)
 	, borderFocus(borderFocus_) {
 	text.setPosition(x + line + 20, y + line);
@@ -211,8 +211,8 @@ void TArrow::SetTexture() {
 	if (down)
 		type += 3;
 
-	sf::Vector2u texSize = sprite.getTexture()->getSize();
-	sprite.setTextureRect(sf::IntRect(textl[type] * texSize.x, texbr[type] * texSize.y, texSize.x / 2, texSize.y / 4));
+	Vector2u texSize = sprite.getTexture()->getSize();
+	sprite.setTextureRect(IntRect(textl[type] * texSize.x, texbr[type] * texSize.y, texSize.x / 2, texSize.y / 4));
 }
 
 void TArrow::Draw() const {
@@ -294,7 +294,7 @@ void DrawFrameX(int x, int y, int w, int h, int line, const Color& backcol, cons
 	y += line;
 	w -= line * 2;
 	h -= line * 2;
-	sf::RectangleShape shape(sf::Vector2f(w, h));
+	RectangleShape shape(Vector2f(w, h));
 	shape.setPosition(x, y);
 	shape.setOutlineThickness(line);
 	shape.setFillColor(Color(backcol.r, backcol.g, backcol.b, backcol.a * transp));
@@ -321,9 +321,9 @@ void DrawBonusExt(int y, std::size_t numraces, std::size_t num) {
 	DrawFrameX(lleft[1], y, framewidth, 40, 1, col2, colBlack, 1);
 	DrawFrameX(lleft[2], y, framewidth, 40, 1, col2, colBlack, 1);
 
-	static sf::Sprite tuxbonus(Tex.GetSFTexture(TUXBONUS));
-	sf::Vector2u size = tuxbonus.getTexture()->getSize();
-	tuxbonus.setTextureRect(sf::IntRect(0, 0, size.x, size.y/2));
+	static Sprite tuxbonus(Tex.GetSFTexture(TUXBONUS));
+	Vector2u size = tuxbonus.getTexture()->getSize();
+	tuxbonus.setTextureRect(IntRect(0, 0, size.x, size.y/2));
 
 	for (std::size_t i=0; i<maxtux; i++) {
 		std::size_t majr = (i/numraces);
@@ -339,10 +339,10 @@ void DrawBonusExt(int y, std::size_t numraces, std::size_t num) {
 }
 
 void DrawGUIFrame() {
-	static sf::Sprite bottom_left(Tex.GetSFTexture(BOTTOM_LEFT));
-	static sf::Sprite bottom_right(Tex.GetSFTexture(BOTTOM_RIGHT));
-	static sf::Sprite top_left(Tex.GetSFTexture(TOP_LEFT));
-	static sf::Sprite top_right(Tex.GetSFTexture(TOP_RIGHT));
+	static Sprite bottom_left(Tex.GetSFTexture(BOTTOM_LEFT));
+	static Sprite bottom_right(Tex.GetSFTexture(BOTTOM_RIGHT));
+	static Sprite top_left(Tex.GetSFTexture(TOP_LEFT));
+	static Sprite top_right(Tex.GetSFTexture(TOP_RIGHT));
 
 	bottom_left.setPosition(0, Winsys.resolution.height - bottom_left.getTexture()->getSize().y);
 	bottom_right.setPosition(Winsys.resolution.width - bottom_right.getTexture()->getSize().x, Winsys.resolution.height - bottom_right.getTexture()->getSize().y);
@@ -357,7 +357,7 @@ void DrawGUIFrame() {
 void DrawGUIBackground(float scale) {
 	DrawGUIFrame();
 
-	static sf::Sprite logo(Tex.GetSFTexture(T_TITLE));
+	static Sprite logo(Tex.GetSFTexture(T_TITLE));
 	scale *= 0.5f;
 	logo.setScale(scale, scale);
 	logo.setPosition((Winsys.resolution.width - logo.getTextureRect().width*scale)/2, 5);

@@ -80,12 +80,12 @@ public:
 	TLabel(const std::string& string, int x, int y, const Color& color);
 	void Focussed(bool masterFocus);
 	void Draw() const;
-	sf::Vector2f GetSize() const;
+	Vector2f GetSize() const;
 };
 TLabel* AddLabel(const std::string& string, int x, int y, const Color& color);
 
 class TFramedText : public TWidget {
-	sf::RectangleShape frame;
+	RectangleShape frame;
 	sf::Text text;
 	bool borderFocus;
 public:
@@ -108,7 +108,7 @@ TTextButton* AddTextButton(const std::string& text, int x, int y, int ftsize);
 TTextButton* AddTextButtonN(const std::string& text, int x, int y, int rel_ftsize);
 
 class TArrow : public TWidget {
-	sf::Sprite sprite;
+	Sprite sprite;
 	bool down;
 	void SetTexture();
 public:

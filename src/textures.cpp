@@ -50,7 +50,7 @@ bool TTexture::Load(const std::string& dir, const std::string& filename, bool re
 }
 
 void TTexture::Bind() {
-	sf::Texture::bind(&texture);
+	Texture::bind(&texture);
 }
 
 void TTexture::Draw() {
@@ -157,7 +157,7 @@ void TTexture::DrawFrame(int x, int y, int w, int h, int frame, const Color& col
 	if (frame > 0)
 		DrawFrameX(x - frame, y - frame, w + 2 * frame, h + 2 * frame, frame, colTransp, col, 1.f);
 
-	sf::Sprite temp(texture);
+	Sprite temp(texture);
 	temp.setPosition(x, y);
 	temp.setScale((float) w / (float) texture.getSize().x, (float) h / (float) texture.getSize().y);
 	Winsys.draw(temp);
@@ -209,7 +209,7 @@ TTexture* CTexture::GetTexture(std::size_t idx) const {
 	return CommonTex[idx];
 }
 
-const sf::Texture& CTexture::GetSFTexture(std::size_t idx) const {
+const Texture& CTexture::GetSFTexture(std::size_t idx) const {
 	return CommonTex[idx]->texture;
 }
 

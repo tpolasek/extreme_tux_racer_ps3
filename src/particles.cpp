@@ -52,7 +52,7 @@ GNU General Public License for more details.
 #define PARTICLE_SIZE_RANGE 10
 
 struct TGuiParticle {
-	sf::Sprite sprite;
+	Sprite sprite;
 	float size;
 	TVector2d vel;
 
@@ -67,7 +67,7 @@ static TVector2d last_push_position;
 static bool push_position_initialized = false;
 
 TGuiParticle::TGuiParticle(float x, float y) {
-	const sf::Texture& texture = Tex.GetSFTexture(SNOW_PART);
+	const Texture& texture = Tex.GetSFTexture(SNOW_PART);
 	sprite.setTexture(texture);
 	sprite.setPosition(x*static_cast<float>(Winsys.resolution.width), y*static_cast<float>(Winsys.resolution.height));
 	sprite.setColor(Color(255, 255, 255, 76));
@@ -82,16 +82,16 @@ TGuiParticle::TGuiParticle(float x, float y) {
 	int type = std::rand() % 4;
 	switch (type) {
 		case 0:
-			sprite.setTextureRect(sf::IntRect(0, 0, texture.getSize().x / 2, texture.getSize().y / 2));
+			sprite.setTextureRect(IntRect(0, 0, texture.getSize().x / 2, texture.getSize().y / 2));
 			break;
 		case 1:
-			sprite.setTextureRect(sf::IntRect(texture.getSize().x / 2, 0, texture.getSize().x / 2, texture.getSize().y / 2));
+			sprite.setTextureRect(IntRect(texture.getSize().x / 2, 0, texture.getSize().x / 2, texture.getSize().y / 2));
 			break;
 		case 2:
-			sprite.setTextureRect(sf::IntRect(texture.getSize().x / 2, texture.getSize().y / 2, texture.getSize().x / 2, texture.getSize().y / 2));
+			sprite.setTextureRect(IntRect(texture.getSize().x / 2, texture.getSize().y / 2, texture.getSize().x / 2, texture.getSize().y / 2));
 			break;
 		case 3:
-			sprite.setTextureRect(sf::IntRect(0, texture.getSize().y / 2, texture.getSize().x / 2, texture.getSize().y / 2));
+			sprite.setTextureRect(IntRect(0, texture.getSize().y / 2, texture.getSize().x / 2, texture.getSize().y / 2));
 			break;
 	}
 }

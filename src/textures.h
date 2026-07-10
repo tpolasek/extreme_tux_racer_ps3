@@ -62,7 +62,7 @@ GNU General Public License for more details.
 // --------------------------------------------------------------------
 
 class TTexture {
-	sf::Texture texture;
+	Texture texture;
 	friend class CTexture;
 public:
 	bool Load(const std::string& filename, bool repeatable = false);
@@ -88,7 +88,7 @@ public:
 	void FreeTextureList();
 
 	TTexture* GetTexture(std::size_t idx) const;
-	const sf::Texture& GetSFTexture(std::size_t idx) const;
+	const Texture& GetSFTexture(std::size_t idx) const;
 	bool BindTex(std::size_t idx);
 
 	void Draw(std::size_t idx);

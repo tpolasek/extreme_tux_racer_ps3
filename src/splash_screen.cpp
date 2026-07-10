@@ -34,7 +34,7 @@ GNU General Public License for more details.
 #include "winsys.h"
 
 CSplashScreen SplashScreen;
-sf::Text* Failure = nullptr;
+Text* Failure = nullptr;
 std::string reason;
 
 
@@ -53,10 +53,10 @@ void CSplashScreen::Loop(float time_step) {
 
 	if (!Failure) {
 		FT.AutoSizeN(6);
-		sf::Text t1(Trans.Text(67), FT.getCurrentFont(), FT.GetSize());
+		Text t1(Trans.Text(67), FT.getCurrentFont(), FT.GetSize());
 		int top = AutoYPosN(60);
 		t1.setPosition((Winsys.resolution.width - t1.getLocalBounds().width) / 2, top);
-		sf::Text t2(Trans.Text(68), FT.getCurrentFont(), FT.GetSize());
+		Text t2(Trans.Text(68), FT.getCurrentFont(), FT.GetSize());
 		int dist = FT.AutoDistanceN(3);
 		t2.setPosition((Winsys.resolution.width - t2.getLocalBounds().width) / 2, top + dist);
 
@@ -94,7 +94,7 @@ void CSplashScreen::Loop(float time_step) {
 		else { // Failure
 			FT.AutoSizeN(6);
 			int top = AutoYPosN(60);
-			Failure = new sf::Text(reason, FT.getCurrentFont(), FT.GetSize());
+			Failure = new Text(reason, FT.getCurrentFont(), FT.GetSize());
 			Failure->setFillColor(colDRed);
 			Failure->setOutlineColor(colDRed);
 			Failure->setPosition((Winsys.resolution.width - Failure->getLocalBounds().width) / 2, top);

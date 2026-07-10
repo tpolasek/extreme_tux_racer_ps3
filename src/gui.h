@@ -75,7 +75,7 @@ public:
 };
 
 class TLabel : public TWidget {
-	sf::Text text;
+	Text text;
 public:
 	TLabel(const std::string& string, int x, int y, const Color& color);
 	void Focussed(bool masterFocus);
@@ -86,7 +86,7 @@ TLabel* AddLabel(const std::string& string, int x, int y, const Color& color);
 
 class TFramedText : public TWidget {
 	RectangleShape frame;
-	sf::Text text;
+	Text text;
 	bool borderFocus;
 public:
 	TFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_ = false);
@@ -98,7 +98,7 @@ public:
 TFramedText* AddFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus = false);
 
 class TTextButton : public TWidget {
-	sf::Text text;
+	Text text;
 public:
 	TTextButton(int x, int y, const std::string& text_, int ftsize);
 	void Focussed();

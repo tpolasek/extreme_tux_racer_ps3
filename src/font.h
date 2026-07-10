@@ -30,7 +30,7 @@ GNU General Public License for more details.
 
 class CFont {
 private:
-	std::vector<sf::Font*> fonts;
+	std::vector<Typeface*> fonts;
 	std::unordered_map<std::string, std::size_t> fontindex;
 
 	int curr_font;
@@ -49,7 +49,7 @@ public:
 	int  LoadFont(const std::string& name, const std::string& path);
 	bool LoadFontlist();
 	std::size_t GetFontIdx(const std::string &name) const;
-	const sf::Font& getCurrentFont() const { return *fonts[curr_font]; }
+	const Typeface& getCurrentFont() const { return *fonts[curr_font]; }
 	unsigned int GetSize() const { return curr_size; }
 
 	// properties

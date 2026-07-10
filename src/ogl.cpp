@@ -56,8 +56,8 @@ PFNGLLOCKARRAYSEXTPROC glLockArraysEXT_p = nullptr;
 PFNGLUNLOCKARRAYSEXTPROC glUnlockArraysEXT_p = nullptr;
 
 void InitOpenglExtensions() {
-	glLockArraysEXT_p = (PFNGLLOCKARRAYSEXTPROC)sf::Context::getFunction("glLockArraysEXT");
-	glUnlockArraysEXT_p = (PFNGLUNLOCKARRAYSEXTPROC)sf::Context::getFunction("glUnlockArraysEXT");
+	glLockArraysEXT_p = (PFNGLLOCKARRAYSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glLockArraysEXT");
+	glUnlockArraysEXT_p = (PFNGLUNLOCKARRAYSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glUnlockArraysEXT");
 
 	if (glLockArraysEXT_p == nullptr || glUnlockArraysEXT_p == nullptr) {
 		Message("GL_EXT_compiled_vertex_array extension NOT supported");
@@ -188,19 +188,19 @@ static TRenderMode currentMode = RM_UNINITIALIZED;
 
 void ResetRenderMode() {
 	if (currentMode == GUI)
-		Winsys.endSFML();
+		Winsys.end2D();
 
 	currentMode = RM_UNINITIALIZED;
 }
 
 void set_gl_options(TRenderMode mode) {
 	if (currentMode == GUI)
-		Winsys.endSFML();
+		Winsys.end2D();
 
 	currentMode = mode;
 	switch (mode) {
 		case GUI:
-			Winsys.beginSFML();
+			Winsys.begin2D();
 			break;
 
 		case GAUGE_BARS:

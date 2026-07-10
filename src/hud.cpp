@@ -71,13 +71,13 @@ static void draw_time(double time, Color color) {
 		Tex.DrawNumStr(timestr, 50, 12, 1, color);
 		Tex.DrawNumStr(hundrstr, 170, 12, 0.7f, color);
 	} else {
-		Winsys.beginSFML();
+		Winsys.begin2D();
 		FT.SetColor(color);
 		FT.SetSize(30);
 		FT.DrawString(138, 3, hundrstr);
 		FT.SetSize(42);
 		FT.DrawString(53, 3, timestr);
-		Winsys.endSFML();
+		Winsys.end2D();
 	}
 }
 
@@ -88,10 +88,10 @@ static void draw_herring_count(int herring_count, Color color) {
 	if (param.use_papercut_font < 2) {
 		Tex.DrawNumStr(hcountstr, Winsys.resolution.width - 130, 12, 1, color);
 	} else {
-		Winsys.beginSFML();
+		Winsys.begin2D();
 		FT.SetColor(color);
 		FT.DrawString(Winsys.resolution.width - 125, 3, hcountstr);
-		Winsys.endSFML();
+		Winsys.end2D();
 	}
 }
 
@@ -226,10 +226,10 @@ void DrawSpeed(double speed_in, int x_offset) {
 		Tex.DrawNumStr(speedstr,
 		               Winsys.resolution.width - 87 + x_offset, Winsys.resolution.height-73, 1, colWhite);
 	} else {
-		Winsys.beginSFML();
+		Winsys.begin2D();
 		FT.SetColor(colDDYell);
 		FT.DrawString(Winsys.resolution.width - 82 + x_offset, Winsys.resolution.height - 80, speedstr);
-		Winsys.endSFML();
+		Winsys.end2D();
 	}
 }
 
@@ -240,10 +240,10 @@ void DrawSpeed2(double speed, int x_offset) {
 		Tex.DrawNumStr(speedstr,
 		               Winsys.resolution.width - 87 + x_offset, Winsys.resolution.height-73, 1, colWhite);
 	} else {
-		Winsys.beginSFML();
+		Winsys.begin2D();
 		FT.SetColor(colDDYell);
 		FT.DrawString(Winsys.resolution.width - 82 + x_offset, Winsys.resolution.height - 80, speedstr);
-		Winsys.endSFML();
+		Winsys.end2D();
 	}
 }
 
@@ -306,10 +306,10 @@ void DrawWind(float dir, float speed, const CControl *ctrl) {
 	if (param.use_papercut_font < 2) {
 		Tex.DrawNumStr(windstr, 120, Winsys.resolution.height - 45, 1, colWhite);
 	} else {
-		Winsys.beginSFML();
+		Winsys.begin2D();
 		FT.SetColor(colDDYell);
 		FT.DrawString(120, Winsys.resolution.height - 50, windstr);
-		Winsys.endSFML();
+		Winsys.end2D();
 	}
 }
 
@@ -336,13 +336,13 @@ void DrawFps() {
 	if (param.use_papercut_font < 2) {
 		Tex.DrawNumStr(fpsstr, (Winsys.resolution.width - 60) / 2, 10, 1, colWhite);
 	} else {
-		Winsys.beginSFML();
+		Winsys.begin2D();
 		if (averagefps >= 35)
 			FT.SetColor(colWhite);
 		else
 			FT.SetColor(colRed);
 		FT.DrawString(-1, 3, fpsstr);
-		Winsys.endSFML();
+		Winsys.end2D();
 	}
 }
 

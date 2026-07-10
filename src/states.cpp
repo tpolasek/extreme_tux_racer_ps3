@@ -60,22 +60,22 @@ void State::Manager::EnterNextState() {
 }
 
 void State::Manager::PollEvent() {
-	sf::Event event;
+	Event event;
 
 	while (Winsys.PollEvent(event)) {
 		if (!next) {
 			switch (event.type) {
-				case sf::Event::JoystickMoved: {
+				case Event::JoystickMoved: {
 					float val = event.joystickMove.position / 100.f;
-					current->Jaxis(event.joystickMove.axis == sf::Joystick::X ? 0 : 1, val);
+					current->Jaxis(event.joystickMove.axis == Joystick::X ? 0 : 1, val);
 					break;
 				}
-				case sf::Event::JoystickButtonPressed:
-				case sf::Event::JoystickButtonReleased:
-					current->Jbutt(event.joystickButton.button, event.type == sf::Event::JoystickButtonPressed);
+				case Event::JoystickButtonPressed:
+				case Event::JoystickButtonReleased:
+					current->Jbutt(event.joystickButton.button, event.type == Event::JoystickButtonPressed);
 					break;
 
-				case sf::Event::Closed:
+				case Event::Closed:
 					quit = true;
 					break;
 

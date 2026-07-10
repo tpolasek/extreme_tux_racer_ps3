@@ -31,9 +31,8 @@ class CWinsys {
 private:
 	unsigned int numJoysticks;
 
-	// sfml window
-	bool sfmlRenders;
-	sf::RenderWindow window;
+	bool glStatesPushed;
+	RenderWindow window;
 	TScreenRes auto_resolution;
 	float CalcScreenScale() const;
 public:
@@ -49,14 +48,13 @@ public:
 	void SwapBuffers() { window.display(); }
 	void Quit();
 	void Terminate();
-	void draw(const sf::Drawable& drawable, const sf::RenderStates& states = sf::RenderStates::Default) { window.draw(drawable, states); }
-	// Native 2D drawables self-render via GL (coexists with sf::Drawable overload until SFML is removed).
+	// Native 2D drawables self-render via GL.
 	void draw(const Drawable2D& drawable, const RenderStates& = RenderStates::Default) { drawable.draw(); }
 	void clear() { window.clear(colBackgr); }
-	void beginSFML() { if (!sfmlRenders) window.pushGLStates(); sfmlRenders = true; }
-	void endSFML() { if (sfmlRenders) window.popGLStates(); sfmlRenders = false; }
-	bool PollEvent(sf::Event& event) { return window.pollEvent(event); }
-	const sf::Window& getWindow() const { return window; }
+	// Save/restore GL state around 2D overlay rendering (was beginSFML/endSFML).
+	void begin2D() { if (!glStatesPushed) window.pushGLStates(); glStatesPushed = true; }
+	void end2D()   { if (glStatesPushed)  window.popGLStates();  glStatesPushed = false; }
+	bool PollEvent(Event& event) { return window.pollEvent(event); }
 	void TakeScreenshot() const;
 };
 

@@ -27,6 +27,14 @@ void Image::create(unsigned int w, unsigned int h, const Color& fill) {
 	}
 }
 
+void Image::create(unsigned int w, unsigned int h, const Uint8* rgba) {
+	width_ = w;
+	height_ = h;
+	pixels_.resize(static_cast<std::size_t>(w) * h * 4);
+	if (rgba) std::memcpy(pixels_.data(), rgba, pixels_.size());
+	else     std::memset(pixels_.data(), 0, pixels_.size());
+}
+
 bool Image::loadFromFile(const std::string& filename) {
 	FILE* fp = std::fopen(filename.c_str(), "rb");
 	if (!fp) return false;

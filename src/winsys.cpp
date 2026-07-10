@@ -26,17 +26,19 @@ GNU General Public License for more details.
 #include "game_ctrl.h"
 #include "ogl.h"
 #include "translation.h"
+#include "n_image.h"
 #include <iostream>
+#include <vector>
 
 CWinsys Winsys;
 
 CWinsys::CWinsys()
 	: numJoysticks(0)
-	, sfmlRenders(false)
+	, glStatesPushed(false)
 	, auto_resolution(800, 600)
 	, scale(1.f) {
-	for (unsigned int i = 0; i < sf::Joystick::Count; i++) {
-		if (sf::Joystick::isConnected(i))
+	for (unsigned int i = 0; i < Joystick::Count; i++) {
+		if (Joystick::isConnected(i))
 			numJoysticks++;
 		else
 			break;
@@ -58,23 +60,23 @@ void CWinsys::SetupVideoMode(const TScreenRes& res) {
 		case 0:
 		default:
 			param.bpp_mode = 0;
-			bpp = sf::VideoMode::getDesktopMode().bitsPerPixel;
+			bpp = VideoMode::getDesktopMode().bitsPerPixel;
 			break;
 	}
-	Uint32 style = sf::Style::Close | sf::Style::Titlebar;
+	Uint32 style = Style::Close | Style::Titlebar;
 	if (param.fullscreen)
-		style |= sf::Style::Fullscreen;
+		style |= Style::Fullscreen;
 
 	resolution = res;
 
 	ResetRenderMode();
 
 #ifdef USE_STENCIL_BUFFER
-	sf::ContextSettings ctx(bpp, 8, 0, 1, 2);
+	ContextSettings ctx(bpp, 8, 0, 1, 2);
 #else
-	sf::ContextSettings ctx(bpp, 0, 0, 1, 2);
+	ContextSettings ctx(bpp, 0, 0, 1, 2);
 #endif
-	window.create(sf::VideoMode(resolution.width, resolution.height, bpp), WINDOW_TITLE, style, ctx);
+	window.create(VideoMode(resolution.width, resolution.height, bpp), WINDOW_TITLE, style, ctx);
 	if (param.framerate)
 		window.setFramerateLimit(param.framerate);
 #ifdef _WIN32
@@ -117,24 +119,29 @@ void CWinsys::PrintJoystickInfo() const {
 	std::cout << '\n';
 	for (unsigned int i = 0; i < numJoysticks; i++) {
 		std::cout << "Joystick " << i << '\n';
-		int buttons = sf::Joystick::getButtonCount(i);
+		int buttons = Joystick::getButtonCount(i);
 		std::cout << "Joystick has " << buttons << " button" << (buttons == 1 ? "" : "s") << '\n';
 		std::cout << "Axes: ";
-		if (sf::Joystick::hasAxis(i, sf::Joystick::R)) std::cout << "R ";
-		if (sf::Joystick::hasAxis(i, sf::Joystick::U)) std::cout << "U ";
-		if (sf::Joystick::hasAxis(i, sf::Joystick::V)) std::cout << "V ";
-		if (sf::Joystick::hasAxis(i, sf::Joystick::X)) std::cout << "X ";
-		if (sf::Joystick::hasAxis(i, sf::Joystick::Y)) std::cout << "Y ";
-		if (sf::Joystick::hasAxis(i, sf::Joystick::Z)) std::cout << "Z ";
+		if (Joystick::hasAxis(i, Joystick::R)) std::cout << "R ";
+		if (Joystick::hasAxis(i, Joystick::U)) std::cout << "U ";
+		if (Joystick::hasAxis(i, Joystick::V)) std::cout << "V ";
+		if (Joystick::hasAxis(i, Joystick::X)) std::cout << "X ";
+		if (Joystick::hasAxis(i, Joystick::Y)) std::cout << "Y ";
+		if (Joystick::hasAxis(i, Joystick::Z)) std::cout << "Z ";
 		std::cout << '\n';
 	}
 }
 
 void CWinsys::TakeScreenshot() const {
-	sf::Texture tex;
-	tex.create(window.getSize().x, window.getSize().y);
-	tex.update(window);
-	sf::Image img = tex.copyToImage();
+	Vector2u size = window.getSize();
+	std::vector<Uint8> buf(static_cast<std::size_t>(size.x) * size.y * 4);
+
+	// Read framebuffer (GL origin is bottom-left; flip for PNG top-left).
+	glReadPixels(0, 0, size.x, size.y, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
+
+	Image img;
+	img.create(size.x, size.y, buf.data());
+	img.flipVertically();
 
 	std::string path = param.screenshot_dir;
 

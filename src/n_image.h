@@ -20,6 +20,7 @@ public:
 	Image();
 
 	void create(unsigned int w, unsigned int h, const Color& fill = Color(0, 0, 0, 0));
+	void create(unsigned int w, unsigned int h, const Uint8* rgba); // copy RGBA8 buffer
 
 	bool loadFromFile(const std::string& filename);
 	bool saveToFile(const std::string& filename) const;

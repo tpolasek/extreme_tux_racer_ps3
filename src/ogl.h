@@ -48,9 +48,9 @@ void check_gl_error();
 void InitOpenglExtensions();
 void PrintGLInfo();
 
-void set_material_diffuse(const sf::Color& diffuse_colour);
-void set_material(const sf::Color& diffuse_colour,
-                  const sf::Color& specular_colour,
+void set_material_diffuse(const Color& diffuse_colour);
+void set_material(const Color& diffuse_colour,
+                  const Color& specular_colour,
                   float specular_exp);
 
 
@@ -68,12 +68,12 @@ struct ScopedRenderMode {
 };
 
 void ClearRenderContext();
-void ClearRenderContext(const sf::Color& col);
+void ClearRenderContext(const Color& col);
 void Setup2dScene();
 void Reshape(int w, int h);
 
-void glColor(const sf::Color& col);
-void glColor(const sf::Color& col, uint8_t alpha);
+void glColor(const Color& col);
+void glColor(const Color& col, uint8_t alpha);
 
 void glTranslate(const TVector3d& vec);
 

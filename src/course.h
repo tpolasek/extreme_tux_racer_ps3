@@ -42,7 +42,7 @@ struct TTerrType {
 	std::string textureFile;
 	TTexture* texture;
 	std::size_t sound;
-	sf::Color col;
+	Color col;
 
 	bool particles;
 	bool trackmarks;

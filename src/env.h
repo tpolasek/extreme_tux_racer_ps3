@@ -31,7 +31,7 @@ struct TFog {
 	float end;
 	float height;
 	float color[4];
-	sf::Color part_color;
+	Color part_color;
 	bool is_on;
 };
 
@@ -80,7 +80,7 @@ public:
 	void SetupLight();
 	void SetupFog();
 	void DrawFog() const;
-	const sf::Color& ParticleColor() const { return fog.part_color; }
+	const Color& ParticleColor() const { return fog.part_color; }
 	std::size_t GetEnvIdx(const std::string& tag) const;
 	std::size_t GetLightIdx(const std::string& tag) const;
 };

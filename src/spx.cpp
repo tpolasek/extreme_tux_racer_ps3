@@ -162,20 +162,20 @@ template TVector4<double> Str_Vector4(const std::string &s, const TVector4<doubl
 template TVector4<int> Str_Vector4(const std::string &s, const TVector4<int> &def);
 
 
-sf::Color Str_ColorN(const std::string &s, const sf::Color &def) {
+Color Str_ColorN(const std::string &s, const Color &def) {
 	float r, g, b, a;
 	std::istringstream is(s);
 	is >> r >> g >> b >> a;
 	if (is.fail()) return def;
-	else return sf::Color(r * 255, g * 255, b * 255, a * 255);
+	else return Color(r * 255, g * 255, b * 255, a * 255);
 }
 
-sf::Color Str_Color3N(const std::string &s, const sf::Color &def) {
+Color Str_Color3N(const std::string &s, const Color &def) {
 	int r, g, b;
 	std::istringstream is(s);
 	is >> r >> g >> b;
 	if (is.fail()) return def;
-	else return sf::Color(r, g, b);
+	else return Color(r, g, b);
 }
 
 void Str_ArrN(const std::string &s, float *arr, std::size_t count, float def) {
@@ -250,11 +250,11 @@ TVector4<T> SPVector4(const std::string &s, const std::string &tag, const TVecto
 template TVector4<int> SPVector4(const std::string &s, const std::string &tag, const TVector4<int>& def);
 template TVector4<double> SPVector4(const std::string &s, const std::string &tag, const TVector4<double>& def);
 
-sf::Color SPColorN(const std::string &s, const std::string &tag, const sf::Color& def) {
+Color SPColorN(const std::string &s, const std::string &tag, const Color& def) {
 	return (Str_ColorN(SPItemN(s, tag), def));
 }
 
-sf::Color SPColor3N(const std::string &s, const std::string &tag, const sf::Color& def) {
+Color SPColor3N(const std::string &s, const std::string &tag, const Color& def) {
 	return (Str_Color3N(SPItemN(s, tag), def));
 }
 

@@ -77,25 +77,25 @@ public:
 class TLabel : public TWidget {
 	sf::Text text;
 public:
-	TLabel(const std::string& string, int x, int y, const sf::Color& color);
+	TLabel(const std::string& string, int x, int y, const Color& color);
 	void Focussed(bool masterFocus);
 	void Draw() const;
 	sf::Vector2f GetSize() const;
 };
-TLabel* AddLabel(const std::string& string, int x, int y, const sf::Color& color);
+TLabel* AddLabel(const std::string& string, int x, int y, const Color& color);
 
 class TFramedText : public TWidget {
 	sf::RectangleShape frame;
 	sf::Text text;
 	bool borderFocus;
 public:
-	TFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_ = false);
+	TFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_ = false);
 	void Focussed(bool masterFocus);
 	void Activated();
 	void Draw() const;
 	void SetString(const std::string& string) { text.setString(string); }
 };
-TFramedText* AddFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus = false);
+TFramedText* AddFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus = false);
 
 class TTextButton : public TWidget {
 	sf::Text text;
@@ -151,7 +151,7 @@ void ResetGUI();
 // --------------------------------------------------------------------
 
 void DrawFrameX(int x, int y, int w, int h, int line,
-                const sf::Color& backcol, const sf::Color& framecol, float transp);
+                const Color& backcol, const Color& framecol, float transp);
 void DrawBonusExt(int y, std::size_t numraces, std::size_t num);
 void DrawGUIBackground(float scale);
 void DrawGUIFrame();

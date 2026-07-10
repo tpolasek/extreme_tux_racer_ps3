@@ -52,7 +52,7 @@ TWidget::TWidget(int x, int y, int width, int height, bool interactive_)
 }
 
 
-TLabel::TLabel(const std::string& string, int x, int y, const sf::Color& color)
+TLabel::TLabel(const std::string& string, int x, int y, const Color& color)
 	: TWidget(x, y, 0, 0, false)
 	, text(string, FT.getCurrentFont(), FT.GetSize()) {
 	if (x == CENTER)
@@ -83,12 +83,12 @@ sf::Vector2f TLabel::GetSize() const {
 
 }
 
-TLabel* AddLabel(const std::string& string, int x, int y, const sf::Color& color) {
+TLabel* AddLabel(const std::string& string, int x, int y, const Color& color) {
 	return static_cast<TLabel*>(AddWidget(new TLabel(string, x, y, color)));
 }
 
 
-TFramedText::TFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_)
+TFramedText::TFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& string, unsigned int ftsize, bool borderFocus_)
 	: TWidget(x, y, width, height, false)
 	, frame(sf::Vector2f(width - line * 2, height - line * 2))
 	, text(string, FT.getCurrentFont(), ftsize)
@@ -142,7 +142,7 @@ void TFramedText::Draw() const {
 	Winsys.draw(text);
 }
 
-TFramedText* AddFramedText(int x, int y, int width, int height, int line, const sf::Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus) {
+TFramedText* AddFramedText(int x, int y, int width, int height, int line, const Color& backcol, const std::string& text, unsigned int ftsize, bool borderFocus) {
 	return static_cast<TFramedText*>(AddWidget(new TFramedText(x, y, width, height, line, backcol, text, ftsize, borderFocus)));
 }
 
@@ -289,7 +289,7 @@ TUpDown* AddUpDown(int x, int y, int minimum, int maximum, int value, int distan
 
 // ------------------ Elementary drawing ---------------------------------------------
 
-void DrawFrameX(int x, int y, int w, int h, int line, const sf::Color& backcol, const sf::Color& framecol, float transp) {
+void DrawFrameX(int x, int y, int w, int h, int line, const Color& backcol, const Color& framecol, float transp) {
 	x += line;
 	y += line;
 	w -= line * 2;
@@ -297,8 +297,8 @@ void DrawFrameX(int x, int y, int w, int h, int line, const sf::Color& backcol, 
 	sf::RectangleShape shape(sf::Vector2f(w, h));
 	shape.setPosition(x, y);
 	shape.setOutlineThickness(line);
-	shape.setFillColor(sf::Color(backcol.r, backcol.g, backcol.b, backcol.a * transp));
-	shape.setOutlineColor(sf::Color(framecol.r, framecol.g, framecol.b, framecol.a * transp));
+	shape.setFillColor(Color(backcol.r, backcol.g, backcol.b, backcol.a * transp));
+	shape.setOutlineColor(Color(framecol.r, framecol.g, framecol.b, framecol.a * transp));
 	Winsys.draw(shape);
 }
 
@@ -306,7 +306,7 @@ void DrawBonusExt(int y, std::size_t numraces, std::size_t num) {
 	std::size_t maxtux = numraces * 3;
 	if (num > maxtux) return;
 
-	static const sf::Color col2(115, 166, 217);
+	static const Color col2(115, 166, 217);
 
 	int lleft[3];
 

@@ -34,7 +34,7 @@ private:
 	std::unordered_map<std::string, std::size_t> fontindex;
 
 	int curr_font;
-	sf::Color curr_col;
+	Color curr_col;
 	unsigned int curr_size;
 	float curr_fact;		// the length factor
 
@@ -53,9 +53,9 @@ public:
 	unsigned int GetSize() const { return curr_size; }
 
 	// properties
-	void SetProps(const std::string &fontname, unsigned int size, const sf::Color& col);
+	void SetProps(const std::string &fontname, unsigned int size, const Color& col);
 	void SetProps(const std::string &fontname, unsigned int size);
-	void SetColor(const sf::Color& col) { curr_col = col; }
+	void SetColor(const Color& col) { curr_col = col; }
 	void SetSize(unsigned int size) { curr_size = size; }
 	void SetFont(const std::string& fontname);
 	void SetFontFromSettings();

@@ -73,7 +73,7 @@ public:
 	void Draw();
 	void Draw(int x, int y, float size);
 	void Draw(int x, int y, float width, float height);
-	void DrawFrame(int x, int y, int w, int h, int frame, const sf::Color& col);
+	void DrawFrame(int x, int y, int w, int h, int frame, const Color& col);
 };
 
 class CTexture {
@@ -95,9 +95,9 @@ public:
 	void Draw(std::size_t idx, int x, int y, float size);
 	void Draw(std::size_t idx, int x, int y, int width, int height);
 
-	void DrawFrame(std::size_t idx, int x, int y, double w, double h, int frame, const sf::Color& col);
+	void DrawFrame(std::size_t idx, int x, int y, double w, double h, int frame, const Color& col);
 	void DrawNumChr(char c, int x, int y, int w, int h);
-	void DrawNumStr(const std::string& s, int x, int y, float size, const sf::Color& col);
+	void DrawNumStr(const std::string& s, int x, int y, float size, const Color& col);
 };
 
 extern CTexture Tex;

@@ -30,31 +30,31 @@ GNU General Public License for more details.
 //				color utils
 // --------------------------------------------------------------------
 
-#define TColor(r, g, b, a) sf::Color(static_cast<sf::Uint8>(r*255), static_cast<sf::Uint8>(g*255), static_cast<sf::Uint8>(b*255), static_cast<sf::Uint8>(a*255))
-const sf::Color colDYell =		TColor(1.0, 0.8, 0.0, 1.0);
-const sf::Color colDDYell =		TColor(0.8, 0.6, 0.0, 1.0);
-const sf::Color colLYell =		TColor(1.0, 1.0, 0.4, 1.0);
-const sf::Color colOrange =		TColor(1.0, 0.5, 0.0, 1.0);
-const sf::Color colLRed =		TColor(1.0, 0.3, 0.3, 1.0);
-const sf::Color colDRed =		TColor(0.8, 0.0, 0.0, 1.0);
-const sf::Color colGrey =		TColor(0.5, 0.5, 0.5, 1.0);
-const sf::Color colLGrey =		TColor(0.7, 0.7, 0.7, 1.0);
-const sf::Color colDGrey =		TColor(0.3, 0.3, 0.3, 1.0);
-const sf::Color colLBlue =		TColor(0.5, 0.7, 1.0, 1.0);
-const sf::Color colDBlue =		TColor(0.0, 0.0, 0.6, 1.0);
-const sf::Color colLBackgr =	TColor(0.5, 0.7, 0.9, 1.0);
-const sf::Color colBackgr =		TColor(0.4, 0.6, 0.8, 1.0);
-const sf::Color colMBackgr =	TColor(0.35, 0.5, 0.7, 1.0);
-const sf::Color colDBackgr =	TColor(0.2, 0.3, 0.6, 1.0);
-const sf::Color colDDBackgr =	TColor(0.13, 0.2, 0.4, 1.0);
-const sf::Color colTBackr =		TColor(0.4, 0.6, 0.8, 0.0);
-const sf::Color colMess =		TColor(0.3, 0.3, 0.7, 1.0);
-const sf::Color colSky =		TColor(0.82, 0.86, 0.88, 1.0);
+#define TColor(r, g, b, a) Color(static_cast<Uint8>(r*255), static_cast<Uint8>(g*255), static_cast<Uint8>(b*255), static_cast<Uint8>(a*255))
+const Color colDYell =		TColor(1.0, 0.8, 0.0, 1.0);
+const Color colDDYell =		TColor(0.8, 0.6, 0.0, 1.0);
+const Color colLYell =		TColor(1.0, 1.0, 0.4, 1.0);
+const Color colOrange =		TColor(1.0, 0.5, 0.0, 1.0);
+const Color colLRed =		TColor(1.0, 0.3, 0.3, 1.0);
+const Color colDRed =		TColor(0.8, 0.0, 0.0, 1.0);
+const Color colGrey =		TColor(0.5, 0.5, 0.5, 1.0);
+const Color colLGrey =		TColor(0.7, 0.7, 0.7, 1.0);
+const Color colDGrey =		TColor(0.3, 0.3, 0.3, 1.0);
+const Color colLBlue =		TColor(0.5, 0.7, 1.0, 1.0);
+const Color colDBlue =		TColor(0.0, 0.0, 0.6, 1.0);
+const Color colLBackgr =	TColor(0.5, 0.7, 0.9, 1.0);
+const Color colBackgr =		TColor(0.4, 0.6, 0.8, 1.0);
+const Color colMBackgr =	TColor(0.35, 0.5, 0.7, 1.0);
+const Color colDBackgr =	TColor(0.2, 0.3, 0.6, 1.0);
+const Color colDDBackgr =	TColor(0.13, 0.2, 0.4, 1.0);
+const Color colTBackr =		TColor(0.4, 0.6, 0.8, 0.0);
+const Color colMess =		TColor(0.3, 0.3, 0.7, 1.0);
+const Color colSky =		TColor(0.82, 0.86, 0.88, 1.0);
 
-const sf::Color colBronze   = sf::Color(205, 127, 50,  255);
-const sf::Color colSilver   = sf::Color(192, 192, 192, 255);
-const sf::Color colGold     = sf::Color(255, 215, 0,   255);
-const sf::Color colGreen    = sf::Color(0,   128, 0,   255);
+const Color colBronze   = Color(205, 127, 50,  255);
+const Color colSilver   = Color(192, 192, 192, 255);
+const Color colGold     = Color(255, 215, 0,   255);
+const Color colGreen    = Color(0,   128, 0,   255);
 
 // --------------------------------------------------------------------
 //				print utils
@@ -86,7 +86,7 @@ void PrintVector4(const TVector4d& v) {
 	std::cout << v.x << "  " << v.y << "  " << v.z << "  " << v.w << '\n';
 }
 
-void PrintColor(const sf::Color& c) {
+void PrintColor(const Color& c) {
 	std::cout.precision(3);
 	std::cout << c.r << "  " << c.g << "  " << c.b << '\n';
 }

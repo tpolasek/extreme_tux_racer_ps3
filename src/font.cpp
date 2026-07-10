@@ -145,7 +145,7 @@ std::size_t CFont::GetFontIdx(const std::string &name) const {
 	return fontindex.at(name);
 }
 
-void CFont::SetProps(const std::string &fontname, unsigned int size, const sf::Color& col) {
+void CFont::SetProps(const std::string &fontname, unsigned int size, const Color& col) {
 	SetProps(fontname, size);
 	curr_col  = col;
 }

@@ -49,8 +49,8 @@ template<typename T>
 TVector3<T> Str_Vector3(const std::string &s, const TVector3<T>& def);
 template<typename T>
 TVector4<T> Str_Vector4(const std::string &s, const TVector4<T>& def);
-sf::Color   Str_ColorN(const std::string &s, const sf::Color& def);
-sf::Color   Str_Color3N(const std::string &s, const sf::Color& def);
+Color   Str_ColorN(const std::string &s, const Color& def);
+Color   Str_Color3N(const std::string &s, const Color& def);
 void        Str_ArrN(const std::string &s, float *arr, std::size_t count, float def);
 
 // ----- SP functions for parsing lines --------------------------------
@@ -73,8 +73,8 @@ template<typename T>
 TVector4<T> SPVector4(const std::string &s, const std::string &tag, const TVector4<T>& def);
 static inline TVector4d SPVector4d(const std::string &s, const std::string &tag) { return SPVector4(s, tag, NullVec4); }
 static inline TVector4i SPVector4i(const std::string &s, const std::string &tag) { return SPVector4(s, tag, NullVec4i); }
-sf::Color SPColorN(const std::string &s, const std::string &tag, const sf::Color& def);
-sf::Color SPColor3N(const std::string &s, const std::string &tag, const sf::Color& def);
+Color SPColorN(const std::string &s, const std::string &tag, const Color& def);
+Color SPColor3N(const std::string &s, const std::string &tag, const Color& def);
 void      SPArrN(const std::string &s, const std::string &tag, float *arr, std::size_t count, float def);
 
 // ----- making SP strings --------------------------------------------

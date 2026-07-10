@@ -70,7 +70,7 @@ TGuiParticle::TGuiParticle(float x, float y) {
 	const sf::Texture& texture = Tex.GetSFTexture(SNOW_PART);
 	sprite.setTexture(texture);
 	sprite.setPosition(x*static_cast<float>(Winsys.resolution.width), y*static_cast<float>(Winsys.resolution.height));
-	sprite.setColor(sf::Color(255, 255, 255, 76));
+	sprite.setColor(Color(255, 255, 255, 76));
 	double p_dist = FRandom();
 
 	size = PARTICLE_MIN_SIZE + (1.0 - p_dist) * PARTICLE_SIZE_RANGE;
@@ -133,7 +133,7 @@ void init_ui_snow() {
 }
 
 void update_ui_snow(float time_step) {
-	static sf::Clock timer;
+	static Clock timer;
 	float time = timer.getElapsedTime().asSeconds();
 	timer.restart();
 
@@ -257,7 +257,7 @@ void Particle::Draw(const CControl* ctrl) const {
 		}
 	};
 
-	const sf::Color& particle_colour = Env.ParticleColor();
+	const Color& particle_colour = Env.ParticleColor();
 	glColor(particle_colour, particle_colour.a * alpha);
 
 	draw_billboard(ctrl, cur_size, cur_size, false, tex_coords[type]);
@@ -506,7 +506,7 @@ void TFlakeArea::Draw(const CControl *ctrl) const {
 	ScopedRenderMode rm(PARTICLES);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	Tex.BindTex(SNOW_PART);
-	const sf::Color& particle_colour = Env.ParticleColor();
+	const Color& particle_colour = Env.ParticleColor();
 	glColor(particle_colour);
 
 	glEnableClientState(GL_VERTEX_ARRAY);
@@ -832,7 +832,7 @@ void CCurtain::Draw() {
 
 	ScopedRenderMode rm(PARTICLES);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-	const sf::Color& particle_colour = Env.ParticleColor();
+	const Color& particle_colour = Env.ParticleColor();
 	glColor(particle_colour, 255);
 
 	// glEnable (GL_NORMALIZE);

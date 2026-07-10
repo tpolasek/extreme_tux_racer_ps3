@@ -39,7 +39,7 @@ GNU General Public License for more details.
 
 CReset Reset;
 
-static sf::Clock reset_timer;
+static Clock reset_timer;
 static bool position_reset;
 
 

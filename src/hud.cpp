@@ -54,7 +54,7 @@ static const GLubyte energy_foreground_color[]   = { 138, 150, 255, 128 };
 static const GLubyte speedbar_background_color[] = { 51,  51,  51, 0 };
 static const GLubyte hud_white[]                 = { 255, 255, 255, 255 };
 
-static void draw_time(double time, sf::Color color) {
+static void draw_time(double time, Color color) {
 	Tex.Draw(T_TIME, 10, 10, 1);
 
 	int min, sec, hundr;
@@ -81,7 +81,7 @@ static void draw_time(double time, sf::Color color) {
 	}
 }
 
-static void draw_herring_count(int herring_count, sf::Color color) {
+static void draw_herring_count(int herring_count, Color color) {
 	Tex.Draw(HERRING_ICON, Winsys.resolution.width - 59, 12, 1);
 
 	std::string hcountstr = Int_StrN(herring_count, 3);

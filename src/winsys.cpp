@@ -61,7 +61,7 @@ void CWinsys::SetupVideoMode(const TScreenRes& res) {
 			bpp = sf::VideoMode::getDesktopMode().bitsPerPixel;
 			break;
 	}
-	sf::Uint32 style = sf::Style::Close | sf::Style::Titlebar;
+	Uint32 style = sf::Style::Close | sf::Style::Titlebar;
 	if (param.fullscreen)
 		style |= sf::Style::Fullscreen;
 

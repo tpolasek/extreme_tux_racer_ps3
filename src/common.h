@@ -42,35 +42,35 @@ GNU General Public License for more details.
 //				color utils
 // --------------------------------------------------------------------
 
-#define colTransp sf::Color::Transparent
-#define colWhite  sf::Color::White
-#define colBlack  sf::Color::Black
-#define colRed    sf::Color::Red
-#define colYellow sf::Color::Yellow
-#define colBlue   sf::Color::Blue
-extern const sf::Color colTBackr;
-extern const sf::Color colDYell;
-extern const sf::Color colDDYell;
-extern const sf::Color colLYell;
-extern const sf::Color colOrange;
-extern const sf::Color colLRed;
-extern const sf::Color colDRed;
-extern const sf::Color colGrey;
-extern const sf::Color colLGrey;
-extern const sf::Color colDGrey;
-extern const sf::Color colLBlue;
-extern const sf::Color colDBlue;
-extern const sf::Color colBackgr;
-extern const sf::Color colDBackgr;
-extern const sf::Color colDDBackgr;
-extern const sf::Color colMBackgr;
-extern const sf::Color colLBackgr;
-extern const sf::Color colMess;
-extern const sf::Color colSky;
-extern const sf::Color colBronze;
-extern const sf::Color colSilver;
-extern const sf::Color colGold;
-extern const sf::Color colGreen;
+#define colTransp Color::Transparent
+#define colWhite  Color::White
+#define colBlack  Color::Black
+#define colRed    Color::Red
+#define colYellow Color::Yellow
+#define colBlue   Color::Blue
+extern const Color colTBackr;
+extern const Color colDYell;
+extern const Color colDDYell;
+extern const Color colLYell;
+extern const Color colOrange;
+extern const Color colLRed;
+extern const Color colDRed;
+extern const Color colGrey;
+extern const Color colLGrey;
+extern const Color colDGrey;
+extern const Color colLBlue;
+extern const Color colDBlue;
+extern const Color colBackgr;
+extern const Color colDBackgr;
+extern const Color colDDBackgr;
+extern const Color colMBackgr;
+extern const Color colLBackgr;
+extern const Color colMess;
+extern const Color colSky;
+extern const Color colBronze;
+extern const Color colSilver;
+extern const Color colGold;
+extern const Color colGreen;
 
 
 // --------------------------------------------------------------------
@@ -85,7 +85,7 @@ void	PrintString(const std::string& s);
 void	PrintDouble(const double val);
 void	PrintVector(const TVector3d& v);
 void	PrintVector4(const TVector4d& v);
-void	PrintColor(const sf::Color& c);
+void	PrintColor(const Color& c);
 void	PrintVector2(const TVector2d& v);
 
 template<int x, int y>

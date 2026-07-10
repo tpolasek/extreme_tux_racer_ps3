@@ -43,13 +43,13 @@ still shaped with spheres.
 #define SHADOW_HEIGHT 0.03 // ->0.05
 
 #ifdef USE_STENCIL_BUFFER
-static const sf::Color shad_col(0, 0, 0, 76);
+static const Color shad_col(0, 0, 0, 76);
 #else
-static const sf::Color shad_col(0, 0, 0, 25);
+static const Color shad_col(0, 0, 0, 25);
 #endif
 
-static const TCharMaterial TuxDefMat = { sf::Color(128, 128, 128), colBlack, 0.0 };
-static const TCharMaterial Highlight = { sf::Color(204, 38, 38), colBlack, 0.0 };
+static const TCharMaterial TuxDefMat = { Color(128, 128, 128), colBlack, 0.0 };
+static const TCharMaterial Highlight = { Color(204, 38, 38), colBlack, 0.0 };
 CCharShape TestChar;
 
 CCharShape::CCharShape() {

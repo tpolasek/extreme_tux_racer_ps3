@@ -150,7 +150,7 @@ void TTexture::Draw(int x, int y, float width, float height) {
 	glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void TTexture::DrawFrame(int x, int y, int w, int h, int frame, const sf::Color& col) {
+void TTexture::DrawFrame(int x, int y, int w, int h, int frame, const Color& col) {
 	if (w < 1) w = texture.getSize().x;
 	if (h < 1) h = texture.getSize().y;
 
@@ -236,7 +236,7 @@ void CTexture::Draw(std::size_t idx, int x, int y, int width, int height) {
 		CommonTex[idx]->Draw(x, y, width, height);
 }
 
-void CTexture::DrawFrame(std::size_t idx, int x, int y, double w, double h, int frame, const sf::Color& col) {
+void CTexture::DrawFrame(std::size_t idx, int x, int y, double w, double h, int frame, const Color& col) {
 	if (CommonTex.size() > idx)
 		CommonTex[idx]->DrawFrame(x, y, w, h, frame, col);
 }
@@ -281,7 +281,7 @@ void CTexture::DrawNumChr(char c, int x, int y, int w, int h) {
 	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
-void CTexture::DrawNumStr(const std::string& s, int x, int y, float size, const sf::Color& col) {
+void CTexture::DrawNumStr(const std::string& s, int x, int y, float size, const Color& col) {
 	if (!BindTex(NUMERIC_FONT)) {
 		Message("DrawNumStr: missing texture");
 		return;

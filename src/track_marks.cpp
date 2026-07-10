@@ -96,7 +96,7 @@ void DrawTrackmarks() {
 
 	TTexture* textures[NUM_TRACK_TYPES];
 
-	sf::Color track_colour = colWhite;
+	Color track_colour = colWhite;
 	set_material(track_colour, colBlack, 1.0);
 	ScopedRenderMode rm(TRACK_MARKS);
 

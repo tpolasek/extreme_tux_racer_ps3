@@ -30,8 +30,8 @@ GNU General Public License for more details.
 #define MAX_SPHERE_DIV 16
 
 struct TCharMaterial {
-	sf::Color diffuse;
-	sf::Color specular;
+	Color diffuse;
+	Color specular;
 	float exp;
 	std::string matline;
 };

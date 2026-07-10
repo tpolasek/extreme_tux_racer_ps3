@@ -114,7 +114,7 @@ void PrintGLInfo() {
 	}
 }
 
-void set_material_diffuse(const sf::Color& diffuse_colour) {
+void set_material_diffuse(const Color& diffuse_colour) {
 	const float scale = 1.0 / 255.0;
 	GLfloat mat_amb_diff[4] = {
 		diffuse_colour.r * scale,
@@ -129,7 +129,7 @@ void set_material_diffuse(const sf::Color& diffuse_colour) {
 	glColor(diffuse_colour);
 }
 
-void set_material(const sf::Color& diffuse_colour, const sf::Color& specular_colour, float specular_exp) {
+void set_material(const Color& diffuse_colour, const Color& specular_colour, float specular_exp) {
 	set_material_diffuse(diffuse_colour);
 
 	const float scale = 1.0 / 255.0;
@@ -153,7 +153,7 @@ void ClearRenderContext() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
-void ClearRenderContext(const sf::Color& col) {
+void ClearRenderContext(const Color& col) {
 	glDepthMask(GL_TRUE);
 	glClearColor(col.r / 255.f, col.g / 255.f, col.b / 255.f, col.a / 255.f);
 	glClearStencil(0);
@@ -410,11 +410,11 @@ void PopRenderMode() {
 }
 
 
-void glColor(const sf::Color& col) {
+void glColor(const Color& col) {
 	glColor4ub(col.r, col.g, col.b, col.a);
 }
 
-void glColor(const sf::Color& col, uint8_t alpha) {
+void glColor(const Color& col, uint8_t alpha) {
 	glColor4ub(col.r, col.g, col.b, alpha);
 }
 

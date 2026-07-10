@@ -89,10 +89,10 @@ static void init_texture()
 
 	buffer = (u8*)texture_buffer;
 	for (i = 0; i < checkerboard.width * checkerboard.height * 4; i += 4) {
-		buffer[i + 0] = *data++;
 		buffer[i + 1] = *data++;
 		buffer[i + 2] = *data++;
 		buffer[i + 3] = *data++;
+		buffer[i + 0] = *data++;
 	}
 	ttyTrace("[trace] init_texture: done\n");
 }

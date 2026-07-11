@@ -31,6 +31,13 @@ GNU General Public License for more details.
 #include <cstring>
 #include <csignal>
 
+#ifdef OS_PS3
+#include "ps3_tty.h"
+#define ETR_TRACE(msg) sysTtyTrace("[etr] " msg)
+#else
+#define ETR_TRACE(msg) do {} while (0)
+#endif
+
 TGameData g_game;
 
 volatile sig_atomic_t g_sigint_received = 0;
@@ -57,16 +64,20 @@ void InitGame(int argc, char **argv) {
 	g_game.treevar = 3;
 }
 
-int main(int argc, char **argv) {
+extern "C" int etr_run() {
 	std::cout << "\n----------- Extreme Tux Racer " ETR_VERSION_STRING " ----------------";
 	std::cout << "\n----------- (C) 2010-2024 Extreme Tux Racer Team  --------\n\n";
 	std::cout << "\n----------- (C) GG --------\n\n";
 
 	std::srand(std::time(nullptr));
 	std::signal(SIGINT, sigint_handler);
+	ETR_TRACE("InitConfig");
 	InitConfig();
-	InitGame(argc, argv);
+	ETR_TRACE("InitGame");
+	InitGame(0, nullptr);
+	ETR_TRACE("Winsys.Init");
 	Winsys.Init();
+	ETR_TRACE("InitOpenglExtensions");
 	InitOpenglExtensions();
 
 	// For checking the joystick and the OpgenGL version (the info is written on the console):
@@ -74,18 +85,30 @@ int main(int argc, char **argv) {
 	//PrintGLInfo ();
 
 	// theses resources must or should be loaded before splashscreen starts
+	ETR_TRACE("LoadTextureList");
 	if (!Tex.LoadTextureList()) {
+		ETR_TRACE("LoadTextureList FAILED");
 		Winsys.Quit();
 		return -1;
 	}
+	ETR_TRACE("LoadFontlist");
 	FT.LoadFontlist();
 	FT.SetFontFromSettings();
+	ETR_TRACE("LoadMusicList");
 	Music.LoadMusicList();
 	Music.SetVolume(param.music_volume);
 
+	ETR_TRACE("Run(SplashScreen)");
 	State::manager.Run(SplashScreen);
 
+	ETR_TRACE("shutdown");
 	Winsys.Quit();
 
 	return 0;
 }
+
+#ifndef OS_PS3
+int main(int argc, char **argv) {
+	return etr_run();
+}
+#endif

@@ -1,0 +1,18 @@
+/* ETR PS3 2D fragment program.
+ * Modulates the bound texture (a 1x1 white fallback when no texture is bound,
+ * e.g. for filled rectangles) by the per-draw constant color uColor. Alpha
+ * passes through; blending is driven by the RSX blend state set from
+ * glBlendFunc.
+ */
+void main
+(
+	float2 texcoord : TEXCOORD0,
+
+	uniform float4   uColor,
+	uniform sampler2D tex,
+
+	out float4 oColor
+)
+{
+	oColor = uColor * tex2D(tex, texcoord);
+}

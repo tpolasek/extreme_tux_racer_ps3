@@ -39,7 +39,9 @@ GNU General Public License for more details.
 #include "n_window.h"
 
 #ifndef HAVE_CONFIG_H
-#	ifdef __APPLE__
+#	ifdef __PPU__
+#		define OS_PS3
+#	elif defined(__APPLE__)
 #		define OS_MAC
 #	elif defined(__linux__)
 #		define OS_LINUX
@@ -49,10 +51,12 @@ GNU General Public License for more details.
 // Unix platform (Linux, Mac OS X, BSD, ...)
 #include <unistd.h>
 #include <sys/types.h>
-#include <pwd.h>
 #include <dirent.h>
 #include <sys/time.h>
 #include <GL/glx.h>
+#ifndef OS_PS3
+#	include <pwd.h>
+#endif
 #define SEP "/"
 
 

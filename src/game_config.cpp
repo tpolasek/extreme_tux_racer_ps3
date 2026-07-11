@@ -257,6 +257,15 @@ void SaveConfigFile() {
 void InitConfig() {
 	int config_exist = 0;
 
+#ifdef OS_PS3
+	// PS3: no user database / home dir. Assets and saves live under the
+	// installed title's USRDIR. TITLE_ID (9 chars) must match make_pkg.sh.
+	param.config_dir = "/dev_hdd0/game/EXTR00001/USRDIR";
+	param.save_dir   = param.config_dir;
+	param.data_dir   = "/dev_hdd0/game/EXTR00001/USRDIR/data";
+	param.configfile = param.config_dir + SEP "options.txt";
+	if (FileExists(param.configfile)) config_exist = 1;
+#else
 	struct passwd *pwent = getpwuid(getuid());
 	std::string halfway_dir;
 
@@ -298,6 +307,7 @@ void InitConfig() {
 			config_exist = 2;
 		}
 	}
+#endif
 
 	param.screenshot_dir = param.save_dir + SEP "screenshots";
 	param.obj_dir = param.data_dir + SEP "objects";

@@ -1,0 +1,21 @@
+/* ETR PS3 2D vertex program.
+ * Vertex layout: float3 position (POSITION), float2 texcoord (TEXCOORD0).
+ * Color is a per-draw fragment-program uniform (uColor), so it is not passed
+ * as a varying. Matrices are uploaded transposed (row-major) from the shim's
+ * column-major stores, matching the demo's proven convention.
+ */
+void main
+(
+	float3 position  : POSITION,
+	float2 texcoord  : TEXCOORD0,
+
+	uniform float4x4 projMatrix,
+	uniform float4x4 modelViewMatrix,
+
+	out float4 oPosition : POSITION,
+	out float2 oTexcoord : TEXCOORD0
+)
+{
+	oPosition = mul(mul(projMatrix, modelViewMatrix), float4(position, 1.0f));
+	oTexcoord = texcoord;
+}

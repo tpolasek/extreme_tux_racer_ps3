@@ -1,0 +1,147 @@
+#---------------------------------------------------------------------------------
+# ETR PS3 (PSL1GHT) build — produces etr.elf / etr.self.
+#
+# Compiles the platform-neutral game sources (src/*.cpp) minus the two backends
+# that have PS3 replacements (n_window.cpp, n_audio.cpp), plus the PS3 backend
+# sources under ps3/source/, plus rsxutil.cpp. The GL shim headers under
+# ps3/include/ are searched FIRST so <GL/gl.h> resolves to the shim rather than
+# any host GL.
+#
+# Run:   make -f Makefile.ps3      # builds etr.self
+#        make -f Makefile.ps3 clean
+#
+# Requires PSL1GHT and PS3DEV in the environment (set by the toolchain).
+#---------------------------------------------------------------------------------
+.SUFFIXES:
+
+ifeq ($(strip $(PSL1GHT)),)
+$(error "Please set PSL1GHT in your environment. export PSL1GHT=<path>")
+endif
+
+include $(PSL1GHT)/psl1ght/ppu_rules
+
+#---------------------------------------------------------------------------------
+# TARGET is the output name; BUILD is the object/intermediate dir; SHADERS is
+# the Cg shader dir; INCLUDES is searched before the PSL1GHT/system headers.
+#---------------------------------------------------------------------------------
+TARGET		:=	etr
+BUILD		:=	ps3_build
+SHADERS		:=	ps3/shaders
+INCLUDES	:=	ps3/include .
+
+TITLE		:=	Extreme Tux Racer
+APPID		:=	EXTR00001
+CONTENTID	:=	UP0001-$(APPID)_00-0000000000000001
+
+#---------------------------------------------------------------------------------
+# code-generation options. -std=c++14 is required by the game sources
+# (configure.ac mandates it). -mcpu=cell + the PSL1GHT MACHDEP flags.
+#---------------------------------------------------------------------------------
+# -std=gnu++14 (not c++14): the GNU dialect leaves __STRICT_ANSI__ undefined,
+# which is what PS3 newlib's <stdio.h> checks to expose snprintf/vsnprintf.
+# With plain -std=c++14 the C++ standard library fails to find ::vsnprintf.
+CFLAGS		=	-Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE)
+CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
+
+LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
+
+#---------------------------------------------------------------------------------
+# libraries: freetype/png/z from portlibs, RSX + system libs from PSL1GHT.
+#---------------------------------------------------------------------------------
+LIBS	:=	-lfreetype -lpng -lz -lsimdmath -lrsx -lgcm_sys -lio -lsysutil -lrt -llv2 -lm
+
+#---------------------------------------------------------------------------------
+# library search dirs (portlibs for freetype/png/z).
+#---------------------------------------------------------------------------------
+LIBDIRS	:=	$(PS3DEV)/portlibs/ppu
+
+#---------------------------------------------------------------------------------
+# no real need to edit anything past this point
+#---------------------------------------------------------------------------------
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+
+export OUTPUT	:=	$(CURDIR)/$(TARGET)
+
+# VPATH covers the two source dirs (game src + ps3 backend) + shaders. The game
+# src dir is first so that the colliding basename "main.cpp" resolves to the
+# GAME's main.cpp (etr_run), not the demo's ps3/source/main.cpp.
+export VPATH	:=	$(CURDIR) $(CURDIR)/ps3/source \
+					$(foreach dir,$(SHADERS),$(CURDIR)/$(dir))
+
+export DEPSDIR	:=	$(CURDIR)/$(BUILD)
+export BUILDDIR	:=	$(CURDIR)/$(BUILD)
+
+# game sources: everything in src/*.cpp EXCEPT the two backends with PS3
+# replacements.
+GAME_CPP	:=	$(filter-out n_window.cpp n_audio.cpp,$(notdir $(wildcard $(CURDIR)/*.cpp)))
+
+# PS3 backend sources (explicit list — excludes the demo's main.cpp, which
+# would otherwise collide with the game's src/main.cpp on the flat object dir).
+PS3_CPP		:=	rsxutil.cpp ps3_gl.cpp n_window_ps3.cpp n_audio_ps3.cpp ps3_main.cpp
+
+export CPPFILES	:=	$(GAME_CPP) $(PS3_CPP)
+export CFILES	:=
+export OFILES	:=	$(addsuffix .o,$(VPOFILES)) \
+					$(addsuffix .o,$(FPOFILES)) \
+					$(CPPFILES:.cpp=.o)
+
+# shaders: only the 2D shader the game build uses.
+VCGFILES	:=	etr2d.vcg
+FCGFILES	:=	etr2d.fcg
+VPOFILES	:=	$(VCGFILES:.vcg=.vpo)
+FPOFILES	:=	$(FCGFILES:.fcg=.fpo)
+
+export OFILES	:=	$(addsuffix .o,$(VPOFILES)) $(addsuffix .o,$(FPOFILES)) \
+					$(CPPFILES:.cpp=.o)
+
+# C++ project -> link with CXX.
+export LD	:=	$(CXX)
+
+# include path: PS3 GL shim FIRST, then game src, then portlibs (freetype/png),
+# then PSL1GHT headers, then the build dir (for bin2o-generated shader headers).
+export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
+					-I$(PORTLIBS)/include \
+					$(LIBPSL1GHT_INC) \
+					-I$(CURDIR)/$(BUILD)
+
+export LIBPATHS	:=	-L$(PORTLIBS)/lib $(LIBPSL1GHT_LIB)
+
+.PHONY: $(BUILD) clean
+#---------------------------------------------------------------------------------
+$(BUILD):
+	@[ -d $@ ] || mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile.ps3
+
+#---------------------------------------------------------------------------------
+clean:
+	@echo clean ...
+	@rm -fr $(BUILD) $(OUTPUT).elf $(OUTPUT).self $(OUTPUT).elf.map
+
+#---------------------------------------------------------------------------------
+else
+
+DEPENDS	:=	$(OFILES:.o=.d)
+
+#---------------------------------------------------------------------------------
+# main targets (the %.self: %.elf pattern rule comes from ppu_rules).
+#---------------------------------------------------------------------------------
+$(OUTPUT).self: $(OUTPUT).elf
+$(OUTPUT).elf:	$(OFILES)
+
+#---------------------------------------------------------------------------------
+%.vpo.o	:	%.vpo
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	@$(bin2o)
+
+#---------------------------------------------------------------------------------
+%.fpo.o	:	%.fpo
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	@$(bin2o)
+
+-include $(DEPENDS)
+
+#---------------------------------------------------------------------------------
+endif
+#---------------------------------------------------------------------------------

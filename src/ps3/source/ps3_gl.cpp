@@ -328,9 +328,6 @@ GLboolean glIsEnabled(GLenum cap) {
 	}
 }
 
-void glEnableClientState(GLenum)  { }
-void glDisableClientState(GLenum) { }
-
 void glDepthMask(GLboolean f) { g_depthMask = f; }
 void glDepthFunc(GLenum)      { }
 void glShadeModel(GLenum)     { }
@@ -412,14 +409,111 @@ void glColor4ub(GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
 void glColor4ubv(const GLubyte *v) { glColor4ub(v[0], v[1], v[2], v[3]); }
 
 /* =====================================================================
- * GL: vertex arrays (3D — no-ops)
+ * GL: vertex arrays
+ *
+ * Used by TTexture::Draw, HUD, particles, env, course_render for 2D
+ * textured quads (GL_TRIANGLE_FAN with 4 verts). Implemented by folding
+ * the user's vertex/texcoord arrays into the same ImmVtx buffer the
+ * immediate-mode path uses, then issuing a single rsxDrawVertexArray.
+ * Normal/color arrays and glDrawElements remain no-ops (3D-only paths
+ * the 2D menu never reaches).
  * ===================================================================== */
-void glVertexPointer(GLint, GLenum, GLsizei, const GLvoid*)  { }
-void glTexCoordPointer(GLint, GLenum, GLsizei, const GLvoid*) { }
-void glNormalPointer(GLenum, GLsizei, const GLvoid*)         { }
-void glColorPointer(GLint, GLenum, GLsizei, const GLvoid*)   { }
-void glDrawArrays(GLenum, GLint, GLsizei)                    { }
-void glDrawElements(GLenum, GLsizei, GLenum, const GLvoid*)  { }
+struct ClientArray {
+	GLboolean     enabled;
+	const GLvoid *pointer;
+	GLint         size;
+	GLenum        type;
+	GLsizei       stride;
+};
+static ClientArray g_vertexArray    = { GL_FALSE, NULL, 0, 0, 0 };
+static ClientArray g_texCoordArray  = { GL_FALSE, NULL, 0, 0, 0 };
+
+void glEnableClientState(GLenum cap) {
+	switch (cap) {
+		case GL_VERTEX_ARRAY:        g_vertexArray.enabled   = GL_TRUE; break;
+		case GL_TEXTURE_COORD_ARRAY: g_texCoordArray.enabled = GL_TRUE; break;
+		default: break; /* normal/color arrays not used by 2D path */
+	}
+}
+void glDisableClientState(GLenum cap) {
+	switch (cap) {
+		case GL_VERTEX_ARRAY:        g_vertexArray.enabled   = GL_FALSE; break;
+		case GL_TEXTURE_COORD_ARRAY: g_texCoordArray.enabled = GL_FALSE; break;
+		default: break;
+	}
+}
+
+static u32 sizeofGlType(GLenum t) {
+	switch (t) {
+		case GL_FLOAT:         return 4;
+		case GL_SHORT:         return 2;
+		case GL_INT:           return 4;
+		case GL_UNSIGNED_BYTE: return 1;
+		default:               return 4;
+	}
+}
+
+/* Read component `comp` (0-based) of vertex `idx` from a client array as float. */
+static float readArrayComp(const ClientArray &a, GLint idx, GLint comp) {
+	if (!a.pointer) return 0.0f;
+	GLsizei effStride = a.stride ? a.stride : (GLsizei)(sizeofGlType(a.type) * a.size);
+	const u8 *base = (const u8 *)a.pointer + (u32)idx * (u32)effStride;
+	switch (a.type) {
+		case GL_FLOAT:         return ((const float *)base)[comp];
+		case GL_SHORT:         return (float)((const short *)base)[comp];
+		case GL_INT:           return (float)((const int *)base)[comp];
+		case GL_UNSIGNED_BYTE: return (float)((const u8 *)base)[comp];
+		default:               return 0.0f;
+	}
+}
+
+void glVertexPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
+	g_vertexArray.size = size;
+	g_vertexArray.type = type;
+	g_vertexArray.stride = stride;
+	g_vertexArray.pointer = ptr;
+}
+void glTexCoordPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
+	g_texCoordArray.size = size;
+	g_texCoordArray.type = type;
+	g_texCoordArray.stride = stride;
+	g_texCoordArray.pointer = ptr;
+}
+void glNormalPointer(GLenum, GLsizei, const GLvoid*)         { } /* 3D only */
+void glColorPointer(GLint, GLenum, GLsizei, const GLvoid*)   { } /* 3D only */
+
+void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
+	if (count <= 0) return;
+	if (g_immCount + count > PS3_IMM_MAX) count = PS3_IMM_MAX - g_immCount;
+	if (count <= 0) return;
+
+	bool va = g_vertexArray.enabled   != GL_FALSE;
+	bool ta = g_texCoordArray.enabled != GL_FALSE;
+
+	for (GLint i = 0; i < count; i++) {
+		GLint idx = first + i;
+		ImmVtx &v = g_immVtx[g_immCount++];
+		if (va) {
+			v.x = readArrayComp(g_vertexArray, idx, 0);
+			v.y = (g_vertexArray.size > 1) ? readArrayComp(g_vertexArray, idx, 1) : 0.0f;
+			v.z = (g_vertexArray.size > 2) ? readArrayComp(g_vertexArray, idx, 2) : 0.0f;
+		} else {
+			v.x = v.y = v.z = 0.0f;
+		}
+		if (ta) {
+			v.u = readArrayComp(g_texCoordArray, idx, 0);
+			v.v = (g_texCoordArray.size > 1) ? readArrayComp(g_texCoordArray, idx, 1) : 0.0f;
+		} else {
+			v.u = v.v = 0.0f;
+		}
+	}
+
+	g_primMode = mode;
+	ps3_gl_flush();
+	g_immCount = 0;
+}
+
+void glDrawElements(GLenum, GLsizei, GLenum, const GLvoid*)  { } /* 3D only */
 
 /* =====================================================================
  * GL: textures

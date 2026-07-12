@@ -94,13 +94,12 @@ TFramedText::TFramedText(int x, int y, int width, int height, int line, const Co
 	, text(string, FT.getCurrentFont(), ftsize)
 	, borderFocus(borderFocus_) {
 	text.setPosition(x + line + 20, y + line);
-	if (!borderFocus) {
-		text.setFillColor(colWhite);
-		text.setOutlineColor(colWhite);
-	} else {
-		text.setFillColor(colDYell);
-		text.setOutlineColor(colDYell);
-	}
+	// Focus is indicated by a yellow outline around the glyphs; the fill
+	// stays white in both states. outlineThickness > 0 makes the outline
+	// actually visible (see FontRenderer::renderChar).
+	text.setOutlineThickness(2.0f);
+	text.setFillColor(colWhite);
+	text.setOutlineColor(borderFocus ? colDYell : colWhite);
 	frame.setPosition(x + line, y + line);
 	frame.setOutlineThickness(line);
 	frame.setFillColor(backcol);
@@ -109,13 +108,10 @@ TFramedText::TFramedText(int x, int y, int width, int height, int line, const Co
 
 void TFramedText::Activated() {
 	if (!active) {
-		text.setFillColor(colLGrey);
 		text.setOutlineColor(colLGrey);
 	} else if (borderFocus || focus) {
-		text.setFillColor(colDYell);
 		text.setOutlineColor(colDYell);
 	} else {
-		text.setFillColor(colWhite);
 		text.setOutlineColor(colWhite);
 	}
 }
@@ -125,13 +121,11 @@ void TFramedText::Focussed(bool masterFocus) {
 	if (focus) {
 		frame.setOutlineColor(colDYell);
 		if (!borderFocus) {
-			text.setFillColor(colDYell);
 			text.setOutlineColor(colDYell);
 		}
 	} else {
 		frame.setOutlineColor(colWhite);
 		if (!borderFocus) {
-			text.setFillColor(colWhite);
 			text.setOutlineColor(colWhite);
 		}
 	}
@@ -150,6 +144,10 @@ TTextButton::TTextButton(int x, int y, const std::string& text_, int ftsize)
 	: TWidget(x, y, 0, 0)
 	, text(text_, FT.getCurrentFont(), ftsize) {
 	if (ftsize < 0) text.setCharacterSize(FT.AutoSizeN(4));
+	// Focus is indicated by a yellow outline (fill stays white).
+	text.setOutlineThickness(2.0f);
+	text.setFillColor(colWhite);
+	text.setOutlineColor(colWhite);
 
 	int len = text.getLocalBounds().width;
 	if (x == CENTER) position.x = (Winsys.resolution.width - len) / 2;
@@ -159,10 +157,8 @@ TTextButton::TTextButton(int x, int y, const std::string& text_, int ftsize)
 
 void TTextButton::Focussed() {
 	if (focus) {
-		text.setFillColor(colDYell);
 		text.setOutlineColor(colDYell);
 	} else {
-		text.setFillColor(colWhite);
 		text.setOutlineColor(colWhite);
 	}
 }

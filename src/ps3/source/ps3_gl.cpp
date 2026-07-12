@@ -16,6 +16,7 @@
 
 #include <rsx/rsx.h>
 #include <rsx/gcm_sys.h>
+#include <rsx/mm.h>
 #include <io/pad.h>
 #include <string.h>
 #include <stdlib.h>
@@ -86,6 +87,7 @@ static u32     g_drawBufOffset = 0;
 struct GlTex {
 	u32       offset;
 	u32       width, height;
+	u32       pitch;      /* bytes per row, 64-byte aligned for RSX linear texturing */
 	u8       *buffer;     /* RSX-local backing store */
 	GLboolean smooth;
 	GLboolean repeated;
@@ -94,6 +96,10 @@ struct GlTex {
 static GlTex  g_tex[PS3_MAX_TEXTURES];
 static GLuint g_currentTex = 0;
 static GLuint g_nextTexId  = 1;
+
+/* recycled texture ids (freed by glDeleteTextures, reused by glGenTextures) */
+static GLuint g_freeIds[PS3_MAX_TEXTURES];
+static u32    g_freeCount = 0;
 
 /* shader handles */
 static rsxVertexProgram  *g_vpo = NULL;
@@ -419,17 +425,24 @@ void glDrawElements(GLenum, GLsizei, GLenum, const GLvoid*)  { }
  * GL: textures
  * ===================================================================== */
 void glGenTextures(GLsizei n, GLuint *t) {
-	for (GLsizei i = 0; i < n; i++) t[i] = g_nextTexId++;
+	for (GLsizei i = 0; i < n; i++) {
+		if (g_freeCount > 0) t[i] = g_freeIds[--g_freeCount];
+		else                 t[i] = g_nextTexId++;
+	}
 }
 
 void glDeleteTextures(GLsizei n, const GLuint *t) {
 	for (GLsizei i = 0; i < n; i++) {
 		GLuint id = t[i];
 		if (id > 0 && id < PS3_MAX_TEXTURES) {
-			g_tex[id].used = GL_FALSE;
-			g_tex[id].offset = 0;
-			/* backing store intentionally leaked (load-once textures) */
-			g_tex[id].buffer = NULL;
+			GlTex &T = g_tex[id];
+			/* return RSX backing store to its heap (libc free() would leak) */
+			if (T.buffer) rsxFree(T.buffer);
+			T.buffer = NULL;
+			T.offset = 0;
+			T.width = T.height = T.pitch = 0;
+			T.used = GL_FALSE;
+			if (g_freeCount < PS3_MAX_TEXTURES) g_freeIds[g_freeCount++] = id;
 		}
 	}
 }
@@ -446,22 +459,45 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	T.used = GL_TRUE;
 	T.width = w; T.height = h;
 
-	/* (Re)allocate backing store. RGBA8, swizzled to ARGB on upload. */
-	if (T.buffer) free(T.buffer);
-	T.buffer = (u8 *)rsxMemalign(128, w * h * 4);
+	/* RSX linear textures require pitch to be a multiple of 64 bytes; pad
+	 * each row accordingly. The source row stride is still w*4 (tight RGBA). */
+	const u32 srcRowBytes = (u32)w * 4u;
+	const u32 pitch = (srcRowBytes + 63u) & ~63u;
+	T.pitch = pitch;
+
+	/* (Re)allocate backing store. RGBA8, swizzled to ARGB on upload.
+	 * rsxFree handles memory from rsxMemalign; libc free() leaks it. */
+	if (T.buffer) rsxFree(T.buffer);
+	T.buffer = (u8 *)rsxMemalign(128, (u32)pitch * (u32)h);
 	if (!T.buffer) { sysTtyTrace("[etr] glTexImage2D: rsxMemalign FAILED\n"); return; }
 
 	const u8 *src = (const u8 *)data;
 	if (src) {
-		for (int i = 0; i < w * h * 4; i += 4) {
-			T.buffer[i + 1] = src[i + 0]; /* R */
-			T.buffer[i + 2] = src[i + 1]; /* G */
-			T.buffer[i + 3] = src[i + 2]; /* B */
-			T.buffer[i + 0] = src[i + 3]; /* A */
+		for (GLsizei y = 0; y < h; y++) {
+			const u8 *srow = src + y * srcRowBytes;
+			u8 *drow = T.buffer + (u32)y * pitch;
+			for (GLsizei x = 0; x < w; x++) {
+				u32 di = (u32)x * 4u;
+				u32 si = (u32)x * 4u;
+				drow[di + 1] = srow[si + 0]; /* R */
+				drow[di + 2] = srow[si + 1]; /* G */
+				drow[di + 3] = srow[si + 2]; /* B */
+				drow[di + 0] = srow[si + 3]; /* A */
+			}
+			/* zero-fill trailing alignment padding in this row */
+			if (pitch > srcRowBytes)
+				memset(drow + srcRowBytes, 0, pitch - srcRowBytes);
 		}
 	} else {
-		memset(T.buffer, 0, w * h * 4);
+		memset(T.buffer, 0, (u32)pitch * (u32)h);
 	}
+
+	/* PPU data cache flush so RSX sees the writes, and invalidate the RSX
+	 * texture cache so a re-used buffer offset is not sampled with stale
+	 * texels from a previously resident texture (fixes "first upload fine,
+	 * subsequent uploads corrupted" on per-frame font text). */
+	asm volatile("sync");
+	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
 	rsxAddressToOffset(T.buffer, &T.offset);
 }
 
@@ -640,19 +676,19 @@ static void setDrawEnv(void) {
 
 static void bindTextureForDraw(void) {
 	gcmTexture texture;
-	u32 offset, tw, th;
+	u32 offset, tw, th, pitch;
 	u8  filtMin, filtMag;
 	u8  wrapS, wrapT;
 
 	if (g_tex2d && g_currentTex > 0 && g_currentTex < PS3_MAX_TEXTURES && g_tex[g_currentTex].used) {
 		GlTex &T = g_tex[g_currentTex];
-		offset = T.offset; tw = T.width; th = T.height;
+		offset = T.offset; tw = T.width; th = T.height; pitch = T.pitch;
 		u8 f = T.smooth ? GCM_TEXTURE_LINEAR : GCM_TEXTURE_NEAREST;
 		filtMin = filtMag = f;
 		wrapS = T.repeated ? GCM_TEXTURE_REPEAT : GCM_TEXTURE_CLAMP_TO_EDGE;
 		wrapT = T.repeated ? GCM_TEXTURE_REPEAT : GCM_TEXTURE_CLAMP_TO_EDGE;
 	} else {
-		offset = g_whiteOffset; tw = 1; th = 1;
+		offset = g_whiteOffset; tw = 1; th = 1; pitch = 4;
 		filtMin = filtMag = GCM_TEXTURE_NEAREST;
 		wrapS = wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
 	}
@@ -675,7 +711,7 @@ static void bindTextureForDraw(void) {
 	texture.height    = th;
 	texture.depth     = 1;
 	texture.location  = GCM_LOCATION_RSX;
-	texture.pitch     = tw * 4;
+	texture.pitch     = pitch;
 	texture.offset    = offset;
 
 	rsxLoadTexture(context, g_texSampler ? g_texSampler->index : 0, &texture);

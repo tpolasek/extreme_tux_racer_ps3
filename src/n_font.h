@@ -120,9 +120,16 @@ public:
 	GlyphMetrics getMetrics(uint32_t codepoint);
 
 	// Rasterize one glyph onto `surface` at baseline position (penX, penY).
-	// The glyph bitmap is alpha-modulated by `color`.
+	// The glyph bitmap is alpha-modulated by `fillColor`. When
+	// `outlineThickness > 0`, the glyph is first blitted at 8-direction
+	// (±outlineThickness) offsets in `outlineColor`, then the fill is blitted
+	// on top at (penX, penY). Caller must size the surface to include
+	// `2*outlineThickness` padding on every side and offset penX/penY by
+	// outlineThickness (see Text::recomputeBounds / updateTexture).
 	GlyphMetrics renderChar(uint32_t codepoint, RenderSurface& surface,
-	                        float penX, float penY, const Color& color);
+	                        float penX, float penY, const Color& fillColor,
+	                        float outlineThickness = 0.0f,
+	                        const Color& outlineColor = Color(0, 0, 0, 0));
 
 	// Vertical metrics at the current scale.
 	float getAscender() const noexcept;
@@ -150,8 +157,8 @@ class Text : public Drawable2D {
 	const Typeface*   face_;
 	unsigned int      charSize_;
 	Color             fillColor_;
-	Color             outlineColor_;   // kept for API compat (no separate outline pass)
-	float             outlineThickness_; // kept for API compat (ignored)
+	Color             outlineColor_;     // rendered as 8-direction outline when outlineThickness_ > 0
+	float             outlineThickness_; // pixels of outline drawn around each glyph
 	Vector2f          position_;
 
 	mutable bool      boundsDirty_;

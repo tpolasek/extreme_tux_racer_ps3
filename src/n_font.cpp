@@ -230,7 +230,8 @@ GlyphMetrics FontRenderer::getMetrics(uint32_t codepoint) {
 }
 
 GlyphMetrics FontRenderer::renderChar(uint32_t codepoint, RenderSurface& surface,
-                                       float penX, float penY, const Color& color) {
+                                       float penX, float penY, const Color& fillColor,
+                                       float outlineThickness, const Color& outlineColor) {
 	const Impl::Cached* c = impl_->rasterize(codepoint);
 	if (!c) return GlyphMetrics{0, 0, 0, 0, 0};
 
@@ -238,15 +239,34 @@ GlyphMetrics FontRenderer::renderChar(uint32_t codepoint, RenderSurface& surface
 	int baseX = static_cast<int>(penX + c->metrics.bearingX + 0.5f);
 	int baseY = static_cast<int>(penY - c->metrics.bearingY + 0.5f);
 
-	for (unsigned int y = 0; y < c->metrics.height; ++y) {
-		for (unsigned int x = 0; x < c->metrics.width; ++x) {
-			Uint8 coverage = c->rgba[(static_cast<std::size_t>(y) * c->metrics.width + x) * 4 + 3];
-			if (coverage == 0) continue;
-			surface.blendPixel(static_cast<unsigned int>(baseX) + x,
-			                   static_cast<unsigned int>(baseY) + y,
-			                   color, coverage);
+	// Local blit helper: stamp glyph bitmap at (originX, originY) modulated by `col`.
+	auto blitGlyph = [&](int originX, int originY, const Color& col) {
+		for (unsigned int y = 0; y < c->metrics.height; ++y) {
+			for (unsigned int x = 0; x < c->metrics.width; ++x) {
+				Uint8 coverage = c->rgba[(static_cast<std::size_t>(y) * c->metrics.width + x) * 4 + 3];
+				if (coverage == 0) continue;
+				surface.blendPixel(static_cast<unsigned int>(originX) + x,
+				                   static_cast<unsigned int>(originY) + y,
+				                   col, coverage);
+			}
+		}
+	};
+
+	// Outline pass: stamp the glyph at 8-direction offsets (±outlineThickness)
+	// in outlineColor first. Source-over blend (RenderSurface::blendPixel)
+	// means the later fill pass overwrites the outline inside the glyph body
+	// while leaving the outline halo visible around it.
+	int t = static_cast<int>(outlineThickness + 0.5f);
+	if (t > 0) {
+		for (int dy = -t; dy <= t; ++dy) {
+			for (int dx = -t; dx <= t; ++dx) {
+				if (dx == 0 && dy == 0) continue;
+				blitGlyph(baseX + dx, baseY + dy, outlineColor);
+			}
 		}
 	}
+
+	blitGlyph(baseX, baseY, fillColor);
 	return c->metrics;
 }
 
@@ -289,8 +309,20 @@ void Text::setFillColor(const Color& c) {
 		fillColor_ = c; textureDirty_ = true;
 	}
 }
-void Text::setOutlineColor(const Color& c)  { outlineColor_ = c; }
-void Text::setOutlineThickness(float t)     { outlineThickness_ = t; }
+void Text::setOutlineColor(const Color& c) {
+	if (c.r != outlineColor_.r || c.g != outlineColor_.g ||
+	    c.b != outlineColor_.b || c.a != outlineColor_.a) {
+		outlineColor_ = c;
+		textureDirty_ = true;
+	}
+}
+void Text::setOutlineThickness(float t) {
+	if (t != outlineThickness_) {
+		outlineThickness_ = t;
+		boundsDirty_ = true;   // outline grows the ink box
+		textureDirty_ = true;
+	}
+}
 void Text::setPosition(float x, float y)    { position_ = Vector2f(x, y); }
 void Text::setPosition(const Vector2f& p)   { position_ = p; }
 
@@ -334,8 +366,17 @@ void Text::recomputeBounds() const {
 	int h = static_cast<int>(maxY - minY + 0.5f);
 	if (h < 1) h = 1;
 
+	// Outline extends ±outlineThickness_ pixels around every glyph. Grow the
+	// ink box by 2t on each axis and shift the baseline down by t so the
+	// topmost glyph still has t pixels of headroom for its outline.
+	int pad = static_cast<int>(outlineThickness_ + 0.5f);
+	if (pad > 0) {
+		w += 2 * pad;
+		h += 2 * pad;
+	}
+
 	localBounds_ = FloatRect(0, 0, static_cast<float>(w), static_cast<float>(h));
-	baselineY_ = ascender - minY; // baseline offset from top of texture
+	baselineY_ = ascender - minY + static_cast<float>(pad); // baseline offset from top of texture
 }
 
 FloatRect Text::getLocalBounds() const {
@@ -369,10 +410,14 @@ void Text::updateTexture() const {
 	fr.setTypeface(*face_);
 	fr.setScale(0, static_cast<float>(charSize_));
 
-	float penX = 0;
+	// Pen starts at (pad, baselineY_) so the outline halo has `pad` pixels
+	// of room on the left and top edges of the surface (see recomputeBounds).
+	int pad = static_cast<int>(outlineThickness_ + 0.5f);
+	float penX = static_cast<float>(pad);
 	float penY = baselineY_;
 	for (uint32_t cp : decodeUtf8(string_)) {
-		GlyphMetrics m = fr.renderChar(cp, surface, penX, penY, fillColor_);
+		GlyphMetrics m = fr.renderChar(cp, surface, penX, penY, fillColor_,
+		                                outlineThickness_, outlineColor_);
 		penX += m.advanceX;
 	}
 

@@ -77,7 +77,20 @@ typedef void           GLvoid;
 #define GL_MAX_TEXTURE_SIZE  0x0D33
 #define GL_MAX_MODELVIEW_STACK_DEPTH   0x0D36
 #define GL_MAX_PROJECTION_STACK_DEPTH  0x0D38
+#define GL_MAX_ATTRIB_STACK_DEPTH      0x0D35
 #define GL_VIEWPORT          0x0BA2
+#define GL_MATRIX_MODE       0x0BA0
+#define GL_MODELVIEW_STACK_DEPTH   0x0BA3
+#define GL_PROJECTION_STACK_DEPTH  0x0BA4
+#define GL_MODELVIEW_MATRIX   0x0BA6
+#define GL_PROJECTION_MATRIX  0x0BA7
+#define GL_CURRENT_COLOR         0x0B00
+#define GL_COLOR_CLEAR_VALUE     0x0C22
+#define GL_DEPTH_CLEAR_VALUE     0x0B73
+#define GL_DEPTH_WRITEMASK       0x0B72
+#define GL_SCISSOR_BOX      0x0C10
+#define GL_BLEND_SRC        0x0BE1
+#define GL_BLEND_DST        0x0BE0
 
 /* ---- errors ---- */
 #define GL_NO_ERROR          0x0000
@@ -91,6 +104,7 @@ typedef void           GLvoid;
 #define GL_ALPHA_TEST              0x0BC0
 #define GL_BLEND                   0x0BE2
 #define GL_STENCIL_TEST            0x0B90
+#define GL_SCISSOR_TEST            0x0C11
 #define GL_TEXTURE_GEN_S           0x0C60
 #define GL_TEXTURE_GEN_T           0x0C61
 #define GL_COLOR_MATERIAL          0x0B57
@@ -129,10 +143,17 @@ typedef void           GLvoid;
 #define GL_INCR     0x1E02
 
 /* ---- blend ---- */
-#define GL_SRC_ALPHA           0x0302
-#define GL_ONE_MINUS_SRC_ALPHA 0x0303
-#define GL_ONE                 0x0001
-#define GL_ZERO                0x0000
+#define GL_ZERO                     0x0000
+#define GL_ONE                      0x0001
+#define GL_SRC_COLOR                0x0300
+#define GL_ONE_MINUS_SRC_COLOR      0x0301
+#define GL_SRC_ALPHA                0x0302
+#define GL_ONE_MINUS_SRC_ALPHA      0x0303
+#define GL_DST_ALPHA                0x0304
+#define GL_ONE_MINUS_DST_ALPHA      0x0305
+#define GL_DST_COLOR                0x0306
+#define GL_ONE_MINUS_DST_COLOR      0x0307
+#define GL_SRC_ALPHA_SATURATE       0x0308
 
 /* ---- lighting ---- */
 #define GL_LIGHT0 0x4000

@@ -1,14 +1,26 @@
-/* PS3 fixed-function GL emulation shim (2D path) for ETR.
+/* PS3 fixed-function GL emulation shim for Extreme Tux Racer.
  *
- * Translates the subset of fixed-function GL the game's 2D menu path uses into
- * RSX commands behind a single Cg program (etr2d). Everything is drawn as
- * immediate-mode GL_QUADS (Sprite / RectangleShape / Text all use
- * glBegin/glVertex2f/glTexCoord2f). 3D fixed-function calls (lighting, fog,
- * texgen, stencil, vertex arrays) are accepted so the game links and boots but
- * are otherwise no-ops.
+ * Implements the subset of OpenGL fixed-function the game actually calls —
+ * both the 2D menu path and the full 3D race path — on top of RSX + a single
+ * Cg program (etr3d).
  *
- * Matrices are stored column-major (OpenGL native) and uploaded transposed to
- * the shader, matching the proven convention from src/ps3/source/main.cpp.
+ * Supported:
+ *   matrices (modelview / projection stacks, ortho, frustum, load/mult)
+ *   immediate mode (quads, triangles, fans, strips, quad-strips)
+ *   client vertex / normal / color / texcoord arrays + DrawArrays /
+ *     DrawElements (host-memory yanked into the RSX ring each call)
+ *   RGBA8 textures (RGBA → A8R8G8B8 linear, 64-byte pitch pad)
+ *   blend / depth / cull / alpha-test state
+ *   one directional/positional light + material (ambient/diffuse/specular)
+ *   linear fog, object-linear texgen (S/T)
+ *   gluSphere (expanded into immediate-mode strips)
+ *
+ * Not implemented (game never relies on them after our stubs):
+ *   multi-light accumulation past light0 bilaterally, texenv DECAL vs MODULATE
+ *   (MODULATE is the only path), stencil buffer, texture units > 0.
+ *
+ * Matrices are stored column-major (OpenGL) and uploaded TRANSPOSED to the
+ * shader, matching PSL1GHT's Vectormath / cgcomp convention.
  */
 #include <GL/gl.h>
 #include <GL/glu.h>
@@ -17,7 +29,6 @@
 #include <rsx/rsx.h>
 #include <rsx/gcm_sys.h>
 #include <rsx/mm.h>
-#include <io/pad.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -27,12 +38,10 @@
 #include "ps3_gl_internal.h"
 #include "ps3_tty.h"
 
-/* ---- embedded shader objects (bin2o from etr2d.vcg/.fcg) ---- */
-extern "C" const u8 etr2d_vpo[];
-extern "C" const u8 etr2d_fpo[];
+/* ---- embedded shader objects (bin2o from etr3d.vcg/.fcg) ---- */
+extern "C" const u8 etr3d_vpo[];
+extern "C" const u8 etr3d_fpo[];
 
-/* forward declaration: flushes the accumulated immediate-mode vertices as a
- * single RSX draw (defined below). */
 extern "C" void ps3_gl_flush(void);
 
 /* =====================================================================
@@ -41,6 +50,8 @@ extern "C" void ps3_gl_flush(void);
 
 #define PS3_MATRIX_STACK_DEPTH 32
 #define PS3_ATTRIB_STACK_DEPTH 16
+#define PS3_IMM_MAX            4096
+#define PS3_NUM_LIGHTS         4
 
 struct MatrixStack {
 	float m[16];
@@ -48,15 +59,15 @@ struct MatrixStack {
 	int   top;
 };
 
-static MatrixStack g_proj;          /* GL_PROJECTION */
-static MatrixStack g_mv;            /* GL_MODELVIEW */
+static MatrixStack g_proj;
+static MatrixStack g_mv;
 static GLenum g_matrixMode = GL_MODELVIEW;
 
 static inline MatrixStack *activeMatrix() {
 	return (g_matrixMode == GL_PROJECTION) ? &g_proj : &g_mv;
 }
 
-/* tracked enable / state */
+/* enable / tracked fixed-function state */
 static GLboolean g_tex2d       = GL_FALSE;
 static GLboolean g_blend       = GL_FALSE;
 static GLboolean g_depthTest   = GL_FALSE;
@@ -64,57 +75,87 @@ static GLboolean g_cullFace    = GL_FALSE;
 static GLboolean g_lighting    = GL_FALSE;
 static GLboolean g_alphaTest   = GL_FALSE;
 static GLboolean g_stencilTest = GL_FALSE;
+static GLboolean g_fog         = GL_FALSE;
+static GLboolean g_texGenS     = GL_FALSE;
+static GLboolean g_texGenT     = GL_FALSE;
+static GLboolean g_normalize   = GL_FALSE;   /* informational; shader always renorms */
 static GLboolean g_depthMask   = GL_TRUE;
 static GLenum    g_blendSrc    = GL_SRC_ALPHA;
 static GLenum    g_blendDst    = GL_ONE_MINUS_SRC_ALPHA;
-static float     g_color[4]    = {1.0f, 1.0f, 1.0f, 1.0f};
+static GLenum    g_depthFunc   = GL_LESS;
+static GLenum    g_alphaFunc   = GL_GEQUAL;
+static GLclampf  g_alphaRef    = 0.5f;
+static float     g_color[4]    = {1.f, 1.f, 1.f, 1.f};
 static GLint     g_viewport[4] = {0, 0, 1280, 720};
 
-/* immediate mode */
-struct ImmVtx { float x, y, z, u, v; };
-#define PS3_IMM_MAX 4096
+/* material */
+static float g_matDiffuse[4]  = {1.f, 1.f, 1.f, 1.f};
+static float g_matSpecular[4] = {0.f, 0.f, 0.f, 1.f};
+static float g_matShininess   = 1.f;
+
+/* lights — pos is stored already transformed into eye-space at glLightfv
+ * time (OpenGL multiplies POSITION by the current modelview when the light
+ * is set). isDir is true when the original w component was 0. */
+struct Light {
+	float posEye[3];   /* eye-space position, or direction when isDir */
+	float ambient[4];
+	float diffuse[4];
+	float specular[4];
+	GLboolean isDir;
+	GLboolean enabled;
+};
+static Light g_light[PS3_NUM_LIGHTS];
+
+/* fog (linear only — the sole mode the game uses) */
+static float g_fogColor[4] = {0.9f, 0.9f, 1.f, 0.f};
+static float g_fogStart = 20.f;
+static float g_fogEnd   = 70.f;
+
+/* object-linear texgen planes */
+static float g_texPlaneS[4] = {1.f, 0.f, 0.f, 0.f};
+static float g_texPlaneT[4] = {0.f, 0.f, 1.f, 0.f};
+
+/* ---- immediate mode / flush vertex ----
+ * Layout matches GCM attrib binds in layout order:
+ *   POS(3f) + NRM(3f) + TEX0(2f) + COL(4f)  = 12 floats / 48 bytes
+ */
+struct ImmVtx {
+	float x, y, z;
+	float nx, ny, nz;
+	float u, v;
+	float r, g, b, a;
+};
 static ImmVtx  g_immVtx[PS3_IMM_MAX];
 static int     g_immCount = 0;
 static GLenum  g_primMode = GL_TRIANGLES;
 static int     g_inBegin  = 0;
-static float   g_curU = 0.0f, g_curV = 0.0f;
+static float   g_curU = 0.f, g_curV = 0.f;
+static float   g_curNx = 0.f, g_curNy = 1.f, g_curNz = 0.f;
 
-/* Vertex draw ring.
- *
- * Each glEnd/glDrawArrays flushes into one ring slot, then the RSX reads the
- * slot asynchronously. Without fencing, the next flush overwrites the same
- * buffer while a previous draw is still pending — the classic cause of the
- * "textures flashing / swapped" menu glitches.
- *
- * Pattern mirrors PSL1GHT's RSXDebugFontRenderer::printPass:
- *   wait label → memcpy → bind/draw → invalidate → write label → flush
- *
- * Most menu draws are 4-vert quads; 256 verts/slot covers outlines, snow
- * particles, and multi-quad shapes. A separate oversize buffer handles the
- * rare larger flush under a full RSX idle wait.
- * Label index 253 — rsxutil uses 255 for its own flip/idle fences. */
-#define PS3_VTX_RING        32
-#define PS3_VTX_SLOT_MAX    256
-#define PS3_VTX_LABEL_IDX   253
+/* Vertex draw ring (fencing prevents CPU overwrite of in-flight draws).
+ * Label 253; rsxutil uses 255 for flip/idle. */
+#define PS3_VTX_RING      32
+#define PS3_VTX_SLOT_MAX  512
+#define PS3_VTX_LABEL_IDX 253
 struct VtxSlot {
 	ImmVtx *buf;
 	u32     offset;
-	u32     labelVal;   /* value written after the draw that used this slot */
+	u32     labelVal;
 };
 static VtxSlot  g_vtxRing[PS3_VTX_RING];
 static int      g_vtxRingHead = 0;
-static ImmVtx  *g_vtxOversize     = NULL;
-static u32      g_vtxOversizeOff  = 0;
-static vu32    *g_vtxLabel        = NULL;
-static u32      g_vtxLabelNext    = 1;
+static ImmVtx  *g_vtxOversize    = NULL;
+static u32      g_vtxOversizeOff = 0;
+static vu32    *g_vtxLabel       = NULL;
+static u32      g_vtxLabelNext   = 1;
 
-/* textures: 1-based ids, index 0 = none */
+/* textures */
 #define PS3_MAX_TEXTURES 512
 struct GlTex {
 	u32       offset;
 	u32       width, height;
-	u32       pitch;      /* bytes per row, 64-byte aligned for RSX linear texturing */
-	u8       *buffer;     /* RSX-local backing store */
+	u32       pitch;
+	u8       *buffer;
 	GLboolean smooth;
 	GLboolean repeated;
 	GLboolean used;
@@ -122,39 +163,60 @@ struct GlTex {
 static GlTex  g_tex[PS3_MAX_TEXTURES];
 static GLuint g_currentTex = 0;
 static GLuint g_nextTexId  = 1;
-
-/* recycled texture ids (freed by glDeleteTextures, reused by glGenTextures) */
 static GLuint g_freeIds[PS3_MAX_TEXTURES];
 static u32    g_freeCount = 0;
 
-/* shader handles */
-static rsxVertexProgram  *g_vpo = NULL;
-static void              *g_vpUcode = NULL;
-static rsxFragmentProgram* g_fpo = NULL;
-static void              *g_fpUcode = NULL;
-static u32               *g_fpBuf = NULL;
-static u32                g_fpOffset = 0;
-static rsxProgramConst   *g_uProj = NULL;
-static rsxProgramConst   *g_uMV   = NULL;
-static rsxProgramConst   *g_uColor = NULL;
-static rsxProgramAttrib  *g_texSampler = NULL;
+/* shader handles (etr3d) */
+static rsxVertexProgram   *g_vpo = NULL;
+static void               *g_vpUcode = NULL;
+static rsxFragmentProgram *g_fpo = NULL;
+static void               *g_fpUcode = NULL;
+static u32                *g_fpBuf = NULL;
+static u32                 g_fpOffset = 0;
 
-/* white 1x1 fallback texture */
+static rsxProgramConst *g_uProj = NULL;
+static rsxProgramConst *g_uMV = NULL;
+static rsxProgramConst *g_uTexPlaneS = NULL;
+static rsxProgramConst *g_uTexPlaneT = NULL;
+static rsxProgramConst *g_uDoTexGen = NULL;
+
+static rsxProgramConst *g_uGlobalAmbient = NULL;
+static rsxProgramConst *g_uLightPos = NULL;
+static rsxProgramConst *g_uLightColor = NULL;
+static rsxProgramConst *g_uLightSpec = NULL;
+static rsxProgramConst *g_uLightIsDir = NULL;
+static rsxProgramConst *g_uMatDiffuse = NULL;
+static rsxProgramConst *g_uMatSpecular = NULL;
+static rsxProgramConst *g_uShininess = NULL;
+static rsxProgramConst *g_uDoLighting = NULL;
+static rsxProgramConst *g_uFogColor = NULL;
+static rsxProgramConst *g_uFogSE = NULL;
+static rsxProgramConst *g_uDoFog = NULL;
+static rsxProgramConst *g_uAlphaRef = NULL;
+static rsxProgramConst *g_uDoAlphaTest = NULL;
+static rsxProgramAttrib *g_texSampler = NULL;
+
+/* white 1x1 fallback */
 static u32 *g_whiteBuf = NULL;
 static u32  g_whiteOffset = 0;
 
-/* attrib stack (full tracked-state snapshot) */
+/* clear state */
+static GLclampf g_clearR = 0, g_clearG = 0, g_clearB = 0, g_clearA = 0;
+static GLint    g_clearStencil = 0;
+
+/* attrib stack */
 struct AttribSave {
-	GLboolean tex2d, blend, depthTest, cullFace, lighting, alphaTest, stencilTest, depthMask;
-	GLenum blendSrc, blendDst;
-	float  color[4];
+	GLboolean tex2d, blend, depthTest, cullFace, lighting, alphaTest, stencilTest;
+	GLboolean fog, texGenS, texGenT, depthMask;
+	GLenum blendSrc, blendDst, depthFunc, alphaFunc;
+	GLclampf alphaRef;
+	float color[4];
+	float matDiffuse[4], matSpecular[4], matShininess;
 	GLuint currentTex;
-	GLboolean tex2dEnableSaved;
 };
 static AttribSave g_attrib[PS3_ATTRIB_STACK_DEPTH];
 static int        g_attribTop = 0;
 
-/* RSX init done flag */
 static int g_rsxReady = 0;
 
 /* =====================================================================
@@ -162,15 +224,14 @@ static int g_rsxReady = 0;
  * ===================================================================== */
 static void matIdentity(float *m) {
 	memset(m, 0, sizeof(float) * 16);
-	m[0] = m[5] = m[10] = m[15] = 1.0f;
+	m[0] = m[5] = m[10] = m[15] = 1.f;
 }
 
-/* result = a * b  (column-major; apply b then a) */
 static void matMul(float *out, const float *a, const float *b) {
 	float t[16];
 	for (int col = 0; col < 4; col++) {
 		for (int row = 0; row < 4; row++) {
-			float s = 0.0f;
+			float s = 0.f;
 			for (int k = 0; k < 4; k++)
 				s += a[k * 4 + row] * b[col * 4 + k];
 			t[col * 4 + row] = s;
@@ -184,6 +245,15 @@ static void matTranspose(float *out, const float *m) {
 		for (int j = 0; j < 4; j++)
 			out[i * 4 + j] = m[j * 4 + i];
 }
+
+/* Transform a vec4 by column-major m → out. */
+static void matMulVec4(float *out, const float *m, const float *v) {
+	out[0] = m[0]*v[0] + m[4]*v[1] + m[8] *v[2] + m[12]*v[3];
+	out[1] = m[1]*v[0] + m[5]*v[1] + m[9] *v[2] + m[13]*v[3];
+	out[2] = m[2]*v[0] + m[6]*v[1] + m[10]*v[2] + m[14]*v[3];
+	out[3] = m[3]*v[0] + m[7]*v[1] + m[11]*v[2] + m[15]*v[3];
+}
+
 
 /* =====================================================================
  * GL: matrix stack
@@ -224,9 +294,9 @@ void glMultMatrixd(const GLdouble *m) {
 void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
 	float m[16];
 	matIdentity(m);
-	m[0]  = 2.0f / (float)(r - l);
-	m[5]  = 2.0f / (float)(t - b);
-	m[10] = -2.0f / (float)(f - n);
+	m[0]  = 2.f / (float)(r - l);
+	m[5]  = 2.f / (float)(t - b);
+	m[10] = -2.f / (float)(f - n);
 	m[12] = -(float)(r + l) / (float)(r - l);
 	m[13] = -(float)(t + b) / (float)(t - b);
 	m[14] = -(float)(f + n) / (float)(f - n);
@@ -244,7 +314,7 @@ void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdou
 	m[8]  = (float)((r + l) / (r - l));
 	m[9]  = (float)((t + b) / (t - b));
 	m[10] = (float)(-(f + n) / (f - n));
-	m[11] = -1.0f;
+	m[11] = -1.f;
 	m[14] = (float)(-2.0 * f * n / (f - n));
 	MatrixStack *s = activeMatrix();
 	float tmp[16];
@@ -261,21 +331,22 @@ void glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
 }
-
-void glTranslated(GLdouble x, GLdouble y, GLdouble z) { glTranslatef((GLfloat)x, (GLfloat)y, (GLfloat)z); }
+void glTranslated(GLdouble x, GLdouble y, GLdouble z) {
+	glTranslatef((GLfloat)x, (GLfloat)y, (GLfloat)z);
+}
 
 void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
-	float c = cosf(angle * (3.14159265f / 180.0f));
-	float s = sinf(angle * (3.14159265f / 180.0f));
+	float c = cosf(angle * (3.14159265f / 180.f));
+	float s = sinf(angle * (3.14159265f / 180.f));
 	float len = sqrtf(x * x + y * y + z * z);
-	if (len == 0.0f) return;
+	if (len == 0.f) return;
 	x /= len; y /= len; z /= len;
 	float m[16];
 	memset(m, 0, sizeof(float) * 16);
-	m[0]  = x*x*(1-c)+c;     m[4]  = x*y*(1-c)-z*s;  m[8]  = x*z*(1-c)+y*s;  m[12] = 0;
-	m[1]  = y*x*(1-c)+z*s;   m[5]  = y*y*(1-c)+c;    m[9]  = y*z*(1-c)-x*s;  m[13] = 0;
-	m[2]  = x*z*(1-c)-y*s;   m[6]  = y*z*(1-c)+x*s;  m[10] = z*z*(1-c)+c;    m[14] = 0;
-	m[3]  = 0;               m[7]  = 0;              m[11] = 0;              m[15] = 1;
+	m[0]  = x*x*(1-c)+c;   m[4]  = x*y*(1-c)-z*s; m[8]  = x*z*(1-c)+y*s;
+	m[1]  = y*x*(1-c)+z*s; m[5]  = y*y*(1-c)+c;   m[9]  = y*z*(1-c)-x*s;
+	m[2]  = x*z*(1-c)-y*s; m[6]  = y*z*(1-c)+x*s; m[10] = z*z*(1-c)+c;
+	m[15] = 1.f;
 	MatrixStack *stk = activeMatrix();
 	float tmp[16];
 	matMul(tmp, stk->m, m);
@@ -292,18 +363,28 @@ void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
 static void snapshotState(AttribSave *a) {
 	a->tex2d = g_tex2d; a->blend = g_blend; a->depthTest = g_depthTest;
 	a->cullFace = g_cullFace; a->lighting = g_lighting; a->alphaTest = g_alphaTest;
-	a->stencilTest = g_stencilTest; a->depthMask = g_depthMask;
+	a->stencilTest = g_stencilTest; a->fog = g_fog;
+	a->texGenS = g_texGenS; a->texGenT = g_texGenT; a->depthMask = g_depthMask;
 	a->blendSrc = g_blendSrc; a->blendDst = g_blendDst;
+	a->depthFunc = g_depthFunc; a->alphaFunc = g_alphaFunc; a->alphaRef = g_alphaRef;
 	memcpy(a->color, g_color, sizeof(float) * 4);
+	memcpy(a->matDiffuse, g_matDiffuse, sizeof(float) * 4);
+	memcpy(a->matSpecular, g_matSpecular, sizeof(float) * 4);
+	a->matShininess = g_matShininess;
 	a->currentTex = g_currentTex;
 }
 
 static void restoreState(const AttribSave *a) {
 	g_tex2d = a->tex2d; g_blend = a->blend; g_depthTest = a->depthTest;
 	g_cullFace = a->cullFace; g_lighting = a->lighting; g_alphaTest = a->alphaTest;
-	g_stencilTest = a->stencilTest; g_depthMask = a->depthMask;
+	g_stencilTest = a->stencilTest; g_fog = a->fog;
+	g_texGenS = a->texGenS; g_texGenT = a->texGenT; g_depthMask = a->depthMask;
 	g_blendSrc = a->blendSrc; g_blendDst = a->blendDst;
+	g_depthFunc = a->depthFunc; g_alphaFunc = a->alphaFunc; g_alphaRef = a->alphaRef;
 	memcpy(g_color, a->color, sizeof(float) * 4);
+	memcpy(g_matDiffuse, a->matDiffuse, sizeof(float) * 4);
+	memcpy(g_matSpecular, a->matSpecular, sizeof(float) * 4);
+	g_matShininess = a->matShininess;
 	g_currentTex = a->currentTex;
 }
 
@@ -311,13 +392,19 @@ void glPushAttrib(GLbitfield) {
 	if (g_attribTop < PS3_ATTRIB_STACK_DEPTH)
 		snapshotState(&g_attrib[g_attribTop++]);
 }
-
 void glPopAttrib(void) {
 	if (g_attribTop > 0)
 		restoreState(&g_attrib[--g_attribTop]);
 }
 
+static int lightIndex(GLenum cap) {
+	if (cap >= GL_LIGHT0 && cap < GL_LIGHT0 + PS3_NUM_LIGHTS)
+		return (int)(cap - GL_LIGHT0);
+	return -1;
+}
+
 void glEnable(GLenum cap) {
+	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:     g_tex2d = GL_TRUE; break;
 		case GL_BLEND:          g_blend = GL_TRUE; break;
@@ -326,11 +413,19 @@ void glEnable(GLenum cap) {
 		case GL_LIGHTING:       g_lighting = GL_TRUE; break;
 		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_TRUE; break;
-		default: break;
+		case GL_FOG:            g_fog = GL_TRUE; break;
+		case GL_TEXTURE_GEN_S:  g_texGenS = GL_TRUE; break;
+		case GL_TEXTURE_GEN_T:  g_texGenT = GL_TRUE; break;
+		case GL_NORMALIZE:      g_normalize = GL_TRUE; break;
+		case GL_COLOR_MATERIAL: break; /* material always tracks glColor lightpath via vColor */
+		default:
+			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_TRUE;
+			break;
 	}
 }
 
 void glDisable(GLenum cap) {
+	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:     g_tex2d = GL_FALSE; break;
 		case GL_BLEND:          g_blend = GL_FALSE; break;
@@ -339,42 +434,104 @@ void glDisable(GLenum cap) {
 		case GL_LIGHTING:       g_lighting = GL_FALSE; break;
 		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_FALSE; break;
-		default: break;
+		case GL_FOG:            g_fog = GL_FALSE; break;
+		case GL_TEXTURE_GEN_S:  g_texGenS = GL_FALSE; break;
+		case GL_TEXTURE_GEN_T:  g_texGenT = GL_FALSE; break;
+		case GL_NORMALIZE:      g_normalize = GL_FALSE; break;
+		default:
+			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_FALSE;
+			break;
 	}
 }
 
 GLboolean glIsEnabled(GLenum cap) {
+	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:   return g_tex2d;
 		case GL_BLEND:        return g_blend;
 		case GL_DEPTH_TEST:   return g_depthTest;
 		case GL_CULL_FACE:    return g_cullFace;
 		case GL_LIGHTING:     return g_lighting;
-		default:              return GL_FALSE;
+		case GL_FOG:          return g_fog;
+		default:
+			if ((li = lightIndex(cap)) >= 0) return g_light[li].enabled;
+			return GL_FALSE;
 	}
 }
 
 void glDepthMask(GLboolean f) { g_depthMask = f; }
-void glDepthFunc(GLenum)      { }
+void glDepthFunc(GLenum f)    { g_depthFunc = f; }
 void glShadeModel(GLenum)     { }
-void glAlphaFunc(GLenum, GLclampf) { }
+void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; }
 void glStencilFunc(GLenum, GLint, GLuint) { }
-void glStencilOp(GLenum, GLenum, GLenum) { }
+void glStencilOp(GLenum, GLenum, GLenum)  { }
+void glBlendFunc(GLenum sf, GLenum df)    { g_blendSrc = sf; g_blendDst = df; }
 
-void glBlendFunc(GLenum sf, GLenum df) { g_blendSrc = sf; g_blendDst = df; }
+/* =====================================================================
+ * GL: lighting / material / fog / texgen
+ * ===================================================================== */
+void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
+	int li = lightIndex(light);
+	if (li < 0 || !p) return;
+	Light &L = g_light[li];
+	switch (pname) {
+		case GL_POSITION: {
+			/* OpenGL freezes light position into eye-space under the CURRENT
+			 * modelview (camera already applied when Env.SetupLight runs). */
+			float eye[4];
+			matMulVec4(eye, g_mv.m, p);
+			if (p[3] == 0.f) {
+				L.posEye[0] = eye[0]; L.posEye[1] = eye[1]; L.posEye[2] = eye[2];
+				L.isDir = GL_TRUE;
+			} else {
+				float iw = (eye[3] != 0.f) ? (1.f / eye[3]) : 1.f;
+				L.posEye[0] = eye[0] * iw;
+				L.posEye[1] = eye[1] * iw;
+				L.posEye[2] = eye[2] * iw;
+				L.isDir = GL_FALSE;
+			}
+			break;
+		}
+		case GL_AMBIENT:  memcpy(L.ambient,  p, 4 * sizeof(float)); break;
+		case GL_DIFFUSE:  memcpy(L.diffuse,  p, 4 * sizeof(float)); break;
+		case GL_SPECULAR: memcpy(L.specular, p, 4 * sizeof(float)); break;
+		default: break;
+	}
+}
 
-/* lighting / material / fog / hint : no-ops (3D) */
-void glLightfv(GLenum, GLenum, const GLfloat*)    { }
-void glMaterialf(GLenum, GLenum, GLfloat)         { }
-void glMaterialfv(GLenum, GLenum, const GLfloat*) { }
-void glFogi(GLenum, GLint)         { }
-void glFogf(GLenum, GLfloat)       { }
-void glFogfv(GLenum, const GLfloat*) { }
-void glHint(GLenum, GLenum)        { }
+void glMaterialf(GLenum, GLenum pname, GLfloat v) {
+	if (pname == GL_SHININESS) g_matShininess = v;
+}
 
-/* texgen : no-op (3D) */
-void glTexGeni(GLenum, GLenum, GLint)         { }
-void glTexGenfv(GLenum, GLenum, const GLfloat*) { }
+void glMaterialfv(GLenum, GLenum pname, const GLfloat *p) {
+	if (!p) return;
+	switch (pname) {
+		case GL_AMBIENT_AND_DIFFUSE:
+		case GL_DIFFUSE:  memcpy(g_matDiffuse,  p, 4 * sizeof(float)); break;
+		case GL_SPECULAR: memcpy(g_matSpecular, p, 4 * sizeof(float)); break;
+		case GL_AMBIENT:  /* absorbed into light ambient; ignore material ambient */ break;
+		default: break;
+	}
+}
+
+void glFogi(GLenum pname, GLint v) {
+	(void)pname; (void)v; /* only GL_LINEAR is supported */
+}
+void glFogf(GLenum pname, GLfloat v) {
+	if (pname == GL_FOG_START) g_fogStart = v;
+	else if (pname == GL_FOG_END) g_fogEnd = v;
+}
+void glFogfv(GLenum pname, const GLfloat *p) {
+	if (pname == GL_FOG_COLOR && p) memcpy(g_fogColor, p, 4 * sizeof(float));
+}
+void glHint(GLenum, GLenum) { }
+
+void glTexGeni(GLenum, GLenum, GLint) { /* only OBJECT_LINEAR is used */ }
+void glTexGenfv(GLenum coord, GLenum pname, const GLfloat *p) {
+	if (pname != GL_OBJECT_PLANE || !p) return;
+	if (coord == GL_S) memcpy(g_texPlaneS, p, 4 * sizeof(float));
+	else if (coord == GL_T) memcpy(g_texPlaneT, p, 4 * sizeof(float));
+}
 
 /* =====================================================================
  * GL: immediate mode
@@ -405,44 +562,39 @@ void glEnd(void) {
 	g_immCount = 0;
 }
 
-void glVertex2f(GLfloat x, GLfloat y) {
-	if (!g_inBegin || g_immCount >= PS3_IMM_MAX) return;
+static void pushImm(float x, float y, float z) {
+	if (g_immCount >= PS3_IMM_MAX) return;
 	ImmVtx &v = g_immVtx[g_immCount++];
-	v.x = x; v.y = y; v.z = 0.0f; v.u = g_curU; v.v = g_curV;
+	v.x = x; v.y = y; v.z = z;
+	v.nx = g_curNx; v.ny = g_curNy; v.nz = g_curNz;
+	v.u = g_curU; v.v = g_curV;
+	v.r = g_color[0]; v.g = g_color[1]; v.b = g_color[2]; v.a = g_color[3];
 }
 
-void glVertex3d(GLdouble x, GLdouble y, GLdouble z) {
-	if (!g_inBegin || g_immCount >= PS3_IMM_MAX) return;
-	ImmVtx &v = g_immVtx[g_immCount++];
-	v.x = (float)x; v.y = (float)y; v.z = (float)z; v.u = g_curU; v.v = g_curV;
-}
+void glVertex2f(GLfloat x, GLfloat y)               { if (g_inBegin) pushImm(x, y, 0.f); }
+void glVertex3d(GLdouble x, GLdouble y, GLdouble z) { if (g_inBegin) pushImm((float)x, (float)y, (float)z); }
 
 void glTexCoord2f(GLfloat s, GLfloat t) { g_curU = s; g_curV = t; }
 void glTexCoord2d(GLdouble s, GLdouble t) { g_curU = (float)s; g_curV = (float)t; }
 
-void glNormal3d(GLdouble, GLdouble, GLdouble) { }
-void glNormal3i(GLint, GLint, GLint)          { }
+void glNormal3d(GLdouble x, GLdouble y, GLdouble z) {
+	g_curNx = (float)x; g_curNy = (float)y; g_curNz = (float)z;
+}
+void glNormal3i(GLint x, GLint y, GLint z) {
+	g_curNx = (float)x; g_curNy = (float)y; g_curNz = (float)z;
+}
 
 void glColor4f(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
 	g_color[0] = r; g_color[1] = g; g_color[2] = b; g_color[3] = a;
 }
-
 void glColor4ub(GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
-	static const float inv = 1.0f / 255.0f;
+	static const float inv = 1.f / 255.f;
 	g_color[0] = r * inv; g_color[1] = g * inv; g_color[2] = b * inv; g_color[3] = a * inv;
 }
-
 void glColor4ubv(const GLubyte *v) { glColor4ub(v[0], v[1], v[2], v[3]); }
 
 /* =====================================================================
- * GL: vertex arrays
- *
- * Used by TTexture::Draw, HUD, particles, env, course_render for 2D
- * textured quads (GL_TRIANGLE_FAN with 4 verts). Implemented by folding
- * the user's vertex/texcoord arrays into the same ImmVtx buffer the
- * immediate-mode path uses, then issuing a single rsxDrawVertexArray.
- * Normal/color arrays and glDrawElements remain no-ops (3D-only paths
- * the 2D menu never reaches).
+ * GL: client vertex arrays
  * ===================================================================== */
 struct ClientArray {
 	GLboolean     enabled;
@@ -451,20 +603,26 @@ struct ClientArray {
 	GLenum        type;
 	GLsizei       stride;
 };
-static ClientArray g_vertexArray    = { GL_FALSE, NULL, 0, 0, 0 };
-static ClientArray g_texCoordArray  = { GL_FALSE, NULL, 0, 0, 0 };
+static ClientArray g_vertexArray   = { GL_FALSE, NULL, 0, 0, 0 };
+static ClientArray g_texCoordArray = { GL_FALSE, NULL, 0, 0, 0 };
+static ClientArray g_normalArray   = { GL_FALSE, NULL, 0, 0, 0 };
+static ClientArray g_colorArray    = { GL_FALSE, NULL, 0, 0, 0 };
 
 void glEnableClientState(GLenum cap) {
 	switch (cap) {
 		case GL_VERTEX_ARRAY:        g_vertexArray.enabled   = GL_TRUE; break;
 		case GL_TEXTURE_COORD_ARRAY: g_texCoordArray.enabled = GL_TRUE; break;
-		default: break; /* normal/color arrays not used by 2D path */
+		case GL_NORMAL_ARRAY:        g_normalArray.enabled   = GL_TRUE; break;
+		case GL_COLOR_ARRAY:         g_colorArray.enabled    = GL_TRUE; break;
+		default: break;
 	}
 }
 void glDisableClientState(GLenum cap) {
 	switch (cap) {
 		case GL_VERTEX_ARRAY:        g_vertexArray.enabled   = GL_FALSE; break;
 		case GL_TEXTURE_COORD_ARRAY: g_texCoordArray.enabled = GL_FALSE; break;
+		case GL_NORMAL_ARRAY:        g_normalArray.enabled   = GL_FALSE; break;
+		case GL_COLOR_ARRAY:         g_colorArray.enabled    = GL_FALSE; break;
 		default: break;
 	}
 }
@@ -475,13 +633,13 @@ static u32 sizeofGlType(GLenum t) {
 		case GL_SHORT:         return 2;
 		case GL_INT:           return 4;
 		case GL_UNSIGNED_BYTE: return 1;
+		case GL_UNSIGNED_INT:  return 4;
 		default:               return 4;
 	}
 }
 
-/* Read component `comp` (0-based) of vertex `idx` from a client array as float. */
 static float readArrayComp(const ClientArray &a, GLint idx, GLint comp) {
-	if (!a.pointer) return 0.0f;
+	if (!a.pointer) return 0.f;
 	GLsizei effStride = a.stride ? a.stride : (GLsizei)(sizeofGlType(a.type) * a.size);
 	const u8 *base = (const u8 *)a.pointer + (u32)idx * (u32)effStride;
 	switch (a.type) {
@@ -489,57 +647,134 @@ static float readArrayComp(const ClientArray &a, GLint idx, GLint comp) {
 		case GL_SHORT:         return (float)((const short *)base)[comp];
 		case GL_INT:           return (float)((const int *)base)[comp];
 		case GL_UNSIGNED_BYTE: return (float)((const u8 *)base)[comp];
-		default:               return 0.0f;
+		default:               return 0.f;
 	}
+}
+
+/* color arrays are GLubyte[4] or float[4] — normalize ubyte to 0..1 */
+static void readColor(const ClientArray &a, GLint idx, float *out) {
+	if (!a.pointer || !a.enabled) {
+		out[0] = g_color[0]; out[1] = g_color[1]; out[2] = g_color[2]; out[3] = g_color[3];
+		return;
+	}
+	GLsizei effStride = a.stride ? a.stride : (GLsizei)(sizeofGlType(a.type) * a.size);
+	const u8 *base = (const u8 *)a.pointer + (u32)idx * (u32)effStride;
+	if (a.type == GL_UNSIGNED_BYTE) {
+		static const float inv = 1.f / 255.f;
+		out[0] = base[0] * inv; out[1] = base[1] * inv;
+		out[2] = base[2] * inv; out[3] = (a.size > 3) ? base[3] * inv : 1.f;
+	} else {
+		const float *f = (const float *)base;
+		out[0] = f[0]; out[1] = f[1]; out[2] = f[2];
+		out[3] = (a.size > 3) ? f[3] : 1.f;
+	}
+}
+
+static void fetchVertex(GLint idx, ImmVtx &v) {
+	if (g_vertexArray.enabled) {
+		v.x = readArrayComp(g_vertexArray, idx, 0);
+		v.y = (g_vertexArray.size > 1) ? readArrayComp(g_vertexArray, idx, 1) : 0.f;
+		v.z = (g_vertexArray.size > 2) ? readArrayComp(g_vertexArray, idx, 2) : 0.f;
+	} else {
+		v.x = v.y = v.z = 0.f;
+	}
+	if (g_normalArray.enabled) {
+		v.nx = readArrayComp(g_normalArray, idx, 0);
+		v.ny = readArrayComp(g_normalArray, idx, 1);
+		v.nz = readArrayComp(g_normalArray, idx, 2);
+	} else {
+		v.nx = g_curNx; v.ny = g_curNy; v.nz = g_curNz;
+	}
+	if (g_texCoordArray.enabled) {
+		v.u = readArrayComp(g_texCoordArray, idx, 0);
+		v.v = (g_texCoordArray.size > 1) ? readArrayComp(g_texCoordArray, idx, 1) : 0.f;
+	} else {
+		v.u = g_curU; v.v = g_curV;
+	}
+	float c[4];
+	readColor(g_colorArray, idx, c);
+	v.r = c[0]; v.g = c[1]; v.b = c[2]; v.a = c[3];
 }
 
 void glVertexPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
-	g_vertexArray.size = size;
-	g_vertexArray.type = type;
-	g_vertexArray.stride = stride;
-	g_vertexArray.pointer = ptr;
+	g_vertexArray.size = size; g_vertexArray.type = type;
+	g_vertexArray.stride = stride; g_vertexArray.pointer = ptr;
 }
 void glTexCoordPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
-	g_texCoordArray.size = size;
-	g_texCoordArray.type = type;
-	g_texCoordArray.stride = stride;
-	g_texCoordArray.pointer = ptr;
+	g_texCoordArray.size = size; g_texCoordArray.type = type;
+	g_texCoordArray.stride = stride; g_texCoordArray.pointer = ptr;
 }
-void glNormalPointer(GLenum, GLsizei, const GLvoid*)         { } /* 3D only */
-void glColorPointer(GLint, GLenum, GLsizei, const GLvoid*)   { } /* 3D only */
+void glNormalPointer(GLenum type, GLsizei stride, const GLvoid *ptr) {
+	g_normalArray.size = 3; g_normalArray.type = type;
+	g_normalArray.stride = stride; g_normalArray.pointer = ptr;
+}
+void glColorPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
+	g_colorArray.size = size; g_colorArray.type = type;
+	g_colorArray.stride = stride; g_colorArray.pointer = ptr;
+}
 
 void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
 	if (count <= 0) return;
-	if (g_immCount + count > PS3_IMM_MAX) count = PS3_IMM_MAX - g_immCount;
-	if (count <= 0) return;
-
-	bool va = g_vertexArray.enabled   != GL_FALSE;
-	bool ta = g_texCoordArray.enabled != GL_FALSE;
-
-	for (GLint i = 0; i < count; i++) {
-		GLint idx = first + i;
-		ImmVtx &v = g_immVtx[g_immCount++];
-		if (va) {
-			v.x = readArrayComp(g_vertexArray, idx, 0);
-			v.y = (g_vertexArray.size > 1) ? readArrayComp(g_vertexArray, idx, 1) : 0.0f;
-			v.z = (g_vertexArray.size > 2) ? readArrayComp(g_vertexArray, idx, 2) : 0.0f;
-		} else {
-			v.x = v.y = v.z = 0.0f;
+	/* pull into ImmVtx, flushing as the ring capacity is filled so large
+	 * draws never overflow. Primitive restarts (fan/strip) only of primitive
+	 * types that are restart-safe from an index of 0: we only split TRIANGLES
+	 * and QUADS. For FAN/STRIP force a single flush. */
+	bool canSplit = (mode == GL_TRIANGLES || mode == GL_QUADS ||
+	                 mode == GL_LINES || mode == GL_POINTS);
+	GLint issued = 0;
+	while (issued < count) {
+		GLsizei batch = count - issued;
+		if (canSplit && batch > PS3_VTX_SLOT_MAX) {
+			/* keep batch a multiple of the primitive size */
+			int step = (mode == GL_QUADS) ? 4 : (mode == GL_TRIANGLES) ? 3 :
+			           (mode == GL_LINES) ? 2 : 1;
+			batch = (PS3_VTX_SLOT_MAX / step) * step;
+			if (batch == 0) batch = step;
 		}
-		if (ta) {
-			v.u = readArrayComp(g_texCoordArray, idx, 0);
-			v.v = (g_texCoordArray.size > 1) ? readArrayComp(g_texCoordArray, idx, 1) : 0.0f;
-		} else {
-			v.u = v.v = 0.0f;
-		}
+		if (batch > PS3_IMM_MAX) batch = PS3_IMM_MAX;
+		g_immCount = 0;
+		for (GLint i = 0; i < batch; i++)
+			fetchVertex(first + issued + i, g_immVtx[g_immCount++]);
+		g_primMode = mode;
+		ps3_gl_flush();
+		issued += batch;
+		if (!canSplit) break; /* fan/strip: one shot */
 	}
-
-	g_primMode = mode;
-	ps3_gl_flush();
 	g_immCount = 0;
 }
 
-void glDrawElements(GLenum, GLsizei, GLenum, const GLvoid*)  { } /* 3D only */
+void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
+	if (count <= 0 || !indices) return;
+	/* expand fully-indexed draw into de-indexed ImmVtx and reuse DrawArrays
+	 * batching path. 32-bit indices are the course's preferred form. */
+	GLint issued = 0;
+	bool canSplit = (mode == GL_TRIANGLES || mode == GL_QUADS);
+	while (issued < count) {
+		GLsizei batch = count - issued;
+		if (canSplit && batch > PS3_VTX_SLOT_MAX) {
+			int step = (mode == GL_QUADS) ? 4 : 3;
+			batch = (PS3_VTX_SLOT_MAX / step) * step;
+			if (batch == 0) batch = step;
+		}
+		if (batch > PS3_IMM_MAX) batch = PS3_IMM_MAX;
+		g_immCount = 0;
+		for (GLsizei i = 0; i < batch; i++) {
+			GLuint idx;
+			if (type == GL_UNSIGNED_INT)
+				idx = ((const GLuint *)indices)[issued + i];
+			else if (type == GL_UNSIGNED_SHORT)
+				idx = ((const GLushort *)indices)[issued + i];
+			else
+				idx = ((const GLubyte *)indices)[issued + i];
+			fetchVertex((GLint)idx, g_immVtx[g_immCount++]);
+		}
+		g_primMode = mode;
+		ps3_gl_flush();
+		issued += batch;
+		if (!canSplit) break;
+	}
+	g_immCount = 0;
+}
 
 /* =====================================================================
  * GL: textures
@@ -556,7 +791,6 @@ void glDeleteTextures(GLsizei n, const GLuint *t) {
 		GLuint id = t[i];
 		if (id > 0 && id < PS3_MAX_TEXTURES) {
 			GlTex &T = g_tex[id];
-			/* return RSX backing store to its heap (libc free() would leak) */
 			if (T.buffer) rsxFree(T.buffer);
 			T.buffer = NULL;
 			T.offset = 0;
@@ -579,14 +813,10 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	T.used = GL_TRUE;
 	T.width = w; T.height = h;
 
-	/* RSX linear textures require pitch to be a multiple of 64 bytes; pad
-	 * each row accordingly. The source row stride is still w*4 (tight RGBA). */
 	const u32 srcRowBytes = (u32)w * 4u;
 	const u32 pitch = (srcRowBytes + 63u) & ~63u;
 	T.pitch = pitch;
 
-	/* (Re)allocate backing store. RGBA8, swizzled to ARGB on upload.
-	 * rsxFree handles memory from rsxMemalign; libc free() leaks it. */
 	if (T.buffer) rsxFree(T.buffer);
 	T.buffer = (u8 *)rsxMemalign(128, (u32)pitch * (u32)h);
 	if (!T.buffer) { sysTtyTrace("[etr] glTexImage2D: rsxMemalign FAILED\n"); return; }
@@ -597,14 +827,12 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 			const u8 *srow = src + y * srcRowBytes;
 			u8 *drow = T.buffer + (u32)y * pitch;
 			for (GLsizei x = 0; x < w; x++) {
-				u32 di = (u32)x * 4u;
-				u32 si = (u32)x * 4u;
+				u32 di = (u32)x * 4u, si = (u32)x * 4u;
 				drow[di + 1] = srow[si + 0]; /* R */
 				drow[di + 2] = srow[si + 1]; /* G */
 				drow[di + 3] = srow[si + 2]; /* B */
 				drow[di + 0] = srow[si + 3]; /* A */
 			}
-			/* zero-fill trailing alignment padding in this row */
 			if (pitch > srcRowBytes)
 				memset(drow + srcRowBytes, 0, pitch - srcRowBytes);
 		}
@@ -612,10 +840,6 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 		memset(T.buffer, 0, (u32)pitch * (u32)h);
 	}
 
-	/* PPU data cache flush so RSX sees the writes, and invalidate the RSX
-	 * texture cache so a re-used buffer offset is not sampled with stale
-	 * texels from a previously resident texture (fixes "first upload fine,
-	 * subsequent uploads corrupted" on per-frame font text). */
 	asm volatile("sync");
 	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
 	rsxAddressToOffset(T.buffer, &T.offset);
@@ -626,32 +850,34 @@ void glTexParameteri(GLenum, GLenum pname, GLint param) {
 	GlTex &T = g_tex[g_currentTex];
 	switch (pname) {
 		case GL_TEXTURE_MIN_FILTER:
-		case GL_TEXTURE_MAG_FILTER: T.smooth = (param == GL_LINEAR || param == GL_LINEAR_MIPMAP_LINEAR || param == GL_NEAREST_MIPMAP_LINEAR) ? GL_TRUE : GL_FALSE; break;
+		case GL_TEXTURE_MAG_FILTER:
+			T.smooth = (param == GL_LINEAR || param == GL_LINEAR_MIPMAP_LINEAR ||
+			            param == GL_NEAREST_MIPMAP_LINEAR) ? GL_TRUE : GL_FALSE;
+			break;
 		case GL_TEXTURE_WRAP_S:
-		case GL_TEXTURE_WRAP_T:     T.repeated = (param == GL_REPEAT) ? GL_TRUE : GL_FALSE; break;
+		case GL_TEXTURE_WRAP_T:
+			T.repeated = (param == GL_REPEAT) ? GL_TRUE : GL_FALSE;
+			break;
 		default: break;
 	}
 }
-
 void glTexEnvf(GLenum, GLenum, GLfloat) { }
 void glPixelStorei(GLenum, GLint)       { }
 
 /* =====================================================================
  * GL: clear
  * ===================================================================== */
-static GLclampf g_clearR = 0, g_clearG = 0, g_clearB = 0, g_clearA = 0;
-static GLint    g_clearStencil = 0;
-
 void glClearColor(GLclampf r, GLclampf g, GLclampf b, GLclampf a) {
 	g_clearR = r; g_clearG = g; g_clearB = b; g_clearA = a;
 }
 void glClearStencil(GLint s) { g_clearStencil = s; }
 
 void glClear(GLbitfield) {
-	u32 col = ((u32)(g_clearA * 255.0f) & 0xFF) << 24 |
-	          ((u32)(g_clearR * 255.0f) & 0xFF) << 16 |
-	          ((u32)(g_clearG * 255.0f) & 0xFF) << 8  |
-	          ((u32)(g_clearB * 255.0f) & 0xFF);
+	if (!g_rsxReady) return;
+	u32 col = ((u32)(g_clearA * 255.f) & 0xFF) << 24 |
+	          ((u32)(g_clearR * 255.f) & 0xFF) << 16 |
+	          ((u32)(g_clearG * 255.f) & 0xFF) << 8  |
+	          ((u32)(g_clearB * 255.f) & 0xFF);
 	rsxSetClearColor(context, col);
 	rsxSetClearDepthStencil(context, 0xffffff00u | (g_clearStencil & 0xFF));
 	rsxClearSurface(context, GCM_CLEAR_R | GCM_CLEAR_G | GCM_CLEAR_B | GCM_CLEAR_A |
@@ -663,9 +889,9 @@ void glClear(GLbitfield) {
  * ===================================================================== */
 GLenum glGetError(void) { return GL_NO_ERROR; }
 
-static const char *g_vendor = "PSL1GHT";
-static const char *g_renderer = "PS3 RSX (ETR GL shim)";
-static const char *g_version = "1.2 ETR-PS3";
+static const char *g_vendor     = "PSL1GHT";
+static const char *g_renderer   = "PS3 RSX (ETR GL shim)";
+static const char *g_version    = "1.2 ETR-PS3";
 static const char *g_extensions = "";
 const GLubyte *glGetString(GLenum name) {
 	switch (name) {
@@ -684,18 +910,17 @@ void glGetIntegerv(GLenum pname, GLint *p) {
 			p[2] = g_viewport[2]; p[3] = g_viewport[3];
 			break;
 		case GL_MAX_TEXTURE_SIZE:            *p = 4096; break;
-		case GL_MAX_LIGHTS:                  *p = 8;    break;
+		case GL_MAX_LIGHTS:                  *p = PS3_NUM_LIGHTS; break;
 		case GL_MAX_MODELVIEW_STACK_DEPTH:   *p = PS3_MATRIX_STACK_DEPTH; break;
 		case GL_MAX_PROJECTION_STACK_DEPTH:  *p = PS3_MATRIX_STACK_DEPTH; break;
-		case GL_RED_BITS: case GL_GREEN_BITS: case GL_BLUE_BITS: case GL_ALPHA_BITS: *p = 8;  break;
-		case GL_DEPTH_BITS:                  *p = 24; break;
-		case GL_STENCIL_BITS:                *p = 8;  break;
-		case GL_DOUBLEBUFFER:                *p = GL_TRUE; break;
-		default:                             *p = 0;  break;
+		case GL_RED_BITS: case GL_GREEN_BITS: case GL_BLUE_BITS: case GL_ALPHA_BITS: *p = 8; break;
+		case GL_DEPTH_BITS:   *p = 24; break;
+		case GL_STENCIL_BITS: *p = 8;  break;
+		case GL_DOUBLEBUFFER: *p = GL_TRUE; break;
+		default:              *p = 0;  break;
 	}
 }
-
-void glGetFloatv(GLenum, GLfloat *p) { *p = 0.0f; }
+void glGetFloatv(GLenum, GLfloat *p) { *p = 0.f; }
 void glGetBooleanv(GLenum, GLboolean *p) { *p = GL_FALSE; }
 
 void glGetTexLevelParameteriv(GLenum, GLint, GLenum pname, GLint *p) {
@@ -709,12 +934,7 @@ void glGetTexLevelParameteriv(GLenum, GLint, GLenum pname, GLint *p) {
 
 void glReadPixels(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, GLvoid*) { }
 
-/* =====================================================================
- * Internal: setup, draw env, texture bind, flush
- * ===================================================================== */
-
-/* GLX stubs (only glXGetProcAddressARB is actually called). Declared in our
- * <GL/glx.h> as extern "C", so the definitions must match that linkage. */
+/* GLX stubs */
 extern "C" void *glXGetProcAddressARB(const GLubyte *) { return NULL; }
 extern "C" int   glXChooseFBConfig(void *, int, const int *, int *) { return 0; }
 extern "C" void *glXGetVisualFromFBConfig(void *, GLXFBConfig) { return NULL; }
@@ -723,35 +943,65 @@ extern "C" void  glXDestroyContext(void *, GLXContext) { }
 extern "C" int   glXMakeCurrent(void *, unsigned long, GLXContext) { return 1; }
 extern "C" void  glXSwapBuffers(void *, unsigned long) { }
 
+/* =====================================================================
+ * init / draw-env / bind-texture / flush
+ * ===================================================================== */
+static void initDefaultLight(void) {
+	for (int i = 0; i < PS3_NUM_LIGHTS; i++) {
+		Light &L = g_light[i];
+		memset(&L, 0, sizeof(L));
+		L.posEye[0] = 0.f; L.posEye[1] = 0.f; L.posEye[2] = 1.f;
+		L.isDir = GL_TRUE;
+		L.ambient[0] = L.ambient[1] = L.ambient[2] = 0.f; L.ambient[3] = 1.f;
+		L.diffuse[0] = L.diffuse[1] = L.diffuse[2] = L.diffuse[3] = 1.f;
+		L.specular[0] = L.specular[1] = L.specular[2] = L.specular[3] = 1.f;
+		L.enabled = (i == 0) ? GL_TRUE : GL_FALSE;
+	}
+}
+
 void ps3_gl_init(void) {
 	if (g_rsxReady) return;
-	sysTtyTrace("[etr] ps3_gl_init: loading shaders\n");
+	sysTtyTrace("[etr] ps3_gl_init: loading etr3d shaders\n");
 
-	g_vpo = (rsxVertexProgram *)etr2d_vpo;
+	g_vpo = (rsxVertexProgram *)etr3d_vpo;
 	u32 vpsz = 0;
 	rsxVertexProgramGetUCode(g_vpo, &g_vpUcode, &vpsz);
-	g_uProj = rsxVertexProgramGetConst(g_vpo, "projMatrix");
-	g_uMV   = rsxVertexProgramGetConst(g_vpo, "modelViewMatrix");
+	g_uProj      = rsxVertexProgramGetConst(g_vpo, "projMatrix");
+	g_uMV        = rsxVertexProgramGetConst(g_vpo, "modelViewMatrix");
+	g_uTexPlaneS = rsxVertexProgramGetConst(g_vpo, "texPlaneS");
+	g_uTexPlaneT = rsxVertexProgramGetConst(g_vpo, "texPlaneT");
+	g_uDoTexGen  = rsxVertexProgramGetConst(g_vpo, "doTexGen");
 
-	g_fpo = (rsxFragmentProgram *)etr2d_fpo;
+	g_fpo = (rsxFragmentProgram *)etr3d_fpo;
 	u32 fpsz = 0;
 	rsxFragmentProgramGetUCode(g_fpo, &g_fpUcode, &fpsz);
 	g_fpBuf = (u32 *)rsxMemalign(64, fpsz);
 	memcpy(g_fpBuf, g_fpUcode, fpsz);
 	rsxAddressToOffset(g_fpBuf, &g_fpOffset);
-	g_uColor     = rsxFragmentProgramGetConst(g_fpo, "uColor");
-	g_texSampler = rsxFragmentProgramGetAttrib(g_fpo, "tex");
 
-	if (!g_uProj) sysTtyTrace("[etr] ps3_gl_init: WARN projMatrix const missing\n");
-	if (!g_uMV)   sysTtyTrace("[etr] ps3_gl_init: WARN modelViewMatrix const missing\n");
-	if (!g_uColor)sysTtyTrace("[etr] ps3_gl_init: WARN uColor const missing\n");
+	g_uGlobalAmbient = rsxFragmentProgramGetConst(g_fpo, "globalAmbient");
+	g_uLightPos      = rsxFragmentProgramGetConst(g_fpo, "lightPosition");
+	g_uLightColor    = rsxFragmentProgramGetConst(g_fpo, "lightColor");
+	g_uLightSpec     = rsxFragmentProgramGetConst(g_fpo, "lightSpecular");
+	g_uLightIsDir    = rsxFragmentProgramGetConst(g_fpo, "lightIsDir");
+	g_uMatDiffuse    = rsxFragmentProgramGetConst(g_fpo, "matDiffuse");
+	g_uMatSpecular   = rsxFragmentProgramGetConst(g_fpo, "matSpecular");
+	g_uShininess     = rsxFragmentProgramGetConst(g_fpo, "shininess");
+	g_uDoLighting    = rsxFragmentProgramGetConst(g_fpo, "doLighting");
+	g_uFogColor      = rsxFragmentProgramGetConst(g_fpo, "fogColor");
+	g_uFogSE         = rsxFragmentProgramGetConst(g_fpo, "fogSE");
+	g_uDoFog         = rsxFragmentProgramGetConst(g_fpo, "doFog");
+	g_uAlphaRef      = rsxFragmentProgramGetConst(g_fpo, "alphaRef");
+	g_uDoAlphaTest   = rsxFragmentProgramGetConst(g_fpo, "doAlphaTest");
+	g_texSampler     = rsxFragmentProgramGetAttrib(g_fpo, "texture");
 
-	/* white 1x1 fallback texture (ARGB 0xFFFFFFFF) */
+	if (!g_uProj) sysTtyTrace("[etr] ps3_gl_init: WARN projMatrix missing\n");
+	if (!g_uMV)   sysTtyTrace("[etr] ps3_gl_init: WARN modelViewMatrix missing\n");
+
 	g_whiteBuf = (u32 *)rsxMemalign(128, 4);
 	g_whiteBuf[0] = 0xFFFFFFFFu;
 	rsxAddressToOffset(g_whiteBuf, &g_whiteOffset);
 
-	/* vertex draw ring + oversize fallback (see VtxSlot comment above) */
 	for (int i = 0; i < PS3_VTX_RING; i++) {
 		g_vtxRing[i].buf = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_VTX_SLOT_MAX);
 		if (!g_vtxRing[i].buf) {
@@ -759,11 +1009,12 @@ void ps3_gl_init(void) {
 			return;
 		}
 		rsxAddressToOffset(g_vtxRing[i].buf, &g_vtxRing[i].offset);
-		g_vtxRing[i].labelVal = 0;	/* 0 = never used, don't wait on first acquire */
+		g_vtxRing[i].labelVal = 0;
 	}
 	g_vtxRingHead = 0;
 	g_vtxOversize = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_IMM_MAX);
 	rsxAddressToOffset(g_vtxOversize, &g_vtxOversizeOff);
+
 	g_vtxLabel = (vu32 *)gcmGetLabelAddress(PS3_VTX_LABEL_IDX);
 	*g_vtxLabel = 0;
 	g_vtxLabelNext = 1;
@@ -773,35 +1024,36 @@ void ps3_gl_init(void) {
 	g_proj.top = g_mv.top = 0;
 	g_viewport[2] = display_width;
 	g_viewport[3] = display_height;
+	initDefaultLight();
 
-	/* initial render target (first frame draws before any flip) */
 	setRenderTarget(curr_fb);
-
 	g_rsxReady = 1;
-	sysTtyTrace("[etr] ps3_gl_init: ready\n");
+	sysTtyTrace("[etr] ps3_gl_init: ready (etr3d)\n");
 }
 
 static void setDrawEnv(void) {
 	u16 x = 0, y = 0;
 	u16 w = display_width, h = display_height;
-	float min = 0.0f, max = 1.0f;
+	float min = 0.f, max = 1.f;
 	float scale[4], offset[4];
-	scale[0] = w * 0.5f;  scale[1] = h * -0.5f;  scale[2] = (max - min) * 0.5f;  scale[3] = 0.0f;
-	offset[0] = x + w * 0.5f;  offset[1] = y + h * 0.5f;  offset[2] = (max + min) * 0.5f;  offset[3] = 0.0f;
+	scale[0] = w * 0.5f;  scale[1] = h * -0.5f;  scale[2] = (max - min) * 0.5f;  scale[3] = 0.f;
+	offset[0] = x + w * 0.5f;  offset[1] = y + h * 0.5f;  offset[2] = (max + min) * 0.5f;  offset[3] = 0.f;
 
 	rsxSetColorMask(context, GCM_COLOR_MASK_R | GCM_COLOR_MASK_G | GCM_COLOR_MASK_B | GCM_COLOR_MASK_A);
 	rsxSetColorMaskMrt(context, 0);
 	rsxSetViewport(context, x, y, w, h, min, max, scale, offset);
 	rsxSetScissor(context, x, y, w, h);
+
+	/* GCM depth-func enums match the GL values we store. */
 	rsxSetDepthTestEnable(context, g_depthTest ? GCM_TRUE : GCM_FALSE);
-	rsxSetDepthFunc(context, GCM_LESS);
+	rsxSetDepthFunc(context, g_depthFunc);
 	rsxSetDepthWriteEnable(context, g_depthMask ? 1 : 0);
+
 	rsxSetFrontFace(context, GCM_FRONTFACE_CCW);
+	rsxSetCullFaceEnable(context, g_cullFace ? GCM_TRUE : GCM_FALSE);
+	if (g_cullFace) rsxSetCullFace(context, GCM_CULL_BACK);
 	rsxSetShadeModel(context, GCM_SHADE_MODEL_SMOOTH);
-	/* Full, deterministic blend state. Samples (debugfont_renderer,
-	 * blitting) always set the equation + disable logic-op; leaving either
-	 * unspecified produces irregular alpha on the first few frames and
-	 * solid / missing UI rectangles thereafter. */
+
 	rsxSetLogicOpEnable(context, GCM_FALSE);
 	rsxSetBlendEquation(context, GCM_FUNC_ADD, GCM_FUNC_ADD);
 	rsxSetBlendFunc(context,
@@ -810,6 +1062,16 @@ static void setDrawEnv(void) {
 	                g_blend ? g_blendSrc : GCM_ONE,
 	                g_blend ? g_blendDst : GCM_ZERO);
 	rsxSetBlendEnable(context, g_blend ? GCM_TRUE : GCM_FALSE);
+
+	/* Hardware alpha test for GEQUAL (trees/particles). Other funcs fall
+	 * back to the shader discard path. */
+	if (g_alphaTest && g_alphaFunc == GL_GEQUAL) {
+		rsxSetAlphaFunc(context, GCM_GEQUAL, (u32)(g_alphaRef * 255.f));
+		rsxSetAlphaTestEnable(context, GCM_TRUE);
+	} else {
+		rsxSetAlphaTestEnable(context, GCM_FALSE);
+	}
+
 	for (u8 i = 0; i < 8; i++)
 		rsxSetViewportClip(context, i, display_width, display_height);
 	rsxSetZMinMaxControl(context, 0, 1, 1);
@@ -818,8 +1080,7 @@ static void setDrawEnv(void) {
 static void bindTextureForDraw(void) {
 	gcmTexture texture;
 	u32 offset, tw, th, pitch;
-	u8  filtMin, filtMag;
-	u8  wrapS, wrapT;
+	u8  filtMin, filtMag, wrapS, wrapT;
 
 	if (g_tex2d && g_currentTex > 0 && g_currentTex < PS3_MAX_TEXTURES && g_tex[g_currentTex].used) {
 		GlTex &T = g_tex[g_currentTex];
@@ -829,6 +1090,7 @@ static void bindTextureForDraw(void) {
 		wrapS = T.repeated ? GCM_TEXTURE_REPEAT : GCM_TEXTURE_CLAMP_TO_EDGE;
 		wrapT = T.repeated ? GCM_TEXTURE_REPEAT : GCM_TEXTURE_CLAMP_TO_EDGE;
 	} else {
+		/* unwrap or untextured → 1x1 white so the FP sample is identity */
 		offset = g_whiteOffset; tw = 1; th = 1; pitch = 4;
 		filtMin = filtMag = GCM_TEXTURE_NEAREST;
 		wrapS = wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
@@ -855,17 +1117,45 @@ static void bindTextureForDraw(void) {
 	texture.pitch     = pitch;
 	texture.offset    = offset;
 
-	rsxLoadTexture(context, g_texSampler ? g_texSampler->index : 0, &texture);
-	rsxTextureControl(context, g_texSampler ? g_texSampler->index : 0, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
-	rsxTextureFilter(context, g_texSampler ? g_texSampler->index : 0, 0, filtMag, filtMin, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
-	rsxTextureWrapMode(context, g_texSampler ? g_texSampler->index : 0, wrapS, wrapT, wrapT, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
+	u8 unit = g_texSampler ? g_texSampler->index : 0;
+	rsxLoadTexture(context, unit, &texture);
+	rsxTextureControl(context, unit, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
+	rsxTextureFilter(context, unit, 0, filtMag, filtMin, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
+	rsxTextureWrapMode(context, unit, wrapS, wrapT, wrapT, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
 }
 
-/* Spin until the RSX backend label has advanced to at least `val` (or the
- * slot was never used — val==0). Labels are monotonic, so equality is wrong
- * for a multi-slot ring: by the time we reclaim slot N, the label has already
- * progressed past slot N's old value via later slots. Signed subtraction is
- * wraparound-safe within a 2^31 window (we wrap the counter away from 0). */
+/* Pick primary light (first enabled; usually light0) + sum ambient. Position is
+ * already in eye-space (snapshotted at glLightfv under the view matrix). */
+static void composeLighting(float *outAmbient, float *outLightPosEye,
+                            float *outDiff, float *outSpec, float *outIsDir) {
+	float amb[3] = {0.f, 0.f, 0.f};
+	int primary = -1;
+	for (int i = 0; i < PS3_NUM_LIGHTS; i++) {
+		if (!g_light[i].enabled) continue;
+		amb[0] += g_light[i].ambient[0];
+		amb[1] += g_light[i].ambient[1];
+		amb[2] += g_light[i].ambient[2];
+		if (primary < 0) primary = i;
+	}
+	for (int i = 0; i < 3; i++) if (amb[i] > 1.f) amb[i] = 1.f;
+	outAmbient[0] = amb[0]; outAmbient[1] = amb[1]; outAmbient[2] = amb[2];
+
+	if (primary < 0) {
+		outLightPosEye[0] = 0.f; outLightPosEye[1] = 1.f; outLightPosEye[2] = 0.f;
+		outDiff[0] = outDiff[1] = outDiff[2] = 1.f;
+		outSpec[0] = outSpec[1] = outSpec[2] = 0.f;
+		*outIsDir = 1.f;
+		return;
+	}
+	const Light &L = g_light[primary];
+	outLightPosEye[0] = L.posEye[0];
+	outLightPosEye[1] = L.posEye[1];
+	outLightPosEye[2] = L.posEye[2];
+	*outIsDir = L.isDir ? 1.f : 0.f;
+	outDiff[0] = L.diffuse[0]; outDiff[1] = L.diffuse[1]; outDiff[2] = L.diffuse[2];
+	outSpec[0] = L.specular[0]; outSpec[1] = L.specular[1]; outSpec[2] = L.specular[2];
+}
+
 static void waitVtxLabel(u32 val) {
 	if (val == 0 || !g_vtxLabel) return;
 	while ((s32)(*g_vtxLabel - val) < 0)
@@ -873,8 +1163,7 @@ static void waitVtxLabel(u32 val) {
 }
 
 extern "C" void ps3_gl_flush(void) {
-	if (g_immCount == 0) return;
-	if (!g_rsxReady) return;
+	if (g_immCount == 0 || !g_rsxReady) return;
 
 	int n = g_immCount;
 	if (n > PS3_IMM_MAX) n = PS3_IMM_MAX;
@@ -884,7 +1173,6 @@ extern "C" void ps3_gl_flush(void) {
 	int ringSlot = -1;
 
 	if (n <= PS3_VTX_SLOT_MAX) {
-		/* normal path: take next ring slot, wait until RSX is done with it */
 		ringSlot = g_vtxRingHead;
 		VtxSlot &slot = g_vtxRing[ringSlot];
 		waitVtxLabel(slot.labelVal);
@@ -892,10 +1180,8 @@ extern "C" void ps3_gl_flush(void) {
 		drawOffset = slot.offset;
 		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
 	} else {
-		/* rare oversize flush: hard-wait RSX entirely so we can reuse the
-		 * single large buffer safely. */
 		u32 idleVal = g_vtxLabelNext++;
-		if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;	/* label 0 reserved */
+		if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
 		rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, idleVal);
 		rsxFlushBuffer(context);
 		waitVtxLabel(idleVal);
@@ -908,25 +1194,65 @@ extern "C" void ps3_gl_flush(void) {
 	setDrawEnv();
 	bindTextureForDraw();
 
-	/* bind POS + TEX0 attribs to this slot */
-	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, drawOffset,
-	                         sizeof(ImmVtx), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
-	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0,
+	/* POS / NRM / TEX0 / COL attribs */
+	const u32 stride = sizeof(ImmVtx);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0,
+	                         drawOffset + 0,
+	                         stride, 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_NORMAL, 0,
 	                         drawOffset + sizeof(float) * 3,
-	                         sizeof(ImmVtx), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+	                         stride, 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0,
+	                         drawOffset + sizeof(float) * 6,
+	                         stride, 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_COLOR0, 0,
+	                         drawOffset + sizeof(float) * 8,
+	                         stride, 4, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
-	/* vertex program + matrices (uploaded transposed) */
+	/* vertex program + uniforms (transposed matrices) */
 	rsxLoadVertexProgram(context, g_vpo, g_vpUcode);
 	float tmp[16];
 	if (g_uProj) { matTranspose(tmp, g_proj.m); rsxSetVertexProgramParameter(context, g_vpo, g_uProj, tmp); }
 	if (g_uMV)   { matTranspose(tmp, g_mv.m);   rsxSetVertexProgramParameter(context, g_vpo, g_uMV, tmp); }
 
-	/* fragment Program: patch uColor into the RSX-local ucode, THEN load.
-	 * Working rsxtest sample order is SetFragmentProgramParameter →
-	 * LoadFragmentProgramLocation; reverse order can leave the previous
-	 * frame's colour / alpha active (or zero). */
-	if (g_uColor)
-		rsxSetFragmentProgramParameter(context, g_fpo, g_uColor, g_color, g_fpOffset, GCM_LOCATION_RSX);
+	float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
+	if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
+	if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
+	if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
+
+	/* fragment uniforms — set before Load so ucode embeds the new values */
+	float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
+	composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
+
+	float anyLight = (g_light[0].enabled || g_light[1].enabled ||
+	                  g_light[2].enabled || g_light[3].enabled) ? 1.f : 0.f;
+	float doLighting = (g_lighting && anyLight) ? 1.f : 0.f;
+
+	float doFog = g_fog ? 1.f : 0.f;
+	float fogSE[2] = { g_fogStart, g_fogEnd };
+	float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
+	float matDiff[3] = { g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2] };
+	float matSpec[3] = { g_matSpecular[0], g_matSpecular[1], g_matSpecular[2] };
+	float shin = g_matShininess > 0.f ? g_matShininess : 1.f;
+	/* shader discard only for non-GEQUAL alpha tests (hw path covers GEQUAL) */
+	float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
+	float aRef = g_alphaRef;
+
+	if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, g_fpOffset, GCM_LOCATION_RSX);
+
 	rsxLoadFragmentProgramLocation(context, g_fpo, g_fpOffset, GCM_LOCATION_RSX);
 
 	rsxSetUserClipPlaneControl(context,
@@ -936,7 +1262,6 @@ extern "C" void ps3_gl_flush(void) {
 	rsxInvalidateVertexCache(context);
 	rsxDrawVertexArray(context, mapPrim(g_primMode), 0, n);
 
-	/* tell the next acquirer of this slot when the RSX has finished with it */
 	u32 doneVal = g_vtxLabelNext++;
 	if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
 	rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, doneVal);
@@ -946,7 +1271,7 @@ extern "C" void ps3_gl_flush(void) {
 }
 
 /* =====================================================================
- * GLU stubs
+ * GLU
  * ===================================================================== */
 void gluPerspective(GLdouble fovy, GLdouble aspect, GLdouble znear, GLdouble zfar) {
 	GLdouble fh = tan(fovy * 3.14159265358979323846 / 360.0) * znear;
@@ -958,10 +1283,49 @@ const GLubyte *gluErrorString(GLenum) {
 	return (const GLubyte *)"PS3 GL shim: no error";
 }
 
-/* quadrics: no-op (only tux.cpp's sphere, which is 3D) */
+/* gluSphere: expand a unit sphere into triangle strips via immediate mode,
+ * consuming the currently-bound material / color / lighting state. Used by
+ * tux's body parts (DrawCharSphere). */
 GLUquadricObj *gluNewQuadric(void)                 { return (GLUquadricObj *)1; }
 void gluDeleteQuadric(GLUquadricObj*)              { }
 void gluQuadricDrawStyle(GLUquadricObj*, GLenum)   { }
 void gluQuadricOrientation(GLUquadricObj*, GLenum) { }
 void gluQuadricNormals(GLUquadricObj*, GLenum)     { }
-void gluSphere(GLUquadricObj*, GLdouble, GLint, GLint) { }
+
+void gluSphere(GLUquadricObj*, GLdouble radius, GLint slices, GLint stacks) {
+	if (slices < 3) slices = 3;
+	if (stacks < 2) stacks = 2;
+	/* Cap tessellation so a single sphere fits the imm buffer. */
+	if (slices > 24) slices = 24;
+	if (stacks > 16) stacks = 16;
+
+	const float R = (float)radius;
+	const float dTheta = 2.f * 3.14159265f / (float)slices;
+	const float dPhi   = 3.14159265f / (float)stacks;
+
+	for (int i = 0; i < stacks; i++) {
+		float phi0 = (float)i * dPhi;
+		float phi1 = (float)(i + 1) * dPhi;
+		float y0 = cosf(phi0), r0 = sinf(phi0);
+		float y1 = cosf(phi1), r1 = sinf(phi1);
+
+		glBegin(GL_TRIANGLE_STRIP);
+		for (int j = 0; j <= slices; j++) {
+			float th = (float)j * dTheta;
+			float ct = cosf(th), st = sinf(th);
+
+			/* bottom of strip */
+			float nx1 = r1 * ct, ny1 = y1, nz1 = r1 * st;
+			glNormal3d(nx1, ny1, nz1);
+			glTexCoord2f((float)j / (float)slices, (float)(i + 1) / (float)stacks);
+			glVertex3d(R * nx1, R * ny1, R * nz1);
+
+			/* top of strip */
+			float nx0 = r0 * ct, ny0 = y0, nz0 = r0 * st;
+			glNormal3d(nx0, ny0, nz0);
+			glTexCoord2f((float)j / (float)slices, (float)i / (float)stacks);
+			glVertex3d(R * nx0, R * ny0, R * nz0);
+		}
+		glEnd();
+	}
+}

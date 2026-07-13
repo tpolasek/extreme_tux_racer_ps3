@@ -85,9 +85,9 @@ export OFILES	:=	$(addsuffix .o,$(VPOFILES)) \
 					$(addsuffix .o,$(FPOFILES)) \
 					$(CPPFILES:.cpp=.o)
 
-# shaders: only the 2D shader the game build uses.
-VCGFILES	:=	etr2d.vcg
-FCGFILES	:=	etr2d.fcg
+# shaders: unified 2D+3D fixed-function stand-in (lighting/fog/texgen).
+VCGFILES	:=	etr3d.vcg
+FCGFILES	:=	etr3d.fcg
 VPOFILES	:=	$(VCGFILES:.vcg=.vpo)
 FPOFILES	:=	$(FCGFILES:.fcg=.fpo)
 

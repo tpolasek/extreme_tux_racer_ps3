@@ -1,0 +1,83 @@
+/* ETR PS3 3D fragment program (fixed-function stand-in).
+ *
+ * Lighting model (when doLighting > 0.5):
+ *   ambient = globalAmbient * matDiffuse
+ *   diffuse = max(N·L, 0) * lightColor * matDiffuse * vtxColor.rgb
+ *   specular = max(N·H, 0)^shininess * lightSpec * matSpecular
+ *             (zero when N·L <= 0)
+ * Light direction L is lightPosition - eyePos (w!=0 point) or just
+ * lightPosition (directional, encoded w=0 as |dir| , eyePos ignored).
+ *
+ * texturing: tex * lighting, or tex * vtxColor when unlit
+ * fog: linear fog in eye-space -eyePos.z (GL modelview -Z forward).
+ */
+void main
+(
+	float3 eyePos   : TEXCOORD0,
+	float3 eyeNrm   : TEXCOORD1,
+	float2 texcoord : TEXCOORD2,
+	float4 vColor   : COLOR,
+
+	uniform float3  globalAmbient,
+	uniform float3  lightPosition,   /* eye-space; or direction when lightIsDir */
+	uniform float3  lightColor,
+	uniform float3  lightSpecular,
+	uniform float   lightIsDir,      /* 1 = directional */
+	uniform float3  matDiffuse,
+	uniform float3  matSpecular,
+	uniform float   shininess,
+	uniform float   doLighting,
+	uniform float3  fogColor,
+	uniform float2  fogSE,           /* .x = start, .y = end */
+	uniform float   doFog,
+	uniform float   alphaRef,
+	uniform float   doAlphaTest,
+
+	uniform sampler2D texture,
+
+	out float4 oColor
+)
+{
+	float4 tex = tex2D(texture, texcoord);
+
+	float3 base;
+	float  alpha = tex.a * vColor.a;
+
+	if (doLighting > 0.5f) {
+		float3 N = normalize(eyeNrm);
+		float3 L;
+		if (lightIsDir > 0.5f)
+			L = normalize(lightPosition);
+		else
+			L = normalize(lightPosition - eyePos);
+
+		float ndotl = max(dot(N, L), 0.0f);
+		float3 kd = matDiffuse * vColor.rgb;
+		float3 ambient = globalAmbient * kd;
+		float3 diffuse = lightColor * kd * ndotl;
+
+		float3 V = normalize(-eyePos);
+		float3 H = normalize(L + V);
+		float  specTerm = pow(max(dot(N, H), 0.0f), max(shininess, 1.0f));
+		if (ndotl <= 0.0f) specTerm = 0.0f;
+		float3 specular = lightSpecular * matSpecular * specTerm;
+
+		base = tex.rgb * (ambient + diffuse) + specular;
+	} else {
+		base = tex.rgb * vColor.rgb;
+	}
+
+	if (doFog > 0.5f) {
+		/* eye-space Z is negative in front of the camera (OpenGL). */
+		float z = -eyePos.z;
+		float f = (fogSE.y - z) / max(fogSE.y - fogSE.x, 0.0001f);
+		f = saturate(f);
+		base = lerp(fogColor, base, f);
+	}
+
+	if (doAlphaTest > 0.5f) {
+		if (alpha < alphaRef) discard;
+	}
+
+	oColor = float4(base, alpha);
+}

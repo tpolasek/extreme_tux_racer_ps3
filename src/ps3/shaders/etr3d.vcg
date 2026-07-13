@@ -1,0 +1,47 @@
+/* ETR PS3 3D vertex program (fixed-function stand-in).
+ *
+ * Vertex: position + normal + texcoord + colour.
+ * Matrices are uploaded transposed (row-major) from the shim's
+ * column-major stores — same convention as etr2d / the demo.
+ *
+ * Texgen is object-linear: when doTexGen != 0 the S/T plane
+ * uniforms replace the explicit texcoord (course terrain + HUD gauges).
+ * eye positions/normals are passed to the fragment program for lighting
+ * and fog (computed in eye space).
+ */
+void main
+(
+	float3 position  : POSITION,
+	float3 normal    : NORMAL,
+	float2 texcoord  : TEXCOORD0,
+	float4 color     : COLOR,
+
+	uniform float4x4 projMatrix,
+	uniform float4x4 modelViewMatrix,
+	uniform float4   texPlaneS,
+	uniform float4   texPlaneT,
+	uniform float    doTexGen,
+
+	out float4 oPosition : POSITION,
+	out float3 oEyePos   : TEXCOORD0,
+	out float3 oEyeNrm   : TEXCOORD1,
+	out float2 oTexcoord : TEXCOORD2,
+	out float4 oColor    : COLOR
+)
+{
+	float4 hpos = float4(position, 1.0f);
+	float4 eye  = mul(modelViewMatrix, hpos);
+	oPosition   = mul(projMatrix, eye);
+	oEyePos     = eye.xyz;
+
+	/* normal transformed by upper 3x3 of modelView (uniform scale ok;
+	 * FL path enables GL_NORMALIZE for irregular scales). */
+	oEyeNrm = mul((float3x3)modelViewMatrix, normal);
+
+	if (doTexGen > 0.5f) {
+		oTexcoord = float2(dot(hpos, texPlaneS), dot(hpos, texPlaneT));
+	} else {
+		oTexcoord = texcoord;
+	}
+	oColor = color;
+}

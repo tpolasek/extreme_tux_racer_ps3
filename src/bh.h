@@ -60,7 +60,11 @@ GNU General Public License for more details.
 #define SEP "/"
 
 
-#define USE_STENCIL_BUFFER
+/* Stencil shadows need a hardware stencil path we don't implement on PS3;
+ * without it ogl.cpp falls back to the cull-face shadow path. */
+#ifndef OS_PS3
+#	define USE_STENCIL_BUFFER
+#endif
 
 #include "version.h"
 #define WINDOW_TITLE "Extreme Tux Racer " ETR_VERSION_STRING

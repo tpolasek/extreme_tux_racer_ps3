@@ -171,8 +171,26 @@ static rsxVertexProgram   *g_vpo = NULL;
 static void               *g_vpUcode = NULL;
 static rsxFragmentProgram *g_fpo = NULL;
 static void               *g_fpUcode = NULL;
-static u32                *g_fpBuf = NULL;
-static u32                 g_fpOffset = 0;
+static u32                 g_fpUcodeSize = 0;
+
+/* Fragment-program ring.
+ *
+ * rsxSetFragmentProgramParameter patches constants INTO the RSX-local
+ * programubuffer via InlineTransfer. The previous single-buffer layout let
+ * draw N+1 rewrite uniforms while draw N was still executing from that same
+ * buffer — torn floats for doLighting / fog / materials surface as red-tinted
+ * menus, white sparkles on HUD digits, and scrambled textures after the 3D
+ * port punted ~14 uniforms every flush (vs. the old 2D path's one uColor).
+ *
+ * Ring slots are acquired under the same backend label fence as the vertex
+ * ring so a slot is never rewritten until the RSX has finished the draw that
+ * last used it. */
+struct FpSlot {
+	u32 *buf;
+	u32  offset;
+};
+static FpSlot g_fpRing[PS3_VTX_RING];
+static FpSlot g_fpOversize;
 
 static rsxProgramConst *g_uProj = NULL;
 static rsxProgramConst *g_uMV = NULL;
@@ -973,11 +991,25 @@ void ps3_gl_init(void) {
 	g_uDoTexGen  = rsxVertexProgramGetConst(g_vpo, "doTexGen");
 
 	g_fpo = (rsxFragmentProgram *)etr3d_fpo;
-	u32 fpsz = 0;
-	rsxFragmentProgramGetUCode(g_fpo, &g_fpUcode, &fpsz);
-	g_fpBuf = (u32 *)rsxMemalign(64, fpsz);
-	memcpy(g_fpBuf, g_fpUcode, fpsz);
-	rsxAddressToOffset(g_fpBuf, &g_fpOffset);
+	rsxFragmentProgramGetUCode(g_fpo, &g_fpUcode, &g_fpUcodeSize);
+
+	/* Ring of fragment-program buffers (same count as the vertex ring so they
+	 * share the same fence labels). Each slot starts as a copy of the clean
+	 * ucode; constants are patched into the acquired slot at flush time. */
+	for (int i = 0; i < PS3_VTX_RING; i++) {
+		g_fpRing[i].buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
+		if (!g_fpRing[i].buf) {
+			sysTtyTrace("[etr] ps3_gl_init: fp ring alloc FAILED\n");
+			return;
+		}
+		memcpy(g_fpRing[i].buf, g_fpUcode, g_fpUcodeSize);
+		rsxAddressToOffset(g_fpRing[i].buf, &g_fpRing[i].offset);
+	}
+	g_fpOversize.buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
+	if (g_fpOversize.buf) {
+		memcpy(g_fpOversize.buf, g_fpUcode, g_fpUcodeSize);
+		rsxAddressToOffset(g_fpOversize.buf, &g_fpOversize.offset);
+	}
 
 	g_uGlobalAmbient = rsxFragmentProgramGetConst(g_fpo, "globalAmbient");
 	g_uLightPos      = rsxFragmentProgramGetConst(g_fpo, "lightPosition");
@@ -1171,13 +1203,19 @@ extern "C" void ps3_gl_flush(void) {
 	u32 drawOffset;
 	ImmVtx *drawBuf;
 	int ringSlot = -1;
+	u32 *fpBuf = NULL;
+	u32  fpOffset = 0;
 
 	if (n <= PS3_VTX_SLOT_MAX) {
+		/* Acquire next ring slot for BOTH vertex data and the fragment-program
+		 * ucode copy. Waiting on the same label keeps the two in lockstep. */
 		ringSlot = g_vtxRingHead;
 		VtxSlot &slot = g_vtxRing[ringSlot];
 		waitVtxLabel(slot.labelVal);
 		drawBuf    = slot.buf;
 		drawOffset = slot.offset;
+		fpBuf      = g_fpRing[ringSlot].buf;
+		fpOffset   = g_fpRing[ringSlot].offset;
 		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
 	} else {
 		u32 idleVal = g_vtxLabelNext++;
@@ -1187,12 +1225,16 @@ extern "C" void ps3_gl_flush(void) {
 		waitVtxLabel(idleVal);
 		drawBuf    = g_vtxOversize;
 		drawOffset = g_vtxOversizeOff;
+		fpBuf      = g_fpOversize.buf;
+		fpOffset   = g_fpOversize.offset;
 	}
+	if (!fpBuf || !fpOffset) return;
 
 	memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
 
 	setDrawEnv();
 	bindTextureForDraw();
+	(void)fpBuf; /* buffer contents are patched via InlineTransfer on fpOffset */
 
 	/* POS / NRM / TEX0 / COL attribs */
 	const u32 stride = sizeof(ImmVtx);
@@ -1220,7 +1262,7 @@ extern "C" void ps3_gl_flush(void) {
 	if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
 	if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
 
-	/* fragment uniforms — set before Load so ucode embeds the new values */
+	/* fragment uniforms — patched into fpBuf, then the slot is loaded */
 	float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
 	composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
 
@@ -1238,22 +1280,22 @@ extern "C" void ps3_gl_flush(void) {
 	float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
 	float aRef = g_alphaRef;
 
-	if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, g_fpOffset, GCM_LOCATION_RSX);
-	if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, g_fpOffset, GCM_LOCATION_RSX);
+	if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, fpOffset, GCM_LOCATION_RSX);
+	if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, fpOffset, GCM_LOCATION_RSX);
+	if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, fpOffset, GCM_LOCATION_RSX);
+	if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, fpOffset, GCM_LOCATION_RSX);
+	if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, fpOffset, GCM_LOCATION_RSX);
+	if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, fpOffset, GCM_LOCATION_RSX);
+	if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
+	if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
+	if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
+	if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
+	if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
 
-	rsxLoadFragmentProgramLocation(context, g_fpo, g_fpOffset, GCM_LOCATION_RSX);
+	rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset, GCM_LOCATION_RSX);
 
 	rsxSetUserClipPlaneControl(context,
 		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE,

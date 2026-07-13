@@ -85,9 +85,9 @@ export OFILES	:=	$(addsuffix .o,$(VPOFILES)) \
 					$(addsuffix .o,$(FPOFILES)) \
 					$(CPPFILES:.cpp=.o)
 
-# shaders: unified 2D+3D fixed-function stand-in (lighting/fog/texgen).
+# shaders: 3D fixed-function stand-in plus an RGBA-preserving UI fast path.
 VCGFILES	:=	etr3d.vcg
-FCGFILES	:=	etr3d.fcg
+FCGFILES	:=	etr3d.fcg etr_ui.fcg
 VPOFILES	:=	$(VCGFILES:.vcg=.vpo)
 FPOFILES	:=	$(FCGFILES:.fcg=.fpo)
 

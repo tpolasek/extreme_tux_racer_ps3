@@ -1,0 +1,18 @@
+/* Minimal fragment path for blended, depthless UI draws.
+ *
+ * Keeping the sampled texel as one float4 preserves RGBA exactly and avoids
+ * the lighting/fog predicates in etr3d.fcg. The 3D vertex program supplies
+ * TEXCOORD2 and COLOR0 for both game and UI geometry.
+ */
+void main
+(
+	float2 texcoord : TEXCOORD2,
+	float4 vColor   : COLOR,
+
+	uniform sampler2D texture,
+
+	out float4 oColor
+)
+{
+	oColor = tex2D(texture, texcoord) * vColor;
+}

@@ -32,6 +32,7 @@ void main
 	uniform float   doFog,
 	uniform float   alphaRef,
 	uniform float   doAlphaTest,
+	uniform float4  outputScale,     /* kept dynamic to force one RGBA output op */
 
 	uniform sampler2D texture,
 
@@ -40,8 +41,13 @@ void main
 {
 	float4 tex = tex2D(texture, texcoord);
 
+	/* Preserve RGBA with one full-vector write. The previous implementation
+	 * reconstructed RGB and alpha separately and ended with a masked .w write;
+	 * that path produced incorrect fragment alpha on RSX even though the source
+	 * textures were uploaded correctly. Lighting and fog affect RGB only. */
+	oColor = tex * vColor;
+
 	float3 base;
-	float  alpha = tex.a * vColor.a;
 
 	if (doLighting > 0.5f) {
 		float3 N = normalize(eyeNrm);
@@ -64,20 +70,23 @@ void main
 
 		base = tex.rgb * (ambient + diffuse) + specular;
 	} else {
-		base = tex.rgb * vColor.rgb;
+		base = oColor.rgb;
 	}
+	oColor.rgb = base;
 
 	if (doFog > 0.5f) {
 		/* eye-space Z is negative in front of the camera (OpenGL). */
 		float z = -eyePos.z;
 		float f = (fogSE.y - z) / max(fogSE.y - fogSE.x, 0.0001f);
 		f = saturate(f);
-		base = lerp(fogColor, base, f);
+		oColor.rgb = lerp(fogColor, oColor.rgb, f);
 	}
 
 	if (doAlphaTest > 0.5f) {
-		if (alpha < alphaRef) discard;
+		if (oColor.a < alphaRef) discard;
 	}
 
-	oColor = float4(base, alpha);
+	/* outputScale is (1,1,1,1). Keeping it as a dynamic float4 prevents cgc
+	 * from lowering the final colour to separate RGB and alpha writes. */
+	oColor *= outputScale;
 }

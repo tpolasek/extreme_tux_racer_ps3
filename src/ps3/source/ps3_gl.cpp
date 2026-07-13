@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 
 #include "rsxutil.h"
@@ -41,6 +42,7 @@
 /* ---- embedded shader objects (bin2o from etr3d.vcg/.fcg) ---- */
 extern "C" const u8 etr3d_vpo[];
 extern "C" const u8 etr3d_fpo[];
+extern "C" const u8 etr_ui_fpo[];
 
 extern "C" void ps3_gl_flush(void);
 
@@ -166,12 +168,27 @@ static GLuint g_nextTexId  = 1;
 static GLuint g_freeIds[PS3_MAX_TEXTURES];
 static u32    g_freeCount = 0;
 
+/* Texture diagnostics are deliberately bounded so the RPCS3 / hardware
+ * TTY remains useful while locating channel damage. */
+#define PS3_TEXTURE_TRACE_UPLOADS 32
+static u32 g_textureTraceUploads = 0;
+static GLboolean g_textureTraceDrawn[PS3_MAX_TEXTURES];
+
 /* shader handles (etr3d) */
 static rsxVertexProgram   *g_vpo = NULL;
 static void               *g_vpUcode = NULL;
 static rsxFragmentProgram *g_fpo = NULL;
 static void               *g_fpUcode = NULL;
 static u32                 g_fpUcodeSize = 0;
+
+/* The UI program is immutable (sampler * vertex colour), so unlike the 3D
+ * program it needs only one RSX-local copy and no per-draw constant patching. */
+static rsxFragmentProgram *g_uiFpo = NULL;
+static void               *g_uiFpUcode = NULL;
+static u32                *g_uiFpBuf = NULL;
+static u32                 g_uiFpOffset = 0;
+static rsxProgramAttrib   *g_uiTexSampler = NULL;
+static GLboolean           g_uiTraceOnce = GL_FALSE;
 
 /* Fragment-program ring.
  *
@@ -212,11 +229,19 @@ static rsxProgramConst *g_uFogSE = NULL;
 static rsxProgramConst *g_uDoFog = NULL;
 static rsxProgramConst *g_uAlphaRef = NULL;
 static rsxProgramConst *g_uDoAlphaTest = NULL;
+static rsxProgramConst *g_uOutputScale = NULL;
 static rsxProgramAttrib *g_texSampler = NULL;
 
 /* white 1x1 fallback */
 static u32 *g_whiteBuf = NULL;
 static u32  g_whiteOffset = 0;
+
+static GLboolean useUiFragmentProgram(void) {
+	/* This is the old 2D workload: alpha-blended screen geometry with depth,
+	 * lighting and alpha-test disabled. Fog can remain set after the 3D pass;
+	 * it must not tint HUD/menu transparent texels. */
+	return g_blend && !g_depthTest && !g_lighting && !g_alphaTest;
+}
 
 /* clear state */
 static GLclampf g_clearR = 0, g_clearG = 0, g_clearB = 0, g_clearA = 0;
@@ -824,12 +849,14 @@ void glBindTexture(GLenum, GLuint t) {
 	else if (t == 0) g_currentTex = 0;
 }
 
-void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
-                  GLenum, GLenum, const GLvoid *data) {
+void glTexImage2D(GLenum target, GLint level, GLint internalFormat,
+                  GLsizei w, GLsizei h, GLint border,
+                  GLenum format, GLenum type, const GLvoid *data) {
 	if (g_currentTex == 0 || g_currentTex >= PS3_MAX_TEXTURES) return;
 	GlTex &T = g_tex[g_currentTex];
 	T.used = GL_TRUE;
 	T.width = w; T.height = h;
+	g_textureTraceDrawn[g_currentTex] = GL_FALSE;
 
 	const u32 srcRowBytes = (u32)w * 4u;
 	const u32 pitch = (srcRowBytes + 63u) & ~63u;
@@ -861,6 +888,33 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	asm volatile("sync");
 	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
 	rsxAddressToOffset(T.buffer, &T.offset);
+
+	if (g_textureTraceUploads < PS3_TEXTURE_TRACE_UPLOADS) {
+		char msg[320];
+		const u8 *s = (const u8 *)data;
+		const u8 *d = T.buffer;
+		if (s && w > 0 && h > 0) {
+			snprintf(msg, sizeof(msg),
+			         "[etr][tex] upload id=%u %dx%d target=%04x level=%d internal=%04x border=%d fmt=%04x type=%04x "
+			         "srcRGBA=%02x,%02x,%02x,%02x rsxARGB=%02x,%02x,%02x,%02x pitch=%u off=%08x\n",
+			         (unsigned)g_currentTex, (int)w, (int)h,
+			         (unsigned)target, (int)level, (unsigned)internalFormat,
+			         (int)border, (unsigned)format, (unsigned)type,
+			         (unsigned)s[0], (unsigned)s[1], (unsigned)s[2], (unsigned)s[3],
+			         (unsigned)d[0], (unsigned)d[1], (unsigned)d[2], (unsigned)d[3],
+			         (unsigned)T.pitch, (unsigned)T.offset);
+		} else {
+			snprintf(msg, sizeof(msg),
+			         "[etr][tex] upload id=%u %dx%d fmt=%04x type=%04x data=%s pitch=%u off=%08x\n",
+			         (unsigned)g_currentTex, (int)w, (int)h,
+			         (unsigned)format, (unsigned)type, s ? "set" : "null",
+			         (unsigned)T.pitch, (unsigned)T.offset);
+		}
+		sysTtyTrace(msg);
+		if (format != GL_RGBA || type != GL_UNSIGNED_BYTE)
+			sysTtyTrace("[etr][tex] WARN upload is not GL_RGBA/GL_UNSIGNED_BYTE; PS3 conversion currently assumes RGBA8\n");
+		g_textureTraceUploads++;
+	}
 }
 
 void glTexParameteri(GLenum, GLenum pname, GLint param) {
@@ -993,6 +1047,18 @@ void ps3_gl_init(void) {
 	g_fpo = (rsxFragmentProgram *)etr3d_fpo;
 	rsxFragmentProgramGetUCode(g_fpo, &g_fpUcode, &g_fpUcodeSize);
 
+	g_uiFpo = (rsxFragmentProgram *)etr_ui_fpo;
+	u32 uiFpSize = 0;
+	rsxFragmentProgramGetUCode(g_uiFpo, &g_uiFpUcode, &uiFpSize);
+	g_uiFpBuf = (u32 *)rsxMemalign(64, uiFpSize);
+	if (!g_uiFpBuf) {
+		sysTtyTrace("[etr] ps3_gl_init: UI fragment-program alloc FAILED\n");
+		return;
+	}
+	memcpy(g_uiFpBuf, g_uiFpUcode, uiFpSize);
+	rsxAddressToOffset(g_uiFpBuf, &g_uiFpOffset);
+	g_uiTexSampler = rsxFragmentProgramGetAttrib(g_uiFpo, "texture");
+
 	/* Ring of fragment-program buffers (same count as the vertex ring so they
 	 * share the same fence labels). Each slot starts as a copy of the clean
 	 * ucode; constants are patched into the acquired slot at flush time. */
@@ -1025,6 +1091,7 @@ void ps3_gl_init(void) {
 	g_uDoFog         = rsxFragmentProgramGetConst(g_fpo, "doFog");
 	g_uAlphaRef      = rsxFragmentProgramGetConst(g_fpo, "alphaRef");
 	g_uDoAlphaTest   = rsxFragmentProgramGetConst(g_fpo, "doAlphaTest");
+	g_uOutputScale   = rsxFragmentProgramGetConst(g_fpo, "outputScale");
 	g_texSampler     = rsxFragmentProgramGetAttrib(g_fpo, "texture");
 
 	if (!g_uProj) sysTtyTrace("[etr] ps3_gl_init: WARN projMatrix missing\n");
@@ -1111,11 +1178,13 @@ static void setDrawEnv(void) {
 
 static void bindTextureForDraw(void) {
 	gcmTexture texture;
+	GlTex *bound = NULL;
 	u32 offset, tw, th, pitch;
 	u8  filtMin, filtMag, wrapS, wrapT;
 
 	if (g_tex2d && g_currentTex > 0 && g_currentTex < PS3_MAX_TEXTURES && g_tex[g_currentTex].used) {
 		GlTex &T = g_tex[g_currentTex];
+		bound = &T;
 		offset = T.offset; tw = T.width; th = T.height; pitch = T.pitch;
 		u8 f = T.smooth ? GCM_TEXTURE_LINEAR : GCM_TEXTURE_NEAREST;
 		filtMin = filtMag = f;
@@ -1149,7 +1218,44 @@ static void bindTextureForDraw(void) {
 	texture.pitch     = pitch;
 	texture.offset    = offset;
 
-	u8 unit = g_texSampler ? g_texSampler->index : 0;
+	GLboolean uiDraw = useUiFragmentProgram();
+	u8 unit = uiDraw && g_uiTexSampler ? g_uiTexSampler->index :
+	          g_texSampler ? g_texSampler->index : 0;
+	if (bound && !g_textureTraceDrawn[g_currentTex]) {
+		char msg[320];
+		const ImmVtx *v = g_immCount > 0 ? &g_immVtx[0] : NULL;
+		snprintf(msg, sizeof(msg),
+		         "[etr][tex] first-draw id=%u %ux%u unit=%u pitch=%u off=%08x "
+		         "fp=%s blend=%u(%04x,%04x) depth=%u light=%u fog=%u atest=%u "
+		         "vtxRGBA=%.3f,%.3f,%.3f,%.3f\n",
+		         (unsigned)g_currentTex, (unsigned)bound->width, (unsigned)bound->height,
+		         (unsigned)unit, (unsigned)bound->pitch, (unsigned)bound->offset,
+		         uiDraw ? "ui" : "3d",
+		         (unsigned)g_blend, (unsigned)g_blendSrc, (unsigned)g_blendDst,
+		         (unsigned)g_depthTest, (unsigned)g_lighting, (unsigned)g_fog,
+		         (unsigned)g_alphaTest,
+		         v ? v->r : -1.f, v ? v->g : -1.f, v ? v->b : -1.f, v ? v->a : -1.f);
+		sysTtyTrace(msg);
+
+		/* Find a transparent but coloured texel. If its stored A is zero here
+		 * yet it renders opaque/red, corruption is after the CPU upload. */
+		const u8 *probe = NULL;
+		for (u32 y = 0; y < bound->height && !probe; y++) {
+			const u8 *row = bound->buffer + y * bound->pitch;
+			for (u32 x = 0; x < bound->width; x++) {
+				const u8 *p = row + x * 4u; /* A,R,G,B */
+				if (p[0] == 0 && (p[1] || p[2] || p[3])) { probe = p; break; }
+			}
+		}
+		if (probe) {
+			snprintf(msg, sizeof(msg),
+			         "[etr][tex] transparent-probe id=%u rsxARGB=%02x,%02x,%02x,%02x\n",
+			         (unsigned)g_currentTex, (unsigned)probe[0], (unsigned)probe[1],
+			         (unsigned)probe[2], (unsigned)probe[3]);
+			sysTtyTrace(msg);
+		}
+		g_textureTraceDrawn[g_currentTex] = GL_TRUE;
+	}
 	rsxLoadTexture(context, unit, &texture);
 	rsxTextureControl(context, unit, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
 	rsxTextureFilter(context, unit, 0, filtMag, filtMin, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
@@ -1279,6 +1385,7 @@ extern "C" void ps3_gl_flush(void) {
 	/* shader discard only for non-GEQUAL alpha tests (hw path covers GEQUAL) */
 	float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
 	float aRef = g_alphaRef;
+	float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
 
 	if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
 	if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
@@ -1294,8 +1401,17 @@ extern "C" void ps3_gl_flush(void) {
 	if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
 	if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
 	if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
+	if (g_uOutputScale)   rsxSetFragmentProgramParameter(context, g_fpo, g_uOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
 
-	rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset, GCM_LOCATION_RSX);
+	if (useUiFragmentProgram()) {
+		rsxLoadFragmentProgramLocation(context, g_uiFpo, g_uiFpOffset, GCM_LOCATION_RSX);
+		if (!g_uiTraceOnce) {
+			sysTtyTrace("[etr][tex] using minimal RGBA-preserving UI fragment program\n");
+			g_uiTraceOnce = GL_TRUE;
+		}
+	} else {
+		rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset, GCM_LOCATION_RSX);
+	}
 
 	rsxSetUserClipPlaneControl(context,
 		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE,

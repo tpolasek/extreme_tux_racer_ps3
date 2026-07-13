@@ -18,6 +18,7 @@
 #include <rsx/gcm_sys.h>
 #include <rsx/mm.h>
 #include <io/pad.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -78,9 +79,34 @@ static GLenum  g_primMode = GL_TRIANGLES;
 static int     g_inBegin  = 0;
 static float   g_curU = 0.0f, g_curV = 0.0f;
 
-/* draw vertex buffer (RSX-visible, CPU-written) */
-static ImmVtx *g_drawBuf = NULL;
-static u32     g_drawBufOffset = 0;
+/* Vertex draw ring.
+ *
+ * Each glEnd/glDrawArrays flushes into one ring slot, then the RSX reads the
+ * slot asynchronously. Without fencing, the next flush overwrites the same
+ * buffer while a previous draw is still pending — the classic cause of the
+ * "textures flashing / swapped" menu glitches.
+ *
+ * Pattern mirrors PSL1GHT's RSXDebugFontRenderer::printPass:
+ *   wait label → memcpy → bind/draw → invalidate → write label → flush
+ *
+ * Most menu draws are 4-vert quads; 256 verts/slot covers outlines, snow
+ * particles, and multi-quad shapes. A separate oversize buffer handles the
+ * rare larger flush under a full RSX idle wait.
+ * Label index 253 — rsxutil uses 255 for its own flip/idle fences. */
+#define PS3_VTX_RING        32
+#define PS3_VTX_SLOT_MAX    256
+#define PS3_VTX_LABEL_IDX   253
+struct VtxSlot {
+	ImmVtx *buf;
+	u32     offset;
+	u32     labelVal;   /* value written after the draw that used this slot */
+};
+static VtxSlot  g_vtxRing[PS3_VTX_RING];
+static int      g_vtxRingHead = 0;
+static ImmVtx  *g_vtxOversize     = NULL;
+static u32      g_vtxOversizeOff  = 0;
+static vu32    *g_vtxLabel        = NULL;
+static u32      g_vtxLabelNext    = 1;
 
 /* textures: 1-based ids, index 0 = none */
 #define PS3_MAX_TEXTURES 512
@@ -725,9 +751,22 @@ void ps3_gl_init(void) {
 	g_whiteBuf[0] = 0xFFFFFFFFu;
 	rsxAddressToOffset(g_whiteBuf, &g_whiteOffset);
 
-	/* draw vertex buffer (CPU-written, RSX-read) */
-	g_drawBuf = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_IMM_MAX);
-	rsxAddressToOffset(g_drawBuf, &g_drawBufOffset);
+	/* vertex draw ring + oversize fallback (see VtxSlot comment above) */
+	for (int i = 0; i < PS3_VTX_RING; i++) {
+		g_vtxRing[i].buf = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_VTX_SLOT_MAX);
+		if (!g_vtxRing[i].buf) {
+			sysTtyTrace("[etr] ps3_gl_init: vtx ring alloc FAILED\n");
+			return;
+		}
+		rsxAddressToOffset(g_vtxRing[i].buf, &g_vtxRing[i].offset);
+		g_vtxRing[i].labelVal = 0;	/* 0 = never used, don't wait on first acquire */
+	}
+	g_vtxRingHead = 0;
+	g_vtxOversize = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_IMM_MAX);
+	rsxAddressToOffset(g_vtxOversize, &g_vtxOversizeOff);
+	g_vtxLabel = (vu32 *)gcmGetLabelAddress(PS3_VTX_LABEL_IDX);
+	*g_vtxLabel = 0;
+	g_vtxLabelNext = 1;
 
 	matIdentity(g_proj.m);
 	matIdentity(g_mv.m);
@@ -759,10 +798,18 @@ static void setDrawEnv(void) {
 	rsxSetDepthWriteEnable(context, g_depthMask ? 1 : 0);
 	rsxSetFrontFace(context, GCM_FRONTFACE_CCW);
 	rsxSetShadeModel(context, GCM_SHADE_MODEL_SMOOTH);
+	/* Full, deterministic blend state. Samples (debugfont_renderer,
+	 * blitting) always set the equation + disable logic-op; leaving either
+	 * unspecified produces irregular alpha on the first few frames and
+	 * solid / missing UI rectangles thereafter. */
+	rsxSetLogicOpEnable(context, GCM_FALSE);
+	rsxSetBlendEquation(context, GCM_FUNC_ADD, GCM_FUNC_ADD);
+	rsxSetBlendFunc(context,
+	                g_blend ? g_blendSrc : GCM_ONE,
+	                g_blend ? g_blendDst : GCM_ZERO,
+	                g_blend ? g_blendSrc : GCM_ONE,
+	                g_blend ? g_blendDst : GCM_ZERO);
 	rsxSetBlendEnable(context, g_blend ? GCM_TRUE : GCM_FALSE);
-	if (g_blend) {
-		rsxSetBlendFunc(context, g_blendSrc, g_blendDst, g_blendSrc, g_blendDst);
-	}
 	for (u8 i = 0; i < 8; i++)
 		rsxSetViewportClip(context, i, display_width, display_height);
 	rsxSetZMinMaxControl(context, 0, 1, 1);
@@ -814,21 +861,58 @@ static void bindTextureForDraw(void) {
 	rsxTextureWrapMode(context, g_texSampler ? g_texSampler->index : 0, wrapS, wrapT, wrapT, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
 }
 
+/* Spin until the RSX backend label has advanced to at least `val` (or the
+ * slot was never used — val==0). Labels are monotonic, so equality is wrong
+ * for a multi-slot ring: by the time we reclaim slot N, the label has already
+ * progressed past slot N's old value via later slots. Signed subtraction is
+ * wraparound-safe within a 2^31 window (we wrap the counter away from 0). */
+static void waitVtxLabel(u32 val) {
+	if (val == 0 || !g_vtxLabel) return;
+	while ((s32)(*g_vtxLabel - val) < 0)
+		usleep(10);
+}
+
 extern "C" void ps3_gl_flush(void) {
 	if (g_immCount == 0) return;
+	if (!g_rsxReady) return;
 
-	/* copy accumulated verts into the RSX-visible draw buffer */
 	int n = g_immCount;
 	if (n > PS3_IMM_MAX) n = PS3_IMM_MAX;
-	memcpy(g_drawBuf, g_immVtx, sizeof(ImmVtx) * n);
+
+	u32 drawOffset;
+	ImmVtx *drawBuf;
+	int ringSlot = -1;
+
+	if (n <= PS3_VTX_SLOT_MAX) {
+		/* normal path: take next ring slot, wait until RSX is done with it */
+		ringSlot = g_vtxRingHead;
+		VtxSlot &slot = g_vtxRing[ringSlot];
+		waitVtxLabel(slot.labelVal);
+		drawBuf    = slot.buf;
+		drawOffset = slot.offset;
+		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
+	} else {
+		/* rare oversize flush: hard-wait RSX entirely so we can reuse the
+		 * single large buffer safely. */
+		u32 idleVal = g_vtxLabelNext++;
+		if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;	/* label 0 reserved */
+		rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, idleVal);
+		rsxFlushBuffer(context);
+		waitVtxLabel(idleVal);
+		drawBuf    = g_vtxOversize;
+		drawOffset = g_vtxOversizeOff;
+	}
+
+	memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
 
 	setDrawEnv();
 	bindTextureForDraw();
 
-	/* bind POS + TEX0 attribs */
-	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, g_drawBufOffset,
+	/* bind POS + TEX0 attribs to this slot */
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0, drawOffset,
 	                         sizeof(ImmVtx), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
-	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0, g_drawBufOffset + sizeof(float) * 3,
+	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_TEX0, 0,
+	                         drawOffset + sizeof(float) * 3,
 	                         sizeof(ImmVtx), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
 	/* vertex program + matrices (uploaded transposed) */
@@ -837,10 +921,13 @@ extern "C" void ps3_gl_flush(void) {
 	if (g_uProj) { matTranspose(tmp, g_proj.m); rsxSetVertexProgramParameter(context, g_vpo, g_uProj, tmp); }
 	if (g_uMV)   { matTranspose(tmp, g_mv.m);   rsxSetVertexProgramParameter(context, g_vpo, g_uMV, tmp); }
 
-	/* fragment program + color uniform */
-	rsxLoadFragmentProgramLocation(context, g_fpo, g_fpOffset, GCM_LOCATION_RSX);
+	/* fragment Program: patch uColor into the RSX-local ucode, THEN load.
+	 * Working rsxtest sample order is SetFragmentProgramParameter →
+	 * LoadFragmentProgramLocation; reverse order can leave the previous
+	 * frame's colour / alpha active (or zero). */
 	if (g_uColor)
 		rsxSetFragmentProgramParameter(context, g_fpo, g_uColor, g_color, g_fpOffset, GCM_LOCATION_RSX);
+	rsxLoadFragmentProgramLocation(context, g_fpo, g_fpOffset, GCM_LOCATION_RSX);
 
 	rsxSetUserClipPlaneControl(context,
 		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE,
@@ -848,6 +935,14 @@ extern "C" void ps3_gl_flush(void) {
 
 	rsxInvalidateVertexCache(context);
 	rsxDrawVertexArray(context, mapPrim(g_primMode), 0, n);
+
+	/* tell the next acquirer of this slot when the RSX has finished with it */
+	u32 doneVal = g_vtxLabelNext++;
+	if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
+	rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, doneVal);
+	rsxFlushBuffer(context);
+	if (ringSlot >= 0)
+		g_vtxRing[ringSlot].labelVal = doneVal;
 }
 
 /* =====================================================================

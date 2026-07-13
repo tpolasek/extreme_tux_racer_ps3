@@ -78,6 +78,31 @@ folder name). **Content ID:** `UP0001-EXTR00001_00-0000000000000001`.
 ### Real PS3
 Install `etr.pkg` via a package manager, or `ps3load src/etr.self`.
 
+## Controls — racing
+
+DualShock 3 bindings during gameplay (defined in `src/racing.cpp`).
+
+### Buttons
+
+| DualShock 3 | Action |
+|---|---|
+| Cross | Paddle |
+| Circle | Trick modifier |
+| Square | Brake |
+| Triangle | Charge jump |
+| L1 | Gear down (min 1) |
+| R1 | Gear up (max 9) |
+| Start | Exit to race select |
+
+### Left analog stick
+
+| Axis | Action |
+|---|---|
+| X (left/right) | Turn (deadzone ±0.2) |
+| Y (up/down) | Paddle (up) / Brake (down) (deadzone ±0.3) |
+
+Unmapped during racing: L2, R2, Select, L3, R3, PS, D-pad, right stick.
+
 ## Port layout
 
 ```

@@ -11,11 +11,8 @@
 #
 # Requires PSL1GHT/PS3DEV in the environment (the ps3dev toolchain).
 #
-# NOTE: the PS3 Makefile's VPATH includes src/, so any stale .o files left in
-# src/ by a native (x86-64) autotools build would be linked in by mistake
-# ("File in wrong format" / "EM: 62"). To guarantee the PS3 build is clean we
-# remove src/*.o + src/*.o.d before compiling. They're regenerable artifacts,
-# so the next native `make` just recompiles them.
+# The PS3 Makefile uses source-extension-only lookup, so native object files in
+# src/ are ignored and can safely coexist with the PS3 build directory.
 #
 set -euo pipefail
 
@@ -49,20 +46,13 @@ command -v ppu-gcc >/dev/null || { echo "ERROR: ppu-gcc not on PATH." >&2; exit 
 
 cd "$SRC"
 
-# full clean: PS3 build dir + stale native .o files + final artifacts.
+# full clean: PS3 build dir + final artifacts.
 if [ "$DO_CLEAN" -eq 1 ]; then
 	echo "==> clean"
 	make -f "$MAKEFILE" clean 2>/dev/null || true
-	rm -f "$SRC"/*.o "$SRC"/*.o.d
 	rm -f "$ROOT"/etr.pkg "$SRC"/etr.elf "$SRC"/etr.self "$SRC"/etr.elf.map
 	echo "==> clean done"
 	exit 0
-fi
-
-# Pre-build: purge stale native (x86-64) .o files so VPATH can't pick them up.
-if compgen -G "$SRC/*.o" >/dev/null; then
-	echo "==> removing stale .o files in src/ (avoids x86/PS3 link conflicts)"
-	rm -f "$SRC"/*.o "$SRC"/*.o.d
 fi
 
 echo "==> make -f $MAKEFILE ${MAKE_ARGS[*]:-}"

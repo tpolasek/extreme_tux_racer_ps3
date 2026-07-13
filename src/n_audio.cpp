@@ -1,9 +1,9 @@
 /* --------------------------------------------------------------------
 EXTREME TUXRACER - native audio, Linux backend.
 
-Audio thread pattern mirrors PS3 snd_ps3.c: wait → mix block → write.
-On Linux: snd_pcm_wait/snd_pcm_writei drain the device.
-On PS3 (future): sysEventQueueReceive / fill DMA block.
+Audio thread pattern: wait → mix block → write.
+On Linux, snd_pcm_wait/snd_pcm_writei drain the device. The PS3 backend
+uses sysEventQueueReceive and fills PSL1GHT libaudio DMA blocks directly.
 
 Mixer is single-threaded inside the audio thread: iterates voices +
 music, sums int16 samples, clips, writes to ALSA period buffer.

@@ -46,9 +46,11 @@ CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
-# libraries: freetype/png/z from portlibs, RSX + system libs from PSL1GHT.
+# libraries: freetype/png/z and Vorbis/Ogg from portlibs; audio, RSX and
+# system libraries from PSL1GHT. Static-library dependency order matters.
 #---------------------------------------------------------------------------------
-LIBS	:=	-lfreetype -lpng -lz -lsimdmath -lrsx -lgcm_sys -lio -lsysutil -lrt -llv2 -lm
+LIBS	:=	-lfreetype -lpng -lz -lvorbisfile -lvorbis -logg \
+		-laudio -lsimdmath -lrsx -lgcm_sys -lio -lsysutil -lrt -llv2 -lm
 
 #---------------------------------------------------------------------------------
 # library search dirs (portlibs for freetype/png/z).
@@ -62,11 +64,14 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 
-# VPATH covers the two source dirs (game src + ps3 backend) + shaders. The game
-# src dir is first so that the colliding basename "main.cpp" resolves to the
-# GAME's main.cpp (etr_run), not the demo's ps3/source/main.cpp.
-export VPATH	:=	$(CURDIR) $(CURDIR)/ps3/source \
-					$(foreach dir,$(SHADERS),$(CURDIR)/$(dir))
+# Restrict path lookup to source extensions. A broad VPATH also searches for
+# targets, which can make GNU make reuse native x86 src/*.o files in a PS3
+# build. The game source dir remains first so the colliding main.cpp basename
+# resolves to the game's etr_run implementation.
+export SOURCE_ROOT := $(CURDIR)
+vpath %.cpp $(SOURCE_ROOT) $(SOURCE_ROOT)/ps3/source
+vpath %.vcg $(SOURCE_ROOT)/$(SHADERS)
+vpath %.fcg $(SOURCE_ROOT)/$(SHADERS)
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 export BUILDDIR	:=	$(CURDIR)/$(BUILD)
@@ -121,6 +126,10 @@ clean:
 else
 
 DEPENDS	:=	$(OFILES:.o=.d)
+
+vpath %.cpp $(SOURCE_ROOT) $(SOURCE_ROOT)/ps3/source
+vpath %.vcg $(SOURCE_ROOT)/$(SHADERS)
+vpath %.fcg $(SOURCE_ROOT)/$(SHADERS)
 
 #---------------------------------------------------------------------------------
 # main targets (the %.self: %.elf pattern rule comes from ppu_rules).

@@ -1,25 +1,21 @@
 /* --------------------------------------------------------------------
 EXTREME TUXRACER - native audio system
 
-Designed to mirror the PS3 libaudio + event-queue pattern
-(see chocolate-quake/src/sound/src/snd_ps3.c). One dedicated
-audio thread drains a mix buffer to the output device in blocks.
-The mixer + codecs (WAV/OGG) are cross-platform; only the device
-backend function differs between Linux (ALSA) and PS3 (libaudio).
+The Linux and PS3 backends use one dedicated audio thread to drain a
+mix buffer to the output device in blocks. Linux targets ALSA; PS3 uses
+PSL1GHT libaudio and its block-consumed event queue.
 
 PS3 mapping:
-    Linux (this file)              PS3 (snd_ps3.c)
-    --------------------------     ------------------------------
-    AudioDevice::init              SNDDMA_Init (audioInit/audioPortOpen)
-    AudioDevice::shutdown          SNDDMA_Shutdown
-    audio thread loop              _audio_thread_func
-    snd_pcm_wait (period ready)    sysEventQueueReceive (DMA block done)
-    mixer.mixBlock(dst, n)         memcpy(dst, shm->buffer+pos, n)
-    snd_pcm_writei                 (implicit — DMA block filled)
+    Linux (n_audio.cpp)            PS3 (n_audio_ps3.cpp)
+    --------------------------     ---------------------------------
+    snd_pcm_open                   audioInit / audioPortOpen
+    std::thread                    sysThreadCreate
+    std::mutex                     sysMutexCreate
+    snd_pcm_wait                   sysEventQueueReceive
+    snd_pcm_writei                 fill next float32 DMA block
 
-Future PS3 port: replace just the ALSA calls inside the audio thread
-function with libaudio/event-queue calls; the mixer + voice management
-+ SoundData + MusicStream remain unchanged.
+The platform implementations live in n_audio.cpp and
+ps3/source/n_audio_ps3.cpp respectively.
 ---------------------------------------------------------------------*/
 #ifndef N_AUDIO_H
 #define N_AUDIO_H
@@ -56,8 +52,7 @@ private:
 
 // --------------------------------------------------------------------
 // MusicStream — streaming OGG decoder.
-// Linux: libvorbisfile. PS3: replace with cellFsDecode / libvorbis
-// ported to PS3 (or convert .ogg → .wav offline).
+// Both platforms use libvorbisfile; PS3 links the ps3dev portlib.
 // --------------------------------------------------------------------
 class MusicStream {
 public:

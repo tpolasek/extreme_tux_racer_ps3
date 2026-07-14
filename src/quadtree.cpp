@@ -16,6 +16,22 @@
 #define ERROR_MAGNIFICATION_THRESHOLD 20
 #define ERROR_MAGNIFICATION_AMOUNT 3
 #define ENV_MAP_ALPHA 50
+
+/* The legacy three-terrain junction pass redraws coplanar triangles over a
+ * black base with additive blending.  On RSX those LOD-dependent redraws can
+ * surface as momentary black/white triangle flashes.  Ordinary two-terrain
+ * blending remains enabled; only the problematic extra junction pass is
+ * suppressed on PS3. */
+#ifdef __PPU__
+static const bool PS3_DISABLE_SPECIAL_TERRAIN_PASS = true;
+#else
+static const bool PS3_DISABLE_SPECIAL_TERRAIN_PASS = false;
+#endif
+
+static inline bool use_special_terrain_pass() {
+	return param.perf_level > 1 && !PS3_DISABLE_SPECIAL_TERRAIN_PASS;
+}
+
 #define colorval(j,ch) \
 	VNCArray[j*STRIDE_GL_ARRAY+STRIDE_GL_ARRAY-4+(ch)]
 
@@ -758,7 +774,7 @@ void quadsquare::Render(const quadcornerdata& cd, GLubyte *vnc_array) {
 		}
 	}
 
-	if (param.perf_level > 1) {
+	if (use_special_terrain_pass()) {
 		InitArrayCounters();
 		RenderAux(cd, SomeClip, -1);
 

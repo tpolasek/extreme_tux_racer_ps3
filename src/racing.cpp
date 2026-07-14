@@ -160,8 +160,8 @@ static void SetSoundVolumes() {
 	Sound.SetVolume("pickup2",    CalcSoundVol(0.24f));
 	Sound.SetVolume("pickup3",    CalcSoundVol(0.24f));
 	Sound.SetVolume("snow_sound", CalcSoundVol(1.5f));
-	Sound.SetVolume("ice_sound",  CalcSoundVol(0.6f));
-	Sound.SetVolume("rock_sound", CalcSoundVol(1.1f));
+	Sound.SetVolume("ice_sound",  CalcSoundVol(0.42f));
+	Sound.SetVolume("rock_sound", CalcSoundVol(0.77f));
 }
 
 // ---------------------------- init ----------------------------------

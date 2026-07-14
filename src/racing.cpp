@@ -59,6 +59,10 @@ static bool key_braking;
 static bool stick_braking;
 static double charge_start_time;
 static bool trick_modifier;
+static bool face_paddling;
+static bool trigger_paddling;
+static bool face_braking;
+static bool trigger_braking;
 
 static bool sky = true;
 static bool fog = true;
@@ -83,17 +87,19 @@ void CRacing::Jbutt(int button, bool pressed) {
 	CControl *ctrl = g_game.player->ctrl;
 
 	switch (button) {
-		case 0:
-			key_paddling = pressed;
-			break;
-		case 1:
-			trick_modifier = pressed;
-			break;
-		case 2:
-			key_braking = pressed;
-			break;
-		case 3:
+		case 0: // Cross: jump
 			key_charging = pressed;
+			break;
+		case 1: // Circle: brake
+			face_braking = pressed;
+			key_braking = face_braking || trigger_braking;
+			break;
+		case 2: // Square: accelerate / flap
+			face_paddling = pressed;
+			key_paddling = face_paddling || trigger_paddling;
+			break;
+		case 3: // Triangle: trick modifier
+			trick_modifier = pressed;
 			break;
 
 		case 4:
@@ -112,12 +118,20 @@ void CRacing::Jbutt(int button, bool pressed) {
 				}
 			}
 			break;
+		case 6: // L2: brake
+			trigger_braking = pressed;
+			key_braking = face_braking || trigger_braking;
+			break;
 
 		case 7: // Start button - exit to map selection
 			if (pressed) {
 				g_game.raceaborted = true;
 				State::manager.RequestEnterState(RaceSelect);
 			}
+			break;
+		case 8: // R2: accelerate / flap
+			trigger_paddling = pressed;
+			key_paddling = face_paddling || trigger_paddling;
 			break;
 	}
 
@@ -170,6 +184,10 @@ void CRacing::Enter() {
 	key_braking = false;
 	key_charging = false;
 	trick_modifier = false;
+	face_paddling = false;
+	trigger_paddling = false;
+	face_braking = false;
+	trigger_braking = false;
 	stick_paddling = false;
 	stick_braking = false;
 	stick_turn = false;

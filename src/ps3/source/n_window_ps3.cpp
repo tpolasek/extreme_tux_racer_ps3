@@ -57,7 +57,7 @@ static void registerExitCallback() {
 /* ------------------------------------------------------------------ pad
  * Button index mapping (game logic):
  *   0=Cross(confirm) 1=Circle(back) 2=Square 3=Triangle
- *   4=L1 5=R1 6=L2 7=Start(racing: exit)
+ *   4=L1 5=R1 6=L2 7=Start(racing: exit) 8=R2
  *
  * padData (io/pad.h) exposes the DualShock state as named 1-bit bitfields
  * (BTN_CROSS, BTN_CIRCLE, ...) and 16-bit analog fields (ANA_L_H, ANA_L_V).
@@ -70,7 +70,7 @@ static void registerExitCallback() {
 /* Map game button index -> DualShock named bit-field member. padData exposes
  * these as 1-bit bitfields, so we can't take their address (no pointer-to-
  * member); a switch reads each by name. Returns 0/1. */
-#define BTN_MAP_COUNT 8
+#define BTN_MAP_COUNT 9
 static u8 readPadButton(const padData &p, unsigned int button) {
 	switch (button) {
 		case 0: return (u8)p.BTN_CROSS;
@@ -81,6 +81,7 @@ static u8 readPadButton(const padData &p, unsigned int button) {
 		case 5: return (u8)p.BTN_R1;
 		case 6: return (u8)p.BTN_L2;
 		case 7: return (u8)p.BTN_START;
+		case 8: return (u8)p.BTN_R2;
 		default: return 0;
 	}
 }

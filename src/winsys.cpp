@@ -77,6 +77,8 @@ void CWinsys::SetupVideoMode(const TScreenRes& res) {
 	ContextSettings ctx(bpp, 0, 0, 1, 2);
 #endif
 	window.create(VideoMode(resolution.width, resolution.height, bpp), WINDOW_TITLE, style, ctx);
+	Vector2u actualSize = window.getSize();
+	resolution = TScreenRes(actualSize.x, actualSize.y);
 	if (param.framerate)
 		window.setFramerateLimit(param.framerate);
 

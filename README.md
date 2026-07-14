@@ -86,12 +86,14 @@ DualShock 3 bindings during gameplay (defined in `src/racing.cpp`).
 
 | DualShock 3 | Action |
 |---|---|
-| Cross | Paddle |
-| Circle | Trick modifier |
-| Square | Brake |
-| Triangle | Charge jump |
+| Cross | Charge jump |
+| Circle | Brake |
+| Square | Accelerate / flap |
+| Triangle | Trick modifier |
 | L1 | Gear down (min 1) |
 | R1 | Gear up (max 9) |
+| L2 | Brake |
+| R2 | Accelerate / flap |
 | Start | Exit to race select |
 
 ### Left analog stick
@@ -101,7 +103,7 @@ DualShock 3 bindings during gameplay (defined in `src/racing.cpp`).
 | X (left/right) | Turn (deadzone ±0.2) |
 | Y (up/down) | Paddle (up) / Brake (down) (deadzone ±0.3) |
 
-Unmapped during racing: L2, R2, Select, L3, R3, PS, D-pad, right stick.
+Unmapped during racing: Select, L3, R3, PS, D-pad, right stick.
 
 ## Port layout
 

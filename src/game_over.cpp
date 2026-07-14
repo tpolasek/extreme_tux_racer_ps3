@@ -38,10 +38,105 @@ GNU General Public License for more details.
 #include "winsys.h"
 #include "physics.h"
 #include "tux.h"
+#include "highscore.h"
+#include "textures.h"
+
+#include <algorithm>
+#include <cmath>
 
 CGameOver GameOver;
 
 static CKeyframe *final_frame;
+
+namespace {
+
+const int NUM_FISH_BURSTS = 7;
+const int FISH_PER_BURST = 40;
+const int NUM_CELEBRATION_FISH = NUM_FISH_BURSTS * FISH_PER_BURST;
+const float FISH_BURST_INTERVAL = 0.7f;
+const float FISH_LIFETIME = 1.8f;
+const float FISH_BURST_DURATION = 5.0f;
+
+struct CelebrationFish {
+	float vx;
+	float vy;
+	float size;
+	float spawn_time;
+};
+
+CelebrationFish celebration_fish[NUM_CELEBRATION_FISH];
+TTexture* celebration_fish_texture = nullptr;
+bool fish_burst_active = false;
+float fish_burst_time = 0.0f;
+
+TTexture* GetCelebrationFishTexture() {
+	for (auto& type : Course.ObjTypes) {
+		if (type.textureFile != "herring.png") continue;
+		if (type.texture == nullptr) {
+			type.texture = new TTexture();
+			if (!type.texture->Load(param.obj_dir, type.textureFile, false)) {
+				delete type.texture;
+				type.texture = nullptr;
+			}
+		}
+		return type.texture;
+	}
+	return nullptr;
+}
+
+void StartFishBurst() {
+	const float width = static_cast<float>(Winsys.resolution.width);
+	const float height = static_cast<float>(Winsys.resolution.height);
+	const float travel = std::max(width, height);
+	const float display_scale = height / 720.0f;
+
+	celebration_fish_texture = GetCelebrationFishTexture();
+	if (celebration_fish_texture == nullptr) return;
+
+	for (int burst = 0; burst < NUM_FISH_BURSTS; ++burst) {
+		for (int i = 0; i < FISH_PER_BURST; ++i) {
+			const int index = burst * FISH_PER_BURST + i;
+			const float angle = static_cast<float>(2.0 * M_PI * i / FISH_PER_BURST + burst * 0.31);
+			const float speed = travel * (0.38f + 0.055f * (i % 9));
+			celebration_fish[index].vx = std::cos(angle) * speed;
+			celebration_fish[index].vy = std::sin(angle) * speed - height * 0.18f;
+			celebration_fish[index].size = (48.0f + 9.0f * (i % 6)) * display_scale;
+			celebration_fish[index].spawn_time = burst * FISH_BURST_INTERVAL;
+		}
+	}
+
+	fish_burst_time = 0.0f;
+	fish_burst_active = true;
+}
+
+void UpdateAndDrawFishBurst(float time_step) {
+	if (!fish_burst_active) return;
+
+	const float dt = std::min(time_step, 0.05f);
+	const float gravity = Winsys.resolution.height * 0.28f;
+	const float origin_x = Winsys.resolution.width * 0.5f;
+	const float origin_y = Winsys.resolution.height * 0.58f;
+	fish_burst_time += dt;
+	if (fish_burst_time >= FISH_BURST_DURATION) {
+		fish_burst_active = false;
+		return;
+	}
+
+	Setup2dScene();
+	ScopedRenderMode rm(TEXFONT);
+	for (int i = 0; i < NUM_CELEBRATION_FISH; ++i) {
+		const CelebrationFish& fish = celebration_fish[i];
+		const float age = fish_burst_time - fish.spawn_time;
+		if (age < 0.0f || age > FISH_LIFETIME) continue;
+
+		const float x = origin_x + fish.vx * age - fish.size * 0.5f;
+		const float y = origin_y + fish.vy * age + gravity * age * age * 0.5f - fish.size * 0.5f;
+		celebration_fish_texture->Draw(static_cast<int>(x), static_cast<int>(y),
+		                               static_cast<int>(fish.size), static_cast<int>(fish.size));
+	}
+}
+
+} // namespace
 
 void QuitGameOver() {
 	State::manager.RequestEnterState(RaceSelect);
@@ -120,6 +215,11 @@ void CGameOver::Enter() {
 		Music.PlayTheme(g_game.theme_id, MUS_WONRACE);
 	}
 
+	fish_burst_active = false;
+	if (!g_game.raceaborted && SubmitCourseHighScore(g_game.time)) {
+		StartFishBurst();
+	}
+
 	if (g_game.raceaborted || !g_game.use_keyframe) {
 		final_frame = nullptr;
 	} else {
@@ -168,6 +268,7 @@ void CGameOver::Loop(float time_step) {
 		} else GameOverMessage(ctrl);
 	}
 	DrawHud(ctrl);
+	UpdateAndDrawFishBurst(time_step);
 	Reshape(width, height);
 	Winsys.SwapBuffers();
 }

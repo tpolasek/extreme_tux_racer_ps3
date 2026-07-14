@@ -29,6 +29,8 @@ GNU General Public License for more details.
 #include "physics.h"
 #include "winsys.h"
 #include "game_ctrl.h"
+#include "highscore.h"
+#include "gui.h"
 #include <algorithm>
 
 
@@ -77,6 +79,30 @@ static void draw_time(double time, Color color) {
 		FT.DrawString(138, 3, hundrstr);
 		FT.SetSize(42);
 		FT.DrawString(53, 3, timestr);
+		Winsys.end2D();
+	}
+}
+
+static void draw_high_score(double time, Color color) {
+	const int frame_width = 190;
+	const int left = (Winsys.resolution.width - frame_width) / 2;
+	DrawFrameX(left, 6, frame_width, 46, 2, colBlack, colWhite, 0.55f);
+
+	int min, sec, hundr;
+	GetTimeComponents(time, &min, &sec, &hundr);
+	std::string timestr = Int_StrN(min, 2) + ':' + Int_StrN(sec, 2);
+	std::string hundrstr = Int_StrN(hundr, 2);
+
+	if (param.use_papercut_font < 2) {
+		Tex.DrawNumStr(timestr, left + 15, 12, 1, color);
+		Tex.DrawNumStr(hundrstr, left + 135, 12, 0.7f, color);
+	} else {
+		Winsys.begin2D();
+		FT.SetColor(color);
+		FT.SetSize(30);
+		FT.DrawString(left + 133, 3, hundrstr);
+		FT.SetSize(42);
+		FT.DrawString(left + 18, 3, timestr);
 		Winsys.end2D();
 	}
 }
@@ -393,6 +419,7 @@ void DrawHud(const CControl *ctrl) {
 
 
 	draw_time(g_game.time, param.use_papercut_font < 2 ? colWhite : colDYell);
+	draw_high_score(GetCourseHighScore(), param.use_papercut_font < 2 ? colWhite : colDYell);
 	draw_herring_count(g_game.herring, param.use_papercut_font < 2 ? colWhite : colDYell);
 
 	// rpm

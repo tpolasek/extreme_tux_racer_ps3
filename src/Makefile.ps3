@@ -40,7 +40,7 @@ CONTENTID	:=	UP0001-$(APPID)_00-0000000000000001
 # -std=gnu++14 (not c++14): the GNU dialect leaves __STRICT_ANSI__ undefined,
 # which is what PS3 newlib's <stdio.h> checks to expose snprintf/vsnprintf.
 # With plain -std=c++14 the C++ standard library fails to find ::vsnprintf.
-CFLAGS		=	-Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE)
+CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map

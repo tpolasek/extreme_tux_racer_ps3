@@ -37,6 +37,8 @@
 #include "rsxutil.h"
 #include "ps3_gl_internal.h"
 #include "ps3_tty.h"
+#include "ps3_gfx_assert.h"
+#include <stddef.h>
 
 /* ---- embedded shader objects (bin2o from etr3d.vcg/.fcg) ---- */
 extern "C" const u8 etr3d_vpo[];
@@ -126,6 +128,16 @@ struct ImmVtx {
 	float u, v;
 	float r, g, b, a;
 };
+/* Compile-time guarantee that the GCM attrib offsets used in ps3_gl_flush
+ * still match this struct if anyone reshuffles the fields. Mismatched
+ * stride/offset is the classic cause of "blown up triangles" on real
+ * RSX — RPCS3 tends to render fine because it re-validates per attrib. */
+static_assert(sizeof(ImmVtx) == 12 * sizeof(float),
+              "ImmVtx must be 12 packed floats (POS+NRM+TEX0+COL)");
+static_assert(offsetof(ImmVtx, x)  == 0,                  "POS at offset 0");
+static_assert(offsetof(ImmVtx, nx) == 3 * sizeof(float),  "NORMAL at offset 12");
+static_assert(offsetof(ImmVtx, u)  == 6 * sizeof(float),  "TEX0 at offset 24");
+static_assert(offsetof(ImmVtx, r)  == 8 * sizeof(float),  "COLOR0 at offset 32");
 static ImmVtx  g_immVtx[PS3_IMM_MAX];
 static int     g_immCount = 0;
 static GLenum  g_primMode = GL_TRIANGLES;
@@ -844,6 +856,12 @@ void glBindTexture(GLenum, GLuint t) {
 void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
                   GLenum, GLenum, const GLvoid *data) {
 	if (g_currentTex == 0 || g_currentTex >= PS3_MAX_TEXTURES) return;
+	/* RSX caps A8R8G8B8 dimensions at 4096 and needs w,h > 0. A 0 dim
+	 * would pitch-align to 0 and let rsxMemalign hand back NULL — the
+	 * assert fires earlier so the call site shows in the TTY capture. */
+	GFX_ASSERT(w > 0 && h > 0, "glTexImage2D called with zero dim");
+	GFX_ASSERT(w <= 4096 && h <= 4096, "glTexImage2D dim exceeds RSX 4096 limit");
+
 	GlTex &T = g_tex[g_currentTex];
 	T.used = GL_TRUE;
 	T.width = w; T.height = h;
@@ -851,10 +869,12 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	const u32 srcRowBytes = (u32)w * 4u;
 	const u32 pitch = (srcRowBytes + 63u) & ~63u;
 	T.pitch = pitch;
+	GFX_ASSERT(GFX_IS_MULT(pitch, 64), "texture pitch not 64-aligned");
 
 	if (T.buffer) rsxFree(T.buffer);
 	T.buffer = (u8 *)rsxMemalign(128, (u32)pitch * (u32)h);
 	if (!T.buffer) { sysTtyTrace("[etr] glTexImage2D: rsxMemalign FAILED\n"); return; }
+	GFX_ASSERT_ALIGNED(T.buffer, 128);
 
 	const u8 *src = (const u8 *)data;
 	if (src) {
@@ -877,7 +897,12 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 
 	asm volatile("sync");
 	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
-	rsxAddressToOffset(T.buffer, &T.offset);
+	GFX_ASSERT(rsxAddressToOffset(T.buffer, &T.offset) == 0,
+	           "rsxAddressToOffset(texture) failed");
+	/* GCM_TEXTURE_FORMAT_A8R8G8B8 | LIN needs a 128-aligned base offset
+	 * on real RSX; the rsxMemalign(128, ...) above guarantees it but
+	 * catch any future regression in allocation alignment. */
+	GFX_ASSERT_ALIGNED(T.offset, 128);
 }
 
 void glTexParameteri(GLenum, GLenum pname, GLint param) {
@@ -1013,13 +1038,17 @@ void ps3_gl_init(void) {
 	g_uiFpo = (rsxFragmentProgram *)etr_ui_fpo;
 	u32 uiFpSize = 0;
 	rsxFragmentProgramGetUCode(g_uiFpo, &g_uiFpUcode, &uiFpSize);
+	GFX_ASSERT(uiFpSize > 0, "UI fragment program has zero size");
 	g_uiFpBuf = (u32 *)rsxMemalign(64, uiFpSize);
 	if (!g_uiFpBuf) {
 		sysTtyTrace("[etr] ps3_gl_init: UI fragment-program alloc FAILED\n");
 		return;
 	}
+	GFX_ASSERT_ALIGNED(g_uiFpBuf, 64);
 	memcpy(g_uiFpBuf, g_uiFpUcode, uiFpSize);
-	rsxAddressToOffset(g_uiFpBuf, &g_uiFpOffset);
+	GFX_ASSERT(rsxAddressToOffset(g_uiFpBuf, &g_uiFpOffset) == 0,
+	           "rsxAddressToOffset(g_uiFpBuf) failed");
+	GFX_ASSERT_ALIGNED(g_uiFpOffset, 64);
 	g_uiTexSampler = rsxFragmentProgramGetAttrib(g_uiFpo, "texture");
 
 	/* Ring of fragment-program buffers (same count as the vertex ring so they
@@ -1031,13 +1060,19 @@ void ps3_gl_init(void) {
 			sysTtyTrace("[etr] ps3_gl_init: fp ring alloc FAILED\n");
 			return;
 		}
+		GFX_ASSERT_ALIGNED(g_fpRing[i].buf, 64);
 		memcpy(g_fpRing[i].buf, g_fpUcode, g_fpUcodeSize);
-		rsxAddressToOffset(g_fpRing[i].buf, &g_fpRing[i].offset);
+		GFX_ASSERT(rsxAddressToOffset(g_fpRing[i].buf, &g_fpRing[i].offset) == 0,
+		           "rsxAddressToOffset(fp ring) failed");
+		GFX_ASSERT_ALIGNED(g_fpRing[i].offset, 64);
 	}
 	g_fpOversize.buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
 	if (g_fpOversize.buf) {
+		GFX_ASSERT_ALIGNED(g_fpOversize.buf, 64);
 		memcpy(g_fpOversize.buf, g_fpUcode, g_fpUcodeSize);
-		rsxAddressToOffset(g_fpOversize.buf, &g_fpOversize.offset);
+		GFX_ASSERT(rsxAddressToOffset(g_fpOversize.buf, &g_fpOversize.offset) == 0,
+		           "rsxAddressToOffset(fp oversize) failed");
+		GFX_ASSERT_ALIGNED(g_fpOversize.offset, 64);
 	}
 
 	g_uGlobalAmbient = rsxFragmentProgramGetConst(g_fpo, "globalAmbient");
@@ -1059,10 +1094,20 @@ void ps3_gl_init(void) {
 
 	if (!g_uProj) sysTtyTrace("[etr] ps3_gl_init: WARN projMatrix missing\n");
 	if (!g_uMV)   sysTtyTrace("[etr] ps3_gl_init: WARN modelViewMatrix missing\n");
+	/* The shader is built with these uniforms always present; a NULL lookup
+	 * means the etr3d.vpo embedded in the build is out of sync with the
+	 * Cg source — every draw would upload junk transforms. */
+	GFX_ASSERT(g_uProj != NULL, "etr3d vertex shader missing projMatrix");
+	GFX_ASSERT(g_uMV   != NULL, "etr3d vertex shader missing modelViewMatrix");
 
 	g_whiteBuf = (u32 *)rsxMemalign(128, 4);
+	GFX_ASSERT(g_whiteBuf != NULL, "whiteBuf alloc failed");
+	GFX_ASSERT_ALIGNED(g_whiteBuf, 128);
 	g_whiteBuf[0] = 0xFFFFFFFFu;
-	rsxAddressToOffset(g_whiteBuf, &g_whiteOffset);
+	GFX_ASSERT(rsxAddressToOffset(g_whiteBuf, &g_whiteOffset) == 0,
+	           "rsxAddressToOffset(whiteBuf) failed");
+	/* 1x1 A8R8G8B8 texture base offset must be 128-aligned on real RSX. */
+	GFX_ASSERT_ALIGNED(g_whiteOffset, 128);
 
 	for (int i = 0; i < PS3_VTX_RING; i++) {
 		g_vtxRing[i].buf = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_VTX_SLOT_MAX);
@@ -1070,12 +1115,22 @@ void ps3_gl_init(void) {
 			sysTtyTrace("[etr] ps3_gl_init: vtx ring alloc FAILED\n");
 			return;
 		}
-		rsxAddressToOffset(g_vtxRing[i].buf, &g_vtxRing[i].offset);
+		GFX_ASSERT_ALIGNED(g_vtxRing[i].buf, 64);
+		/* Stride must be a multiple of 4 for F32 attribs — true today
+		 * (48 bytes) but cheap to catch if the ImmVtx layout changes. */
+		GFX_ASSERT(GFX_IS_MULT(sizeof(ImmVtx), 4), "ImmVtx stride must be 4-aligned");
+		GFX_ASSERT(rsxAddressToOffset(g_vtxRing[i].buf, &g_vtxRing[i].offset) == 0,
+		           "rsxAddressToOffset(vtx ring) failed");
+		GFX_ASSERT_ALIGNED(g_vtxRing[i].offset, 64);
 		g_vtxRing[i].labelVal = 0;
 	}
 	g_vtxRingHead = 0;
 	g_vtxOversize = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_IMM_MAX);
-	rsxAddressToOffset(g_vtxOversize, &g_vtxOversizeOff);
+	GFX_ASSERT(g_vtxOversize != NULL, "vtx oversize alloc failed");
+	GFX_ASSERT_ALIGNED(g_vtxOversize, 64);
+	GFX_ASSERT(rsxAddressToOffset(g_vtxOversize, &g_vtxOversizeOff) == 0,
+	           "rsxAddressToOffset(vtx oversize) failed");
+	GFX_ASSERT_ALIGNED(g_vtxOversizeOff, 64);
 
 	g_vtxLabel = (vu32 *)gcmGetLabelAddress(PS3_VTX_LABEL_IDX);
 	*g_vtxLabel = 0;
@@ -1157,6 +1212,16 @@ static void bindTextureForDraw(void) {
 		filtMin = filtMag = GCM_TEXTURE_NEAREST;
 		wrapS = wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
 	}
+
+	/* rsxLoadTexture with LIN A8R8G8B8 requires: base offset 128-aligned,
+	 * pitch a multiple of 64, tw/th > 0 and <= 4096. Real RSX faults with
+	 * garbage sampling (the classic source of "blown up" textured polys)
+	 * where RPCS3 quietly rounds. */
+	GFX_ASSERT_ALIGNED(offset, 128);
+	GFX_ASSERT(GFX_IS_MULT(pitch, 64) || pitch == 4,
+	           "texture pitch not 64-aligned (except 1x1 white=4)");
+	GFX_ASSERT(tw > 0 && th > 0, "texture dims zero at draw time");
+	GFX_ASSERT(tw <= 4096 && th <= 4096, "texture dims exceed 4096");
 
 	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
 
@@ -1262,14 +1327,41 @@ extern "C" void ps3_gl_flush(void) {
 	}
 	if (!fpBuf || !fpOffset) return;
 
+	/* Pre-draw invariants. These are the conditions real RSX enforces
+	 * but RPCS3 papers over — catching them here freezes the frame on
+	 * the actual offending draw instead of letting corruption propagate
+	 * through the rest of the scene. */
+	GFX_ASSERT(n > 0, "ps3_gl_flush with no vertices");
+	GFX_ASSERT(drawBuf != NULL, "drawBuf NULL at flush");
+	GFX_ASSERT_ALIGNED(drawBuf, 64);
+	GFX_ASSERT_ALIGNED(drawOffset, 64);
+	GFX_ASSERT_ALIGNED(fpOffset, 64);
+	/* Stride must be a multiple of 4 for F32 attribs (true at 48). */
+	GFX_ASSERT(GFX_IS_MULT(sizeof(ImmVtx), 4), "stride not 4-aligned");
+	/* Note: we deliberately do NOT assert on primitive-count-vs-mode here.
+	 * GL defines incomplete primitives (e.g. GL_TRIANGLE_FAN with < 3
+	 * verts, GL_QUADS with non-multiple-of-4) as rendering nothing, and
+	 * the game relies on this — draw_partial_tri_fan emits a center +
+	 * variable loop count, so a near-empty gauge flushes a 1–2 vert
+	 * fan. RSX also produces nothing for those cases. The strict checks
+	 * here caused false halts during gameplay. */
+
 	memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
 
 	setDrawEnv();
 	bindTextureForDraw();
 	(void)fpBuf; /* buffer contents are patched via InlineTransfer on fpOffset */
 
-	/* POS / NRM / TEX0 / COL attribs */
+	/* POS / NRM / TEX0 / COL attribs.
+	 * F32 attribs require each per-vertex offset to be 4-byte aligned;
+	 * drawOffset is 64-aligned so the struct field offsets (0/12/24/32)
+	 * keep every element aligned. Checked explicitly because a future
+	 * ImmVtx field reorder would silently misbind on real hardware. */
 	const u32 stride = sizeof(ImmVtx);
+	GFX_ASSERT_ALIGNED(drawOffset + 0,                  4);
+	GFX_ASSERT_ALIGNED(drawOffset + sizeof(float) * 3,  4);
+	GFX_ASSERT_ALIGNED(drawOffset + sizeof(float) * 6,  4);
+	GFX_ASSERT_ALIGNED(drawOffset + sizeof(float) * 8,  4);
 	rsxBindVertexArrayAttrib(context, GCM_VERTEX_ATTRIB_POS, 0,
 	                         drawOffset + 0,
 	                         stride, 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);

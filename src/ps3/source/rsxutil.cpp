@@ -6,6 +6,7 @@
 #include <ppu-types.h>
 #include <sysutil/video.h>
 #include "rsxutil.h"
+#include "ps3_gfx_assert.h"
 
 #define GCM_LABEL_INDEX 255
 
@@ -102,6 +103,15 @@ static void initVideoConfiguration()
 
 void setRenderTarget(u32 index)
 {
+	/* Surface offsets and pitches must be 64-aligned on real RSX or
+	 * rsxSetSurface corrupts the colour/depth tile config — RPCS3 hides
+	 * this; real iron shows up as torn or blown-up geometry. */
+	GFX_ASSERT_ALIGNED(color_offset[index], 64);
+	GFX_ASSERT_ALIGNED(depth_offset, 64);
+	GFX_ASSERT(GFX_IS_MULT(color_pitch, 64), "color_pitch must be 64-aligned");
+	GFX_ASSERT(GFX_IS_MULT(depth_pitch, 64), "depth_pitch must be 64-aligned");
+	GFX_ASSERT(index < FRAME_BUFFER_COUNT, "render-target index out of range");
+
 	gcmSurface sf;
 	sf.colorFormat      = GCM_SURFACE_X8R8G8B8;
 	sf.colorTarget      = GCM_SURFACE_TARGET_0;
@@ -143,14 +153,29 @@ void init_screen(void *host_addr, u32 size)
 	color_pitch = display_width * color_depth;
 	depth_pitch = display_width * zs_depth;
 
+	/* RSX requires 64-byte aligned surface pitches. SD widths (640/720)
+	 * satisfy this trivially but a future 1080 mode (1920*4 = 7680) is
+	 * also 64-aligned — catch any mode that breaks the contract. */
+	GFX_ASSERT(GFX_IS_MULT(color_pitch, 64), "color_pitch not 64-aligned");
+	GFX_ASSERT(GFX_IS_MULT(depth_pitch, 64), "depth_pitch not 64-aligned");
+	GFX_ASSERT_ALIGNED(host_addr, HOST_ADDR_ALIGNMENT);
+
 	for (u32 i = 0; i < FRAME_BUFFER_COUNT; i++) {
 		color_buffer[i] = (u32*)rsxMemalign(64, display_height * color_pitch);
-		rsxAddressToOffset(color_buffer[i], &color_offset[i]);
+		GFX_ASSERT(color_buffer[i] != NULL, "color_buffer rsxMemalign failed");
+		GFX_ASSERT_ALIGNED(color_buffer[i], 64);
+		s32 rc = rsxAddressToOffset(color_buffer[i], &color_offset[i]);
+		GFX_ASSERT(rc == 0, "rsxAddressToOffset(color_buffer) failed");
+		GFX_ASSERT_ALIGNED(color_offset[i], 64);
 		gcmSetDisplayBuffer(i, color_offset[i], color_pitch, display_width, display_height);
 	}
 
 	depth_buffer = (u32*)rsxMemalign(64, display_height * depth_pitch);
-	rsxAddressToOffset(depth_buffer, &depth_offset);
+	GFX_ASSERT(depth_buffer != NULL, "depth_buffer rsxMemalign failed");
+	GFX_ASSERT_ALIGNED(depth_buffer, 64);
+	s32 rc = rsxAddressToOffset(depth_buffer, &depth_offset);
+	GFX_ASSERT(rc == 0, "rsxAddressToOffset(depth_buffer) failed");
+	GFX_ASSERT_ALIGNED(depth_offset, 64);
 }
 
 void waitflip()

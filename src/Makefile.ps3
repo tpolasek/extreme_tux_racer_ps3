@@ -82,7 +82,7 @@ GAME_CPP	:=	$(filter-out n_window.cpp n_audio.cpp,$(notdir $(wildcard $(CURDIR)/
 
 # PS3 backend sources (explicit list — excludes the demo's main.cpp, which
 # would otherwise collide with the game's src/main.cpp on the flat object dir).
-PS3_CPP		:=	rsxutil.cpp ps3_gl.cpp n_window_ps3.cpp n_audio_ps3.cpp ps3_main.cpp
+PS3_CPP		:=	rsxutil.cpp ps3_gl.cpp ps3_gfx_assert.cpp n_window_ps3.cpp n_audio_ps3.cpp ps3_main.cpp
 
 export CPPFILES	:=	$(GAME_CPP) $(PS3_CPP)
 export CFILES	:=

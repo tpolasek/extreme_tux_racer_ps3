@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "ogl.h"
 #include "gui.h"
 #include <cctype>
+#include <vector>
 
 
 static const GLshort fullsize_texture[] = {
@@ -294,9 +295,54 @@ void CTexture::DrawNumStr(const std::string& s, int x, int y, float size, const 
 	glColor(col);
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	for (std::size_t i=0; i < s.size(); i++) {
-		DrawNumChr(s[i], x + (int)i*qw, y, qw, qh);
+
+	/* Batch all glyph quads into one vertex array so the entire string
+	 * is a single glDrawArrays (one flush) instead of one per character. */
+	static std::vector<GLfloat> vtx;
+	static std::vector<GLfloat> tex;
+	vtx.clear();
+	tex.clear();
+
+	const float texw = 22.0f / 256.0f;
+	int h_bot = Winsys.resolution.height - y - qh;
+	int h_top = Winsys.resolution.height - y;
+
+	for (std::size_t i = 0; i < s.size(); i++) {
+		int idx;
+		if (std::isdigit((unsigned char)s[i]))
+			idx = s[i] - '0';
+		else if (s[i] == ':')
+			idx = 10;
+		else if (s[i] == ' ')
+			idx = 11;
+		else
+			continue;
+
+		float texleft = idx * texw;
+		float texright = (idx + 1) * texw;
+		float gx = (float)(x + (int)i * qw);
+		float gx_r = (float)(x + (int)i * qw + qw * 0.9f);
+
+		tex.insert(tex.end(), {
+			texleft, 1,
+			texright, 1,
+			texright, 0,
+			texleft, 0
+		});
+		vtx.insert(vtx.end(), {
+			gx,    (float)h_bot,
+			gx_r,  (float)h_bot,
+			gx_r,  (float)h_top,
+			gx,    (float)h_top
+		});
 	}
+
+	if (!vtx.empty()) {
+		glVertexPointer(2, GL_FLOAT, 0, vtx.data());
+		glTexCoordPointer(2, GL_FLOAT, 0, tex.data());
+		glDrawArrays(GL_QUADS, 0, (GLsizei)(vtx.size() / 2));
+	}
+
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 	glDisableClientState(GL_VERTEX_ARRAY);
 }

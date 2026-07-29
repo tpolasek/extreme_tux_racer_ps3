@@ -28,6 +28,8 @@ GNU General Public License for more details.
 #include "env.h"
 #include "game_ctrl.h"
 #include "physics.h"
+#include <vector>
+#include <cmath>
 
 #define TEX_SCALE 6
 static const bool clip_course = true;
@@ -50,7 +52,6 @@ void RenderCourse() {
 }
 
 void DrawTrees() {
-	std::size_t tree_type = -1;
 	const CControl*	ctrl = g_game.player->ctrl;
 
 	ScopedRenderMode rm(TREES);
@@ -60,123 +61,151 @@ void DrawTrees() {
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	set_material(colWhite, colBlack, 1.0);
 
-	// Trees
-	for (std::size_t i = 0; i< Course.CollArr.size(); i++) {
-		if (clip_course) {
-			if (ctrl->viewpos.z - Course.CollArr[i].pt.z > fwd_clip_limit) continue;
-			if (Course.CollArr[i].pt.z - ctrl->viewpos.z > bwd_clip_limit) continue;
-		}
+	/* Reusable accumulators (static so capacity persists across frames). */
+	static std::vector<GLfloat> vpos;
+	static std::vector<GLshort>  vtex;
+	static std::vector<GLfloat>  vnrm;
 
-		if (Course.CollArr[i].tree_type != tree_type) {
-			tree_type = Course.CollArr[i].tree_type;
-			Course.ObjTypes[tree_type].texture->Bind();
-		}
-
-		glPushMatrix();
-		glTranslate(Course.CollArr[i].pt);
-		if (param.perf_level > 1) glRotatef(1, 0, 1, 0);
-
-		float treeRadius = Course.CollArr[i].diam / 2.0;
-		float treeHeight = Course.CollArr[i].height;
+	// ===================== Trees (crossed billboards) =====================
+	/* Bake world-space vertex positions and issue one glDrawArrays per
+	 * texture run, instead of one flush per tree. The per-tree matrix
+	 * stack (translate + 1-degree Y rotation) is folded into the offsets. */
+	{
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 		glNormal3i(0, 0, 1);
 
-		static const GLshort tex[] = {
-			0, 1,
-			1, 1,
-			1, 0,
-			0, 0,
-			0, 1,
-			1, 1,
-			1, 0,
-			0, 0
+		static const GLshort treeTex[] = {
+			0,1, 1,1, 1,0, 0,0,
+			0,1, 1,1, 1,0, 0,0
 		};
+		const float ang = (param.perf_level > 1)
+			? (1.0f * 3.14159265f / 180.0f) : 0.0f;
+		const float c = cosf(ang), s = sinf(ang);
 
-		const GLfloat vtx[] = {
-			-treeRadius, 0.0,        0.0,
-			    treeRadius,  0.0,        0.0,
-			    treeRadius,  treeHeight, 0.0,
-			    -treeRadius, treeHeight, 0.0,
-			    0.0,         0.0,        -treeRadius,
-			    0.0,         0.0,        treeRadius,
-			    0.0,         treeHeight, treeRadius,
-			    0.0,         treeHeight, -treeRadius
-		    };
-
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-		glVertexPointer(3, GL_FLOAT, 0, vtx);
-		glTexCoordPointer(2, GL_SHORT, 0, tex);
-		glDrawArrays(GL_QUADS, 0, 8);
-
+		std::size_t cur_type = (std::size_t)-1;
+		for (std::size_t i = 0; i < Course.CollArr.size(); i++) {
+			if (clip_course) {
+				if (ctrl->viewpos.z - Course.CollArr[i].pt.z > fwd_clip_limit) continue;
+				if (Course.CollArr[i].pt.z - ctrl->viewpos.z > bwd_clip_limit) continue;
+			}
+			std::size_t tt = Course.CollArr[i].tree_type;
+			if (tt != cur_type) {
+				if (!vpos.empty()) {
+					glVertexPointer(3, GL_FLOAT, 0, vpos.data());
+					glTexCoordPointer(2, GL_SHORT, 0, vtex.data());
+					glDrawArrays(GL_QUADS, 0, (GLsizei)(vpos.size() / 3));
+					vpos.clear();
+					vtex.clear();
+				}
+				cur_type = tt;
+				Course.ObjTypes[tt].texture->Bind();
+			}
+			const TCollidable& t = Course.CollArr[i];
+			float r = (float)(t.diam / 2.0);
+			float h = (float)t.height;
+			float px = (float)t.pt.x, py = (float)t.pt.y, pz = (float)t.pt.z;
+			float cr = c * r, sr = s * r;
+			/* Quad 1: rotated X axis (c,0,-s) */
+			GLfloat q1[12] = {
+				px - cr, py,     pz + sr,
+				px + cr, py,     pz - sr,
+				px + cr, py + h, pz - sr,
+				px - cr, py + h, pz + sr,
+			};
+			/* Quad 2: rotated Z axis (s,0,c) */
+			GLfloat q2[12] = {
+				px - sr, py,     pz - cr,
+				px + sr, py,     pz + cr,
+				px + sr, py + h, pz + cr,
+				px - sr, py + h, pz - cr,
+			};
+			vpos.insert(vpos.end(), q1, q1 + 12);
+			vpos.insert(vpos.end(), q2, q2 + 12);
+			vtex.insert(vtex.end(), treeTex, treeTex + 16);
+		}
+		if (!vpos.empty()) {
+			glVertexPointer(3, GL_FLOAT, 0, vpos.data());
+			glTexCoordPointer(2, GL_SHORT, 0, vtex.data());
+			glDrawArrays(GL_QUADS, 0, (GLsizei)(vpos.size() / 3));
+			vpos.clear();
+			vtex.clear();
+		}
 		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 		glDisableClientState(GL_VERTEX_ARRAY);
-
-		glPopMatrix();
 	}
 
-	// Items
-	const TObjectType* item_type = nullptr;
-
-	for (std::size_t i = 0; i< Course.NocollArr.size(); i++) {
-		if (Course.NocollArr[i].collectable == 0 || Course.NocollArr[i].type.drawable == false) continue;
-		if (clip_course) {
-			if (ctrl->viewpos.z - Course.NocollArr[i].pt.z > fwd_clip_limit) continue;
-			if (Course.NocollArr[i].pt.z - ctrl->viewpos.z > bwd_clip_limit) continue;
-		}
-
-		if (&Course.NocollArr[i].type != item_type) {
-			item_type = &Course.NocollArr[i].type;
-			item_type->texture->Bind();
-		}
-
-		glPushMatrix();
-		glTranslate(Course.NocollArr[i].pt);
-		double itemRadius = Course.NocollArr[i].diam / 2;
-		double itemHeight = Course.NocollArr[i].height;
-
-		TVector3d normal;
-		if (item_type->use_normal) {
-			normal = item_type->normal;
-		} else {
-			normal = ctrl->viewpos - Course.NocollArr[i].pt;
-			normal.Norm();
-		}
-		glNormal3(normal);
-		normal.y = 0.0;
-		normal.Norm();
-
-		static const GLshort tex[] = {
-			0, 1,
-			1, 1,
-			1, 0,
-			0, 0
-		};
-
-		const GLfloat vtx[] = {
-			static_cast<GLfloat>(-itemRadius*normal.z),
-			0.f,
-			static_cast<GLfloat>(itemRadius*normal.x),
-
-			static_cast<GLfloat>(itemRadius*normal.z),
-			0.f,
-			static_cast<GLfloat>(-itemRadius*normal.x),
-			static_cast<GLfloat>(itemRadius*normal.z),
-			static_cast<GLfloat>(itemHeight),
-			static_cast<GLfloat>(-itemRadius*normal.x),
-			static_cast<GLfloat>(-itemRadius*normal.z),
-			static_cast<GLfloat>(itemHeight),
-			static_cast<GLfloat>(itemRadius*normal.x)
-		};
+	// ===================== Items (camera-facing billboards) =====================
+	/* Per-item lighting normal supplied via glNormalPointer so a whole
+	 * texture run can be drawn in one flush. */
+	{
 		glEnableClientState(GL_VERTEX_ARRAY);
 		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glEnableClientState(GL_NORMAL_ARRAY);
 
-		glVertexPointer(3, GL_FLOAT, 0, vtx);
-		glTexCoordPointer(2, GL_SHORT, 0, tex);
-		glDrawArrays(GL_QUADS, 0, 4);
+		static const GLshort itemTex[] = { 0,1, 1,1, 1,0, 0,0 };
 
+		const TObjectType* item_type = nullptr;
+		for (std::size_t i = 0; i < Course.NocollArr.size(); i++) {
+			if (Course.NocollArr[i].collectable == 0 || Course.NocollArr[i].type.drawable == false) continue;
+			if (clip_course) {
+				if (ctrl->viewpos.z - Course.NocollArr[i].pt.z > fwd_clip_limit) continue;
+				if (Course.NocollArr[i].pt.z - ctrl->viewpos.z > bwd_clip_limit) continue;
+			}
+			const TObjectType* it = &Course.NocollArr[i].type;
+			if (it != item_type) {
+				if (!vpos.empty()) {
+					glVertexPointer(3, GL_FLOAT, 0, vpos.data());
+					glTexCoordPointer(2, GL_SHORT, 0, vtex.data());
+					glNormalPointer(GL_FLOAT, 0, vnrm.data());
+					glDrawArrays(GL_QUADS, 0, (GLsizei)(vpos.size() / 3));
+					vpos.clear();
+					vtex.clear();
+					vnrm.clear();
+				}
+				item_type = it;
+				it->texture->Bind();
+			}
+			const TItem& item = Course.NocollArr[i];
+			double itemRadius = item.diam / 2.0;
+			double itemHeight = item.height;
+
+			TVector3d normal;
+			if (it->use_normal) normal = it->normal;
+			else { normal = ctrl->viewpos - item.pt; normal.Norm(); }
+			TVector3d drawNormal = normal;   /* full normal (with y) for lighting */
+			normal.y = 0.0;
+			normal.Norm();                   /* horizontal normal for vert offsets */
+
+			float nx = (float)normal.x, nz = (float)normal.z;
+			float px = (float)item.pt.x, py = (float)item.pt.y, pz = (float)item.pt.z;
+			float ir = (float)itemRadius, ih = (float)itemHeight;
+
+			GLfloat v[12] = {
+				px - ir * nz, py,       pz + ir * nx,
+				px + ir * nz, py,       pz - ir * nx,
+				px + ir * nz, py + ih,  pz - ir * nx,
+				px - ir * nz, py + ih,  pz + ir * nx,
+			};
+			vpos.insert(vpos.end(), v, v + 12);
+			vtex.insert(vtex.end(), itemTex, itemTex + 8);
+			for (int k = 0; k < 4; k++) {
+				vnrm.push_back((float)drawNormal.x);
+				vnrm.push_back((float)drawNormal.y);
+				vnrm.push_back((float)drawNormal.z);
+			}
+		}
+		if (!vpos.empty()) {
+			glVertexPointer(3, GL_FLOAT, 0, vpos.data());
+			glTexCoordPointer(2, GL_SHORT, 0, vtex.data());
+			glNormalPointer(GL_FLOAT, 0, vnrm.data());
+			glDrawArrays(GL_QUADS, 0, (GLsizei)(vpos.size() / 3));
+			vpos.clear();
+			vtex.clear();
+			vnrm.clear();
+		}
+		glDisableClientState(GL_NORMAL_ARRAY);
 		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 		glDisableClientState(GL_VERTEX_ARRAY);
-		glPopMatrix();
 	}
 }

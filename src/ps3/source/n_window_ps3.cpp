@@ -259,7 +259,11 @@ void RenderWindow::display() {
 	if (framerateLimit_ > 0) {
 		long long target = 1000000LL / (long long)framerateLimit_;
 		long long elapsed = (long long)nowUs() - lastSwapUs_;
-		if (elapsed < target) usleep((useconds_t)(target - elapsed));
+		if (elapsed < target) {
+			TIMER_START("FREE_TIME");
+			usleep((useconds_t)(target - elapsed));
+			TIMER_END("FREE_TIME");
+		}
 	}
 	TIMER_START("FLIP");
 	flip();

@@ -368,7 +368,9 @@ void CCharShape::DrawCharSphere(int num_divisions) const {
 	gluQuadricDrawStyle(qobj, GLU_FILL);
 	gluQuadricOrientation(qobj, GLU_OUTSIDE);
 	gluQuadricNormals(qobj, GLU_SMOOTH);
-	gluSphere(qobj, 1.0, (GLint)2.0 * num_divisions, num_divisions);
+	/* Quarter the stack count to cut per-sphere vert/flush cost. The shim's
+	 * gluSphere floor (stacks>=2) covers the small-divisions edge case. */
+	gluSphere(qobj, 1.0, (GLint)2.0 * num_divisions, num_divisions / 2);
 	gluDeleteQuadric(qobj);
 }
 

@@ -896,6 +896,7 @@ void glBindTexture(GLenum, GLuint t) {
 void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
                   GLenum, GLenum, const GLvoid *data) {
 	if (g_currentTex == 0 || g_currentTex >= PS3_MAX_TEXTURES) return;
+	TIMER_START("TEXIMAGE2D");
 	/* RSX caps A8R8G8B8 dimensions at 4096 and needs w,h > 0. A 0 dim
 	 * would pitch-align to 0 and let rsxMemalign hand back NULL — the
 	 * assert fires earlier so the call site shows in the TTY capture. */
@@ -913,7 +914,7 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 
 	if (T.buffer) rsxFree(T.buffer);
 	T.buffer = (u8 *)rsxMemalign(128, (u32)pitch * (u32)h);
-	if (!T.buffer) { sysTtyTrace("[etr] glTexImage2D: rsxMemalign FAILED\n"); return; }
+	if (!T.buffer) { sysTtyTrace("[etr] glTexImage2D: rsxMemalign FAILED\n"); TIMER_END("TEXIMAGE2D"); return; }
 	GFX_ASSERT_ALIGNED(T.buffer, 128);
 
 	const u8 *src = (const u8 *)data;
@@ -944,6 +945,7 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	 * catch any future regression in allocation alignment. */
 	GFX_ASSERT_ALIGNED(T.offset, 128);
 	g_dirtyBits |= DIRTY_TEXTURE;
+	TIMER_END("TEXIMAGE2D");
 }
 
 void glTexParameteri(GLenum, GLenum pname, GLint param) {
@@ -976,6 +978,7 @@ void glClearStencil(GLint s) { g_clearStencil = s; }
 
 void glClear(GLbitfield) {
 	if (!g_rsxReady) return;
+	TIMER_START("CLEAR");
 	u32 col = ((u32)(g_clearA * 255.f) & 0xFF) << 24 |
 	          ((u32)(g_clearR * 255.f) & 0xFF) << 16 |
 	          ((u32)(g_clearG * 255.f) & 0xFF) << 8  |
@@ -984,6 +987,7 @@ void glClear(GLbitfield) {
 	rsxSetClearDepthStencil(context, 0xffffff00u | (g_clearStencil & 0xFF));
 	rsxClearSurface(context, GCM_CLEAR_R | GCM_CLEAR_G | GCM_CLEAR_B | GCM_CLEAR_A |
 	                        GCM_CLEAR_S | GCM_CLEAR_Z);
+	TIMER_END("CLEAR");
 }
 
 /* =====================================================================
@@ -1459,6 +1463,7 @@ extern "C" void ps3_gl_flush(void) {
 	float aRef = g_alphaRef;
 	float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
 
+	TIMER_START("FLUSH_FP_PATCHES");
 	if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
 	if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
 	if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, fpOffset, GCM_LOCATION_RSX);
@@ -1474,6 +1479,7 @@ extern "C" void ps3_gl_flush(void) {
 	if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
 	if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
 	if (g_uOutputScale)   rsxSetFragmentProgramParameter(context, g_fpo, g_uOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
+	TIMER_END("FLUSH_FP_PATCHES");
 
 	if (useUiFragmentProgram()) {
 		rsxLoadFragmentProgramLocation(context, g_uiFpo, g_uiFpOffset, GCM_LOCATION_RSX);

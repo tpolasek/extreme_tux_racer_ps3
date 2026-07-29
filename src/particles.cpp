@@ -450,27 +450,6 @@ void generate_particles(const CControl *ctrl, double dtime, const TVector3d& pos
 static CFlakes Flakes;
 
 
-void TFlake::Draw(const TPlane& lp, const TPlane& rp, bool rotate_flake, float dir_angle) const {
-	if ((DistanceToPlane(lp, pt) < 0) && (DistanceToPlane(rp, pt) < 0)) {
-		glPushMatrix();
-		glTranslate(pt);
-		if (rotate_flake) glRotatef(dir_angle, 0, 1, 0);
-
-		const GLfloat vtx[] = {
-			0,    0,    0,
-			size, 0,    0,
-			size, size, 0,
-			0,    size, 0
-		};
-		glVertexPointer(3, GL_FLOAT, 0, vtx);
-		glTexCoordPointer(2, GL_FLOAT, 0, tex);
-		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-
-		glPopMatrix();
-	}
-}
-
-
 TFlakeArea::TFlakeArea(
     std::size_t num_flakes,
     float xrange_,
@@ -495,6 +474,23 @@ TFlakeArea::TFlakeArea(
 	left = right = bottom = top = front = back = 0.f;
 }
 
+/* Batched flake draw.
+ *
+ * The original path issued one glDrawArrays per flake (with a per-flake
+ * glPushMatrix/glTranslate/glRotatef around it), which on the PS3 GL shim
+ * means one rsx draw + full per-flush state upload per flake — dominating
+ * the per-frame cost on snow-heavy scenes.
+ *
+ * Each flake is a 4-vertex unit quad scaled by `size`, translated by `pt`,
+ * and (optionally) rotated around Y by `dir_angle` (the same angle for
+ * every flake in the area). We can therefore bake translate+rotate into
+ * world-space vertex positions and emit one GL_QUADS draw for the whole
+ * area. Culled flakes (those outside either side clip plane) are skipped
+ * while building the array.
+ *
+ * Rotation math (corners have z=0, so the Y-rotation matrix simplifies):
+ *   glRotatef(θ, 0, 1, 0) maps (x,y,0) -> (cosθ·x, y, -sinθ·x)
+ */
 void TFlakeArea::Draw(const CControl *ctrl) const {
 	if (g_game.snow_id < 1 || flakes.empty())
 		return;
@@ -502,6 +498,37 @@ void TFlakeArea::Draw(const CControl *ctrl) const {
 	const TPlane& lp = get_left_clip_plane();
 	const TPlane& rp = get_right_clip_plane();
 	float dir_angle(std::atan(ctrl->viewdir.x / ctrl->viewdir.z) * 180 / M_PI);
+
+	float ca = 1.f, sa = 0.f;
+	if (rotate_flake) {
+		float r = dir_angle * (float)M_PI / 180.f;
+		ca = std::cos(r);
+		sa = std::sin(r);
+	}
+
+	std::vector<GLfloat> verts, tcoords;
+	verts.reserve(flakes.size() * 12);
+	tcoords.reserve(flakes.size() * 8);
+
+	for (std::size_t i = 0; i < flakes.size(); i++) {
+		const TFlake &f = flakes[i];
+		if (DistanceToPlane(lp, f.pt) >= 0) continue;
+		if (DistanceToPlane(rp, f.pt) >= 0) continue;
+
+		const float s  = f.size;
+		const float cs = ca * s;
+		const float ss = sa * s;
+		const float px = f.pt.x, py = f.pt.y, pz = f.pt.z;
+
+		verts.push_back(px);       verts.push_back(py);     verts.push_back(pz);       /* v0 */
+		verts.push_back(px + cs);  verts.push_back(py);     verts.push_back(pz - ss);  /* v1 */
+		verts.push_back(px + cs);  verts.push_back(py + s); verts.push_back(pz - ss);  /* v2 */
+		verts.push_back(px);       verts.push_back(py + s); verts.push_back(pz);       /* v3 */
+
+		for (int j = 0; j < 8; j++) tcoords.push_back(f.tex[j]);
+	}
+
+	if (verts.empty()) return;
 
 	ScopedRenderMode rm(PARTICLES);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
@@ -511,9 +538,9 @@ void TFlakeArea::Draw(const CControl *ctrl) const {
 
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	for (std::size_t i=0; i < flakes.size(); i++) {
-		flakes[i].Draw(lp, rp, rotate_flake, dir_angle);
-	}
+	glVertexPointer(3, GL_FLOAT, 0, verts.data());
+	glTexCoordPointer(2, GL_FLOAT, 0, tcoords.data());
+	glDrawArrays(GL_QUADS, 0, (GLsizei)(verts.size() / 3));
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 }
@@ -764,36 +791,55 @@ void TCurtain::SetStartParams(const CControl* ctrl) {
 	}
 }
 
+/* Batched curtain draw — same rationale as TFlakeArea::Draw. Each element
+ * has its own angle (not shared across the curtain), so c/s are computed
+ * per element; cheap (one cos + one sin per quad).
+ *
+ * Local quad (z=0): (-h,-h,0), (h,-h,0), (h,h,0), (-h,h,0).
+ * glRotatef(-angle, 0, 1, 0) maps (x,y,0) -> (cos·x, y, sin·x) with
+ * cos/sin of -angle. Then translate by pt. */
 void TCurtain::Draw() const {
 	Tex.BindTex(texture);
 	float halfsize = size / 2.f;
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	for (unsigned int co=0; co<numCols; co++) {
-		for (unsigned int row=0; row<numRows; row++) {
-			const TVector3d& pt = curtains[co][row].pt;
-			glPushMatrix();
-			glTranslate(pt);
-			glRotatef(-curtains[co][row].angle, 0, 1, 0);
 
-			static const GLshort tex[] = {
-				0, 1,
-				1, 1,
-				1, 0,
-				0, 0
-			};
-			const GLfloat vtx[] = {
-				-halfsize, -halfsize, 0,
-				    halfsize, -halfsize, 0,
-				    halfsize, halfsize, 0,
-				    -halfsize, halfsize, 0
-			    };
-			glVertexPointer(3, GL_FLOAT, 0, vtx);
-			glTexCoordPointer(2, GL_SHORT, 0, tex);
-			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-			glPopMatrix();
+	std::vector<GLfloat> verts, tcoords;
+	verts.reserve((std::size_t)numCols * numRows * 12);
+	tcoords.reserve((std::size_t)numCols * numRows * 8);
+
+	static const GLfloat tex[8] = {
+		0.f, 1.f,
+		1.f, 1.f,
+		1.f, 0.f,
+		0.f, 0.f
+	};
+
+	for (unsigned int co = 0; co < numCols; co++) {
+		for (unsigned int row = 0; row < numRows; row++) {
+			const TCurtainElement &c = curtains[co][row];
+			float r  = -c.angle * (float)M_PI / 180.f;
+			float cc = std::cos(r);
+			float sc = std::sin(r);
+			const float h   = halfsize;
+			const float cch = cc * h;
+			const float sch = sc * h;
+			const float px  = c.pt.x, py = c.pt.y, pz = c.pt.z;
+
+			verts.push_back(px - cch); verts.push_back(py - h); verts.push_back(pz + sch); /* v0 */
+			verts.push_back(px + cch); verts.push_back(py - h); verts.push_back(pz - sch); /* v1 */
+			verts.push_back(px + cch); verts.push_back(py + h); verts.push_back(pz - sch); /* v2 */
+			verts.push_back(px - cch); verts.push_back(py + h); verts.push_back(pz + sch); /* v3 */
+
+			for (int j = 0; j < 8; j++) tcoords.push_back(tex[j]);
 		}
 	}
+
+	if (verts.empty()) return;
+
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	glVertexPointer(3, GL_FLOAT, 0, verts.data());
+	glTexCoordPointer(2, GL_FLOAT, 0, tcoords.data());
+	glDrawArrays(GL_QUADS, 0, (GLsizei)(verts.size() / 3));
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 	glDisableClientState(GL_VERTEX_ARRAY);
 }

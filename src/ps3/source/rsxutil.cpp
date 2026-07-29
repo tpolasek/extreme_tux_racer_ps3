@@ -7,6 +7,7 @@
 #include <sysutil/video.h>
 #include "rsxutil.h"
 #include "ps3_gfx_assert.h"
+#include "ps3_log.h"
 
 #define GCM_LABEL_INDEX 255
 
@@ -180,9 +181,11 @@ void init_screen(void *host_addr, u32 size)
 
 void waitflip()
 {
+	TIMER_START("FLIP_WAIT");
 	while (gcmGetFlipStatus() != 0)
 		usleep(200);
 	gcmResetFlipStatus();
+	TIMER_END("FLIP_WAIT");
 }
 
 void flip()

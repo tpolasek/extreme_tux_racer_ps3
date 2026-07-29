@@ -41,6 +41,7 @@ GNU General Public License for more details.
 #include "winsys.h"
 #include "physics.h"
 #include "tux.h"
+#include "ps3_log.h"
 #include <algorithm>
 #include <cstdlib>
 #define MAX_JUMP_AMT 1.0
@@ -333,29 +334,48 @@ void CRacing::Loop(float time_step) {
 	PlayTerrainSound(ctrl, airborne);
 
 //  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+	TIMER_START("RACE_UPDATE");
 	ctrl->UpdatePlayerPos(time_step);
-//  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
 	if (g_game.finish) IncCameraDistance(time_step);
 	update_view(ctrl, time_step);
 	UpdateTrackmarks(ctrl);
-
 	SetupViewFrustum(ctrl);
+	TIMER_END("RACE_UPDATE");
+
 	if (sky) Env.DrawSkybox(ctrl->viewpos);
 	if (fog) Env.DrawFog();
 	Env.SetupLight();
+
+	TIMER_START("RACE_RENDER_COURSE");
 	if (terr) RenderCourse();
 	DrawTrackmarks();
+	TIMER_END("RACE_RENDER_COURSE");
+
+	TIMER_START("RACE_DRAW_TREES");
 	if (trees) DrawTrees();
+	TIMER_END("RACE_DRAW_TREES");
+
 	if (param.perf_level > 2) {
+		TIMER_START("RACE_DRAW_PARTICLES");
 		update_particles(time_step);
 		draw_particles(ctrl);
+		TIMER_END("RACE_DRAW_PARTICLES");
 	}
+
+	TIMER_START("RACE_DRAW_TUX");
 	g_game.character->shape->Draw();
+	TIMER_END("RACE_DRAW_TUX");
+
 	UpdateWind(time_step);
 	UpdateSnow(time_step, ctrl);
+
+	TIMER_START("RACE_DRAW_SNOW");
 	DrawSnow(ctrl);
+	TIMER_END("RACE_DRAW_SNOW");
+
+	TIMER_START("RACE_DRAW_HUD");
 	DrawHud(ctrl);
+	TIMER_END("RACE_DRAW_HUD");
 
 	Reshape(Winsys.resolution.width, Winsys.resolution.height);
 	Winsys.SwapBuffers();

@@ -1,0 +1,33 @@
+/* Lightweight ETR terrain fragment program.
+ *
+ * Lighting is computed by etr_terrain.vcg and arrives in vColor, so this stage
+ * only samples the texture, applies that interpolated lighting/alpha, and fog.
+ */
+void main
+(
+	float3 eyePos   : TEXCOORD0,
+	float2 texcoord : TEXCOORD2,
+	float4 vColor   : COLOR,
+
+	uniform float3  fogColor,
+	uniform float2  fogSE,
+	uniform float   doFog,
+	uniform float4  outputScale,
+
+	uniform sampler2D texture,
+
+	out float4 oColor
+)
+{
+	float4 tex = tex2D(texture, texcoord);
+	oColor = tex * vColor;
+
+	if (doFog > 0.5f) {
+		float z = -eyePos.z;
+		float f = (fogSE.y - z) / max(fogSE.y - fogSE.x, 0.0001f);
+		oColor.rgb = lerp(fogColor, oColor.rgb, saturate(f));
+	}
+
+	/* Preserve the single full-vector output used to avoid RSX alpha damage. */
+	oColor *= outputScale;
+}

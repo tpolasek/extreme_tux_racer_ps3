@@ -42,6 +42,11 @@ GNU General Public License for more details.
 #include "physics.h"
 #include "tux.h"
 #include "ps3_log.h"
+#ifdef DEMO_MODE
+#include "screenshot.h"
+#include "game_config.h"
+#include <string>
+#endif
 #include <algorithm>
 #include <cstdlib>
 #define MAX_JUMP_AMT 1.0
@@ -321,6 +326,16 @@ static void CalcTrickControls(CControl *ctrl, float time_step, bool airborne) {
 // ====================================================================
 
 void CRacing::Loop(float time_step) {
+#ifdef DEMO_MODE
+	static int sDemoFrame = 0;
+	if (g_game.time >= 10.f) {
+		// Capture right before the demo exits: <=480p, aspect-correct bilinear.
+		std::string p = param.save_dir + SEP "demo_close.png";
+		demoScreenshot(p.c_str(), 640, 480);
+		State::manager.RequestQuit();
+		return;
+	}
+#endif
 	CControl *ctrl = g_game.player->ctrl;
 	double ycoord = Course.FindYCoord(ctrl->cpos.x, ctrl->cpos.z);
 	bool airborne = (bool)(ctrl->cpos.y > (ycoord + JUMP_MAX_START_HEIGHT));
@@ -379,6 +394,13 @@ void CRacing::Loop(float time_step) {
 
 	Reshape(Winsys.resolution.width, Winsys.resolution.height);
 	Winsys.SwapBuffers();
+#ifdef DEMO_MODE
+	if (++sDemoFrame == 150) {
+		// Full native-resolution capture mid-race.
+		std::string p = param.save_dir + SEP "demo_frame150.png";
+		demoScreenshot(p.c_str(), 0, 0);
+	}
+#endif
 	if (g_game.finish == false) g_game.time += time_step;
 }
 

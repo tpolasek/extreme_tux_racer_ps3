@@ -25,5 +25,6 @@ void setRenderTarget(u32 index);
 void init_screen(void *host_addr, u32 size);
 void waitflip();
 void flip();
+void rsxWaitIdle(void);   /* drain RSX pipeline (for host-side framebuffer reads) */
 
 #endif

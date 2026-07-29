@@ -40,7 +40,10 @@ CONTENTID	:=	UP0001-$(APPID)_00-0000000000000001
 # -std=gnu++14 (not c++14): the GNU dialect leaves __STRICT_ANSI__ undefined,
 # which is what PS3 newlib's <stdio.h> checks to expose snprintf/vsnprintf.
 # With plain -std=c++14 the C++ standard library fails to find ::vsnprintf.
-CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE)
+# DEMO_MODE defaults on (auto-pick char+course, play 10s, exit). Disable with
+# `make DEMO_MODE=` for a normal menu-driven build.
+DEMO_MODE	?=	1
+CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(DEMO_MODE),-DDEMO_MODE=1)
 CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
@@ -82,7 +85,7 @@ GAME_CPP	:=	$(filter-out n_window.cpp n_audio.cpp,$(notdir $(wildcard $(CURDIR)/
 
 # PS3 backend sources (explicit list — excludes the demo's main.cpp, which
 # would otherwise collide with the game's src/main.cpp on the flat object dir).
-PS3_CPP		:=	rsxutil.cpp ps3_gl.cpp ps3_gfx_assert.cpp n_window_ps3.cpp n_audio_ps3.cpp ps3_main.cpp ps3_log.cpp
+PS3_CPP		:=	rsxutil.cpp ps3_gl.cpp ps3_gfx_assert.cpp n_window_ps3.cpp n_audio_ps3.cpp ps3_main.cpp ps3_log.cpp screenshot_ps3.cpp
 
 export CPPFILES	:=	$(GAME_CPP) $(PS3_CPP)
 export CFILES	:=
@@ -91,8 +94,8 @@ export OFILES	:=	$(addsuffix .o,$(VPOFILES)) \
 					$(CPPFILES:.cpp=.o)
 
 # shaders: 3D fixed-function stand-in plus an RGBA-preserving UI fast path.
-VCGFILES	:=	etr3d.vcg
-FCGFILES	:=	etr3d.fcg etr_ui.fcg
+VCGFILES	:=	etr3d.vcg etr_terrain.vcg
+FCGFILES	:=	etr3d.fcg etr_terrain.fcg etr_ui.fcg
 VPOFILES	:=	$(VCGFILES:.vcg=.vpo)
 FPOFILES	:=	$(FCGFILES:.fcg=.fpo)
 

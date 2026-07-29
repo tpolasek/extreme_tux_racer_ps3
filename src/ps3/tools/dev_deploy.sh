@@ -53,7 +53,7 @@ echo "[1/4] Rebuilding PPU binary"
 cd "$ROOT/src"
 BUILD_LOG="$(mktemp)"
 trap 'rm -f "$BUILD_LOG"' EXIT
-if ! make -f Makefile.ps3 -j"$(nproc)" >"$BUILD_LOG" 2>&1; then
+if ! make -f Makefile.ps3 DEMO_MODE= -j"$(nproc)" >"$BUILD_LOG" 2>&1; then
     echo "=== BUILD FAILED -- full output: ==="
     cat "$BUILD_LOG"
     exit 1

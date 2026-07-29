@@ -57,6 +57,13 @@ static void waitRSXIdle()
 	waitFinish();
 }
 
+/* Public wrapper: drain the RSX so host code can safely read surfaces that
+ * the GPU has written (e.g. framebuffer screenshots under DEMO_MODE). */
+void rsxWaitIdle(void)
+{
+	waitRSXIdle();
+}
+
 static void initVideoConfiguration()
 {
 	s32 rval = 0;

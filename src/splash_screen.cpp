@@ -32,6 +32,9 @@ GNU General Public License for more details.
 #include "translation.h"
 #include "regist.h"
 #include "winsys.h"
+#ifdef DEMO_MODE
+#include "loading.h"
+#endif
 
 CSplashScreen SplashScreen;
 Text* Failure = nullptr;
@@ -89,8 +92,26 @@ void CSplashScreen::Loop(float time_step) {
 		} else
 			reason += Trans.Text(94) + "\n";
 
-		if (reason.empty())
+		if (reason.empty()) {
+#ifdef DEMO_MODE
+			// Auto-pick first character + first course, skip menus.
+			// Mirrors CRegist::Enter() (SetSinglePlayer) + QuitRegistration()
+			// (regist.cpp) + SetRaceConditions() (race_select.cpp), using
+			// widget defaults of index 0. SetSinglePlayer MUST come first:
+			// it populates the player list that GetPlayer(0) indexes.
+			Players.SetSinglePlayer("bunny");
+			Players.ResetControls();
+			Players.AllocControl(0);
+			g_game.player = Players.GetPlayer(0);
+			g_game.character = &Char.CharList[0];
+			Char.FreeCharacterPreviews();
+			g_game.course = &(*Course.currentCourseList)[0];
+			g_game.theme_id = (*Course.currentCourseList)[0].music_theme;
+			State::manager.RequestEnterState(Loading);
+#else
 			State::manager.RequestEnterState(Regist);
+#endif
+		}
 		else { // Failure
 			FT.AutoSizeN(6);
 			int top = AutoYPosN(60);

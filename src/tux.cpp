@@ -683,84 +683,53 @@ void CCharShape::DrawShadowVertex(double x, double y, double z, const TMatrix<4,
 }
 
 void CCharShape::DrawShadowSphere(const TMatrix<4, 4>& mat) const {
-	double theta, phi, d_theta, d_phi, eps, twopi;
-	double x, y, z;
 	int div = param.tux_shadow_sphere_divisions;
+	if (div < 2) div = 2;
 
-	eps = 1e-15;
-	twopi = M_PI * 2.0;
-	d_theta = d_phi = M_PI / div;
+	const int slices = div * 2;
+	const int stacks = div;
+	const double d_theta = 2.0 * M_PI / slices;
+	const double d_phi = M_PI / stacks;
 
-	for (phi = 0.0; phi + eps < M_PI; phi += d_phi) {
-		double cos_theta, sin_theta;
-		double sin_phi, cos_phi;
-		double sin_phi_d_phi, cos_phi_d_phi;
+	/* One connected strip per projected shadow sphere.  The previous north
+	 * fan + middle strips + south fan issued `div` separate RSX draws for
+	 * every shadow-casting body node.  Repeated pole vertices and degenerate
+	 * joins preserve the same surface while reducing that to one draw. */
+	glBegin(GL_TRIANGLE_STRIP);
+	/* Two leading degenerates put the north-cap triangles on the same
+	 * outward-facing winding as the old GL_TRIANGLE_FAN. */
+	DrawShadowVertex(0.0, 0.0, 1.0, mat);
+	DrawShadowVertex(0.0, 0.0, 1.0, mat);
+	double previous_x = 0.0, previous_y = 0.0, previous_z = 1.0;
+	for (int i = 0; i < stacks; ++i) {
+		const double phi0 = i * d_phi;
+		const double phi1 = (i + 1) * d_phi;
+		const double sin_phi0 = std::sin(phi0);
+		const double cos_phi0 = std::cos(phi0);
+		const double sin_phi1 = std::sin(phi1);
+		const double cos_phi1 = std::cos(phi1);
 
-		sin_phi = std::sin(phi);
-		cos_phi = std::cos(phi);
-		sin_phi_d_phi = std::sin(phi + d_phi);
-		cos_phi_d_phi = std::cos(phi + d_phi);
+		if (i > 0) {
+			DrawShadowVertex(previous_x, previous_y, previous_z, mat);
+			DrawShadowVertex(sin_phi0, 0.0, cos_phi0, mat);
+		}
 
-		if (phi <= eps) {
-			glBegin(GL_TRIANGLE_FAN);
-			DrawShadowVertex(0., 0., 1., mat);
+		for (int j = 0; j <= slices; ++j) {
+			const double theta = j * d_theta;
+			const double cos_theta = std::cos(theta);
+			const double sin_theta = std::sin(theta);
 
-			for (theta = 0.0; theta + eps < twopi; theta += d_theta) {
-				sin_theta = std::sin(theta);
-				cos_theta = std::cos(theta);
+			DrawShadowVertex(cos_theta * sin_phi0,
+			                 sin_theta * sin_phi0,
+			                 cos_phi0, mat);
 
-				x = cos_theta * sin_phi_d_phi;
-				y = sin_theta * sin_phi_d_phi;
-				z = cos_phi_d_phi;
-				DrawShadowVertex(x, y, z, mat);
-			}
-			x = sin_phi_d_phi;
-			y = 0.0;
-			z = cos_phi_d_phi;
-			DrawShadowVertex(x, y, z, mat);
-			glEnd();
-		} else if (phi + d_phi + eps >= M_PI) {
-			glBegin(GL_TRIANGLE_FAN);
-			DrawShadowVertex(0., 0., -1., mat);
-			for (theta = twopi; theta - eps > 0; theta -= d_theta) {
-				sin_theta = std::sin(theta);
-				cos_theta = std::cos(theta);
-				x = cos_theta * sin_phi;
-				y = sin_theta * sin_phi;
-				z = cos_phi;
-				DrawShadowVertex(x, y, z, mat);
-			}
-			x = sin_phi;
-			y = 0.0;
-			z = cos_phi;
-			DrawShadowVertex(x, y, z, mat);
-			glEnd();
-		} else {
-			glBegin(GL_TRIANGLE_STRIP);
-			for (theta = 0.0; theta + eps < twopi; theta += d_theta) {
-				sin_theta = std::sin(theta);
-				cos_theta = std::cos(theta);
-				x = cos_theta * sin_phi;
-				y = sin_theta * sin_phi;
-				z = cos_phi;
-				DrawShadowVertex(x, y, z, mat);
-
-				x = cos_theta * sin_phi_d_phi;
-				y = sin_theta * sin_phi_d_phi;
-				z = cos_phi_d_phi;
-				DrawShadowVertex(x, y, z, mat);
-			}
-			x = sin_phi;
-			y = 0.0;
-			z = cos_phi;
-			DrawShadowVertex(x, y, z, mat);
-			x = sin_phi_d_phi;
-			y = 0.0;
-			z = cos_phi_d_phi;
-			DrawShadowVertex(x, y, z, mat);
-			glEnd();
+			previous_x = cos_theta * sin_phi1;
+			previous_y = sin_theta * sin_phi1;
+			previous_z = cos_phi1;
+			DrawShadowVertex(previous_x, previous_y, previous_z, mat);
 		}
 	}
+	glEnd();
 }
 
 void CCharShape::TraverseDagForShadow(const TCharNode *node, const TMatrix<4, 4>& mat) const {

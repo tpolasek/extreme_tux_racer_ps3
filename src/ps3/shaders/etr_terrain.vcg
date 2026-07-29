@@ -1,0 +1,51 @@
+/* Per-vertex diffuse lighting path for terrain and other zero-spec materials.
+ *
+ * Moving normalization and N.L out of the fragment program is a large saving
+ * for terrain, which covers most of the framebuffer.  The interpolated colour
+ * carries ambient + diffuse lighting and the original vertex alpha.
+ */
+void main
+(
+	float3 position  : POSITION,
+	float3 normal    : NORMAL,
+	float2 texcoord  : TEXCOORD0,
+	float4 color     : COLOR,
+
+	uniform float4x4 projMatrix,
+	uniform float4x4 modelViewMatrix,
+	uniform float4   texPlaneS,
+	uniform float4   texPlaneT,
+	uniform float    doTexGen,
+	uniform float3   globalAmbient,
+	uniform float3   lightPosition,
+	uniform float3   lightColor,
+	uniform float    lightIsDir,
+	uniform float3   matDiffuse,
+
+	out float4 oPosition : POSITION,
+	out float3 oEyePos   : TEXCOORD0,
+	out float2 oTexcoord : TEXCOORD2,
+	out float4 oColor    : COLOR
+)
+{
+	float4 hpos = float4(position, 1.0f);
+	float4 eye = mul(modelViewMatrix, hpos);
+	oPosition = mul(projMatrix, eye);
+	oEyePos = eye.xyz;
+
+	float3 N = normalize(mul((float3x3)modelViewMatrix, normal));
+	float3 L;
+	if (lightIsDir > 0.5f)
+		L = normalize(lightPosition);
+	else
+		L = normalize(lightPosition - eye.xyz);
+
+	float ndotl = max(dot(N, L), 0.0f);
+	float3 kd = matDiffuse * color.rgb;
+	oColor = float4(globalAmbient * kd + lightColor * kd * ndotl, color.a);
+
+	if (doTexGen > 0.5f)
+		oTexcoord = float2(dot(hpos, texPlaneS), dot(hpos, texPlaneT));
+	else
+		oTexcoord = texcoord;
+}

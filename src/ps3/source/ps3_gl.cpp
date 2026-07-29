@@ -1026,7 +1026,19 @@ void glGetIntegerv(GLenum pname, GLint *p) {
 		default:              *p = 0;  break;
 	}
 }
-void glGetFloatv(GLenum, GLfloat *p) { *p = 0.f; }
+void glGetFloatv(GLenum pname, GLfloat *p) {
+	switch (pname) {
+	case GL_MODELVIEW_MATRIX:
+		memcpy(p, g_mv.m, sizeof(float) * 16);
+		break;
+	case GL_PROJECTION_MATRIX:
+		memcpy(p, g_proj.m, sizeof(float) * 16);
+		break;
+	default:
+		*p = 0.f;
+		break;
+	}
+}
 void glGetBooleanv(GLenum, GLboolean *p) { *p = GL_FALSE; }
 
 void glGetTexLevelParameteriv(GLenum, GLint, GLenum pname, GLint *p) {

@@ -42,6 +42,12 @@ still shaped with spheres.
 
 #define SHADOW_HEIGHT 0.03 // ->0.05
 
+/* Back-side cull margin (in Tux-local length units). A visible node whose
+ * centre is more than this far behind Tux's body centre along the view
+ * direction is skipped as occluded by the body. Conservative to avoid
+ * silhouette popping; lower = more aggressive culling. */
+#define TUX_CULL_MARGIN 0.5
+
 #ifdef USE_STENCIL_BUFFER
 static const Color shad_col(0, 0, 0, 76);
 #else
@@ -368,13 +374,17 @@ void CCharShape::DrawCharSphere(int num_divisions) const {
 	gluQuadricDrawStyle(qobj, GLU_FILL);
 	gluQuadricOrientation(qobj, GLU_OUTSIDE);
 	gluQuadricNormals(qobj, GLU_SMOOTH);
-	/* Quarter the stack count to cut per-sphere vert/flush cost. The shim's
+	/* Halve the stack count to cut per-sphere vert/flush cost. The shim's
 	 * gluSphere floor (stacks>=2) covers the small-divisions edge case. */
 	gluSphere(qobj, 1.0, (GLint)2.0 * num_divisions, num_divisions / 2);
 	gluDeleteQuadric(qobj);
 }
 
-void CCharShape::DrawNodes(const TCharNode *node) {
+void CCharShape::DrawNodes(const TCharNode *node, const TMatrix<4, 4>& accum,
+                           const TVector3d& rootEye, const TVector3d& viewDir) {
+	/* Eye-space transform for this node (mirrors the GL push/mult below). */
+	TMatrix<4, 4> nodeAccum = accum * node->trans;
+
 	glPushMatrix();
 	glMultMatrix(node->trans);
 
@@ -388,14 +398,20 @@ void CCharShape::DrawNodes(const TCharNode *node) {
 	}
 
 	if (node->visible == true) {
-		set_material(mat->diffuse, mat->specular, mat->exp);
-
-		DrawCharSphere(node->divisions);
+		/* Back-side cull: skip nodes whose centre is clearly behind Tux's
+		 * body centre along the view direction (occluded by the body).
+		 * Conservative margin avoids popping at the silhouette. */
+		TVector3d nodeEye(nodeAccum[3][0], nodeAccum[3][1], nodeAccum[3][2]);
+		double s = DotProduct(nodeEye - rootEye, viewDir);
+		if (s > -TUX_CULL_MARGIN) {
+			set_material(mat->diffuse, mat->specular, mat->exp);
+			DrawCharSphere(node->divisions);
+		}
 	}
 // -------------- recursive loop -------------------------------------
 	TCharNode *child = node->child;
 	while (child != nullptr) {
-		DrawNodes(child);
+		DrawNodes(child, nodeAccum, rootEye, viewDir);
 		if (child->node_name == highlight_node) highlighted = false;
 		child = child->next;
 	}
@@ -413,7 +429,22 @@ void CCharShape::Draw() {
 	const TCharNode *node = GetNode(0);
 	if (node == nullptr) return;
 
-	DrawNodes(node);
+	/* Capture the eye-space base (view × tuxWorld) for back-side culling.
+	 * The modelview at this point is set up by the caller before Draw(). */
+	float mv[16];
+	glGetFloatv(GL_MODELVIEW_MATRIX, mv);
+	TMatrix<4, 4> base;
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			base[c][r] = (double)mv[c * 4 + r];
+
+	TMatrix<4, 4> rootAccum = base * node->trans;
+	TVector3d rootEye(rootAccum[3][0], rootAccum[3][1], rootAccum[3][2]);
+	TVector3d toCam = -rootEye;             /* root centre -> camera at origin */
+	double camLen = toCam.Length();
+	TVector3d viewDir = (camLen > 1e-6) ? (1.0 / camLen) * toCam : TVector3d(0.0, 0.0, 1.0);
+
+	DrawNodes(node, base, rootEye, viewDir);
 	glDisable(GL_NORMALIZE);
 	if (param.perf_level > 2) DrawShadow();
 	highlighted = false;

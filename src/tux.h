@@ -95,7 +95,8 @@ private:
 
 	// drawing
 	void DrawCharSphere(int num_divisions) const;
-	void DrawNodes(const TCharNode *node);
+	void DrawNodes(const TCharNode *node, const TMatrix<4, 4>& accum,
+	               const TVector3d& rootEye, const TVector3d& viewDir);
 	TVector3d AdjustRollvector(const CControl *ctrl, const TVector3d& vel, const TVector3d& zvec);
 
 	// collision

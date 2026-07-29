@@ -146,6 +146,28 @@ static int     g_inBegin  = 0;
 static float   g_curU = 0.f, g_curV = 0.f;
 static float   g_curNx = 0.f, g_curNy = 1.f, g_curNz = 0.f;
 
+/* Per-flush dirty bits. State mutators set the bit(s) for the categories
+ * they touch; ps3_gl_flush() skips the corresponding rsx command block
+ * when clean and clears the mask at the end of the flush. The RSX keeps
+ * the last-emitted value for any state we don't re-send, so skipping is
+ * equivalent to "state hasn't changed, don't bother re-emitting". */
+enum DirtyBit {
+	DIRTY_DRAW_ENV    = 1 << 0, /* viewport/depth/blend/cull/alpha + clip planes */
+	DIRTY_TEXTURE     = 1 << 1, /* bind + params + data cache inval */
+	DIRTY_PROJ_MATRIX = 1 << 2,
+	DIRTY_MV_MATRIX   = 1 << 3,
+	DIRTY_TEXGEN      = 1 << 4,
+	DIRTY_ALL         = ~0u,
+};
+static u32 g_dirtyBits = DIRTY_ALL;
+
+/* Route a matrix mutation to the bit for the currently-active stack.
+ * Mirrors activeMatrix(): only PROJECTION and MODELVIEW are uploaded
+ * (texture/color matrices aren't read by the shader). */
+static inline u32 matrixDirtyBit() {
+	return (g_matrixMode == GL_PROJECTION) ? DIRTY_PROJ_MATRIX : DIRTY_MV_MATRIX;
+}
+
 /* Vertex draw ring (fencing prevents CPU overwrite of in-flight draws).
  * Label 253; rsxutil uses 255 for flip/idle. */
 #define PS3_VTX_RING      32
@@ -322,12 +344,17 @@ void glPopMatrix(void) {
 		s->top--;
 		memcpy(s->m, s->stack[s->top], sizeof(float) * 16);
 	}
+	g_dirtyBits |= matrixDirtyBit();
 }
 
-void glLoadIdentity(void) { matIdentity(activeMatrix()->m); }
+void glLoadIdentity(void) {
+	matIdentity(activeMatrix()->m);
+	g_dirtyBits |= matrixDirtyBit();
+}
 
 void glLoadMatrixd(const GLdouble *m) {
 	for (int i = 0; i < 16; i++) activeMatrix()->m[i] = (float)m[i];
+	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glMultMatrixd(const GLdouble *m) {
@@ -337,6 +364,7 @@ void glMultMatrixd(const GLdouble *m) {
 	float tmp[16];
 	matMul(tmp, s->m, mf);
 	memcpy(s->m, tmp, sizeof(float) * 16);
+	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
@@ -352,6 +380,7 @@ void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdoubl
 	float tmp[16];
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
+	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
@@ -368,6 +397,7 @@ void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdou
 	float tmp[16];
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
+	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
@@ -378,6 +408,7 @@ void glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
 	float tmp[16];
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
+	g_dirtyBits |= matrixDirtyBit();
 }
 void glTranslated(GLdouble x, GLdouble y, GLdouble z) {
 	glTranslatef((GLfloat)x, (GLfloat)y, (GLfloat)z);
@@ -399,10 +430,12 @@ void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
 	float tmp[16];
 	matMul(tmp, stk->m, m);
 	memcpy(stk->m, tmp, sizeof(float) * 16);
+	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
 	g_viewport[0] = x; g_viewport[1] = y; g_viewport[2] = w; g_viewport[3] = h;
+	g_dirtyBits |= DIRTY_DRAW_ENV;
 }
 
 /* =====================================================================
@@ -443,6 +476,9 @@ void glPushAttrib(GLbitfield) {
 void glPopAttrib(void) {
 	if (g_attribTop > 0)
 		restoreState(&g_attrib[--g_attribTop]);
+	/* restoreState touches draw-env caps, current texture, and texgen
+	 * enables. Conservatively re-emit all of those on the next flush. */
+	g_dirtyBits |= DIRTY_DRAW_ENV | DIRTY_TEXTURE | DIRTY_TEXGEN;
 }
 
 static int lightIndex(GLenum cap) {
@@ -454,17 +490,17 @@ static int lightIndex(GLenum cap) {
 void glEnable(GLenum cap) {
 	int li;
 	switch (cap) {
-		case GL_TEXTURE_2D:     g_tex2d = GL_TRUE; break;
-		case GL_BLEND:          g_blend = GL_TRUE; break;
-		case GL_DEPTH_TEST:     g_depthTest = GL_TRUE; break;
-		case GL_CULL_FACE:      g_cullFace = GL_TRUE; break;
-		case GL_LIGHTING:       g_lighting = GL_TRUE; break;
-		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; break;
-		case GL_STENCIL_TEST:   g_stencilTest = GL_TRUE; break;
-		case GL_FOG:            g_fog = GL_TRUE; break;
-		case GL_TEXTURE_GEN_S:  g_texGenS = GL_TRUE; break;
-		case GL_TEXTURE_GEN_T:  g_texGenT = GL_TRUE; break;
-		case GL_NORMALIZE:      g_normalize = GL_TRUE; break;
+		case GL_TEXTURE_2D:     g_tex2d = GL_TRUE; g_dirtyBits |= DIRTY_TEXTURE;  break;
+		case GL_BLEND:          g_blend = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_DEPTH_TEST:     g_depthTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_CULL_FACE:      g_cullFace = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_LIGHTING:       g_lighting = GL_TRUE; break;  /* FP uniform, not tracked */
+		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_STENCIL_TEST:   g_stencilTest = GL_TRUE; break;  /* not emitted by setDrawEnv */
+		case GL_FOG:            g_fog = GL_TRUE; break;  /* FP uniform, not tracked */
+		case GL_TEXTURE_GEN_S:  g_texGenS = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN; break;
+		case GL_TEXTURE_GEN_T:  g_texGenT = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN; break;
+		case GL_NORMALIZE:      g_normalize = GL_TRUE; break;  /* not uploaded */
 		case GL_COLOR_MATERIAL: break; /* material always tracks glColor lightpath via vColor */
 		default:
 			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_TRUE;
@@ -475,16 +511,16 @@ void glEnable(GLenum cap) {
 void glDisable(GLenum cap) {
 	int li;
 	switch (cap) {
-		case GL_TEXTURE_2D:     g_tex2d = GL_FALSE; break;
-		case GL_BLEND:          g_blend = GL_FALSE; break;
-		case GL_DEPTH_TEST:     g_depthTest = GL_FALSE; break;
-		case GL_CULL_FACE:      g_cullFace = GL_FALSE; break;
+		case GL_TEXTURE_2D:     g_tex2d = GL_FALSE; g_dirtyBits |= DIRTY_TEXTURE;  break;
+		case GL_BLEND:          g_blend = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_DEPTH_TEST:     g_depthTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_CULL_FACE:      g_cullFace = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_LIGHTING:       g_lighting = GL_FALSE; break;
-		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; break;
+		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_FALSE; break;
 		case GL_FOG:            g_fog = GL_FALSE; break;
-		case GL_TEXTURE_GEN_S:  g_texGenS = GL_FALSE; break;
-		case GL_TEXTURE_GEN_T:  g_texGenT = GL_FALSE; break;
+		case GL_TEXTURE_GEN_S:  g_texGenS = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
+		case GL_TEXTURE_GEN_T:  g_texGenT = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_NORMALIZE:      g_normalize = GL_FALSE; break;
 		default:
 			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_FALSE;
@@ -507,13 +543,13 @@ GLboolean glIsEnabled(GLenum cap) {
 	}
 }
 
-void glDepthMask(GLboolean f) { g_depthMask = f; }
-void glDepthFunc(GLenum f)    { g_depthFunc = f; }
+void glDepthMask(GLboolean f) { g_depthMask = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
+void glDepthFunc(GLenum f)    { g_depthFunc = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glShadeModel(GLenum)     { }
-void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; }
+void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glStencilFunc(GLenum, GLint, GLuint) { }
 void glStencilOp(GLenum, GLenum, GLenum)  { }
-void glBlendFunc(GLenum sf, GLenum df)    { g_blendSrc = sf; g_blendDst = df; }
+void glBlendFunc(GLenum sf, GLenum df)    { g_blendSrc = sf; g_blendDst = df; g_dirtyBits |= DIRTY_DRAW_ENV; }
 
 /* =====================================================================
  * GL: lighting / material / fog / texgen
@@ -579,6 +615,7 @@ void glTexGenfv(GLenum coord, GLenum pname, const GLfloat *p) {
 	if (pname != GL_OBJECT_PLANE || !p) return;
 	if (coord == GL_S) memcpy(g_texPlaneS, p, 4 * sizeof(float));
 	else if (coord == GL_T) memcpy(g_texPlaneT, p, 4 * sizeof(float));
+	g_dirtyBits |= DIRTY_TEXGEN;
 }
 
 /* =====================================================================
@@ -847,11 +884,13 @@ void glDeleteTextures(GLsizei n, const GLuint *t) {
 			if (g_freeCount < PS3_MAX_TEXTURES) g_freeIds[g_freeCount++] = id;
 		}
 	}
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 
 void glBindTexture(GLenum, GLuint t) {
 	if (t > 0 && t < PS3_MAX_TEXTURES) g_currentTex = t;
 	else if (t == 0) g_currentTex = 0;
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 
 void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
@@ -904,6 +943,7 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	 * on real RSX; the rsxMemalign(128, ...) above guarantees it but
 	 * catch any future regression in allocation alignment. */
 	GFX_ASSERT_ALIGNED(T.offset, 128);
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 
 void glTexParameteri(GLenum, GLenum pname, GLint param) {
@@ -921,6 +961,7 @@ void glTexParameteri(GLenum, GLenum pname, GLint param) {
 			break;
 		default: break;
 	}
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 void glTexEnvf(GLenum, GLenum, GLfloat) { }
 void glPixelStorei(GLenum, GLint)       { }
@@ -1353,8 +1394,8 @@ extern "C" void ps3_gl_flush(void) {
 
 	memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
 
-	setDrawEnv();
-	bindTextureForDraw();
+	if (g_dirtyBits & DIRTY_DRAW_ENV) setDrawEnv();
+	if (g_dirtyBits & DIRTY_TEXTURE)  bindTextureForDraw();
 	(void)fpBuf; /* buffer contents are patched via InlineTransfer on fpOffset */
 
 	/* POS / NRM / TEX0 / COL attribs.
@@ -1383,13 +1424,21 @@ extern "C" void ps3_gl_flush(void) {
 	/* vertex program + uniforms (transposed matrices) */
 	rsxLoadVertexProgram(context, g_vpo, g_vpUcode);
 	float tmp[16];
-	if (g_uProj) { matTranspose(tmp, g_proj.m); rsxSetVertexProgramParameter(context, g_vpo, g_uProj, tmp); }
-	if (g_uMV)   { matTranspose(tmp, g_mv.m);   rsxSetVertexProgramParameter(context, g_vpo, g_uMV, tmp); }
+	if ((g_dirtyBits & DIRTY_PROJ_MATRIX) && g_uProj) {
+		matTranspose(tmp, g_proj.m);
+		rsxSetVertexProgramParameter(context, g_vpo, g_uProj, tmp);
+	}
+	if ((g_dirtyBits & DIRTY_MV_MATRIX) && g_uMV) {
+		matTranspose(tmp, g_mv.m);
+		rsxSetVertexProgramParameter(context, g_vpo, g_uMV, tmp);
+	}
 
-	float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
-	if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
-	if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
-	if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
+	if (g_dirtyBits & DIRTY_TEXGEN) {
+		float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
+		if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
+		if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
+		if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
+	}
 
 	/* fragment uniforms — patched into fpBuf, then the slot is loaded */
 	float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
@@ -1432,9 +1481,14 @@ extern "C" void ps3_gl_flush(void) {
 		rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset, GCM_LOCATION_RSX);
 	}
 
-	rsxSetUserClipPlaneControl(context,
-		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE,
-		GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE);
+	if (g_dirtyBits & DIRTY_DRAW_ENV) {
+		/* All-clip-planes-disabled is idempotent; only need to emit once
+		 * unless something in setDrawEnv's domain changed. Shares the
+		 * DRAW_ENV bit since the trigger conditions overlap heavily. */
+		rsxSetUserClipPlaneControl(context,
+			GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE,
+			GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE, GCM_USER_CLIP_PLANE_DISABLE);
+	}
 
 	rsxInvalidateVertexCache(context);
 	rsxDrawVertexArray(context, mapPrim(g_primMode), 0, n);
@@ -1445,6 +1499,10 @@ extern "C" void ps3_gl_flush(void) {
 	rsxFlushBuffer(context);
 	if (ringSlot >= 0)
 		g_vtxRing[ringSlot].labelVal = doneVal;
+
+	/* State uploaded this flush is now the RSX's current state; clears
+	 * let subsequent mutators re-arm only what they actually change. */
+	g_dirtyBits = 0;
 
 	TIMER_END("GL_FLUSH");
 }

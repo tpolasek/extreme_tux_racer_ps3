@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "states.h"
 #include "ogl.h"
 #include "winsys.h"
+#include "ps3_log.h"
 #include <csignal>
 
 extern volatile sig_atomic_t g_sigint_received;
@@ -91,5 +92,7 @@ void State::Manager::CallLoopFunction() {
 
 	g_game.time_step = std::max(0.0001f, timer.getElapsedTime().asSeconds());
 	timer.restart();
+	TIMER_START("MAIN_LOOP");
 	current->Loop(g_game.time_step);
+	TIMER_END("MAIN_LOOP");
 }

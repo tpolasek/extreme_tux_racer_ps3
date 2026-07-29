@@ -30,6 +30,7 @@
 #include "rsxutil.h"
 #include "ps3_gl_internal.h"
 #include "ps3_tty.h"
+#include "ps3_log.h"
 
 /* host buffer handed to the RSX (128 MiB, 1 MiB aligned) */
 #define PS3_HOST_SIZE     (128 * 1024 * 1024)
@@ -260,7 +261,9 @@ void RenderWindow::display() {
 		long long elapsed = (long long)nowUs() - lastSwapUs_;
 		if (elapsed < target) usleep((useconds_t)(target - elapsed));
 	}
+	TIMER_START("FLIP");
 	flip();
+	TIMER_END("FLIP");
 	lastSwapUs_ = (long long)nowUs();
 }
 

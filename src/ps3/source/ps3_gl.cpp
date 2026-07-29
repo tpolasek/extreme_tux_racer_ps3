@@ -38,6 +38,7 @@
 #include "ps3_gl_internal.h"
 #include "ps3_tty.h"
 #include "ps3_gfx_assert.h"
+#include "ps3_log.h"
 #include <stddef.h>
 
 /* ---- embedded shader objects (bin2o from etr3d.vcg/.fcg) ---- */
@@ -1287,8 +1288,10 @@ static void composeLighting(float *outAmbient, float *outLightPosEye,
 
 static void waitVtxLabel(u32 val) {
 	if (val == 0 || !g_vtxLabel) return;
+	TIMER_START("GL_FLUSH_WAIT");
 	while ((s32)(*g_vtxLabel - val) < 0)
 		usleep(10);
+	TIMER_END("GL_FLUSH_WAIT");
 }
 
 extern "C" void ps3_gl_flush(void) {
@@ -1326,6 +1329,8 @@ extern "C" void ps3_gl_flush(void) {
 		fpOffset   = g_fpOversize.offset;
 	}
 	if (!fpBuf || !fpOffset) return;
+
+	TIMER_START("GL_FLUSH");
 
 	/* Pre-draw invariants. These are the conditions real RSX enforces
 	 * but RPCS3 papers over — catching them here freezes the frame on
@@ -1440,6 +1445,8 @@ extern "C" void ps3_gl_flush(void) {
 	rsxFlushBuffer(context);
 	if (ringSlot >= 0)
 		g_vtxRing[ringSlot].labelVal = doneVal;
+
+	TIMER_END("GL_FLUSH");
 }
 
 /* =====================================================================

@@ -33,6 +33,7 @@ GNU General Public License for more details.
 
 #ifdef OS_PS3
 #include "ps3_tty.h"
+#include "ps3_log.h"
 #define ETR_TRACE(msg) sysTtyTrace("[etr] " msg)
 #else
 #define ETR_TRACE(msg) do {} while (0)
@@ -73,6 +74,9 @@ extern "C" int etr_run() {
 	std::signal(SIGINT, sigint_handler);
 	ETR_TRACE("InitConfig");
 	InitConfig();
+#ifdef OS_PS3
+	ps3_perf_open((param.save_dir + SEP "etr_perf.log").c_str());
+#endif
 	ETR_TRACE("InitGame");
 	InitGame(0, nullptr);
 	ETR_TRACE("Winsys.Init");
@@ -102,6 +106,9 @@ extern "C" int etr_run() {
 	State::manager.Run(SplashScreen);
 
 	ETR_TRACE("shutdown");
+#ifdef OS_PS3
+	ps3_perf_close();
+#endif
 	Winsys.Quit();
 
 	return 0;

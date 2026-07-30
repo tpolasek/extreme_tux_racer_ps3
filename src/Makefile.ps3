@@ -42,7 +42,7 @@ CONTENTID	:=	UP0001-$(APPID)_00-0000000000000001
 # With plain -std=c++14 the C++ standard library fails to find ::vsnprintf.
 # DEMO_MODE defaults on (auto-pick char+course, play 10s, exit). Disable with
 # `make DEMO_MODE=` for a normal menu-driven build.
-DEMO_MODE	?=	1
+DEMO_MODE	?=	0
 CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(DEMO_MODE),-DDEMO_MODE=1)
 CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 

@@ -336,7 +336,7 @@ void InitConfig() {
 
 	param.ui_snow = true;
 	param.view_mode = FOLLOW;
-	param.display_fps = false;
+	param.display_fps = true;
 	param.show_hud = true;
 
 	if (config_exist > 0) {

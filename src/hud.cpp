@@ -379,6 +379,9 @@ void DrawWind(float dir, float speed, const CControl *ctrl) {
 
 void DrawFps() {
 	const  int   maxFrames = 50;
+	const  int   warningFps = 58;
+	const  int   fpsX = Winsys.resolution.width - 130;
+	const  int   fpsY = 52;
 	static int   numFrames = 0;
 	static float averagefps = 0;
 	static float sumTime = 0;
@@ -396,16 +399,15 @@ void DrawFps() {
 	}
 	if (averagefps < 1) return;
 
-	std::string fpsstr = Int_StrN((int)averagefps);
+	const int displayedFps = (int)averagefps;
+	const Color fpsColor = displayedFps <= warningFps ? colRed : colWhite;
+	std::string fpsstr = Int_StrN(displayedFps);
 	if (param.use_papercut_font < 2) {
-		Tex.DrawNumStr(fpsstr, (Winsys.resolution.width - 60) / 2, 10, 1, colWhite);
+		Tex.DrawNumStr(fpsstr, fpsX, fpsY, 1, fpsColor);
 	} else {
 		Winsys.begin2D();
-		if (averagefps >= 35)
-			FT.SetColor(colWhite);
-		else
-			FT.SetColor(colRed);
-		FT.DrawString(-1, 3, fpsstr);
+		FT.SetColor(fpsColor);
+		FT.DrawString(Winsys.resolution.width - 125, 43, fpsstr);
 		Winsys.end2D();
 	}
 }

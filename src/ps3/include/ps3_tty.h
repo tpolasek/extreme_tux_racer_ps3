@@ -18,11 +18,16 @@ static inline void sysTtyWriteStr(const char *msg) {
 	sysTtyWrite(0, msg, (u32)strlen(msg), &written);
 }
 
-/* Convenience: write a fixed string (literal or const char*). The ETR sources
- * call sysTtyTrace("[etr] something\n"). */
+/* Convenience trace sink for demo/profiling builds. Normal gameplay builds
+ * compile these progress messages away; sysTtyWriteStr remains available for
+ * explicit fatal diagnostics such as GFX_ASSERT. */
+#if defined(DEMO_MODE) && DEMO_MODE
 static inline void sysTtyTrace(const char *msg) {
 	sysTtyWriteStr(msg);
 }
+#else
+static inline void sysTtyTrace(const char *) { }
+#endif
 
 #ifdef __cplusplus
 }

@@ -55,7 +55,6 @@ void CRegist::Jbutt(int button, bool pressed) {
 			QuitRegistration();
 			break;
 		case 1: // B / Back
-			State::manager.RequestQuit();
 			break;
 	}
 }

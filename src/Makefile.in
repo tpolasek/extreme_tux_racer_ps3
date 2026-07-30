@@ -107,18 +107,18 @@ PROGRAMS = $(bin_PROGRAMS)
 am_etr_OBJECTS = audio.$(OBJEXT) common.$(OBJEXT) course.$(OBJEXT) \
 	course_render.$(OBJEXT) env.$(OBJEXT) font.$(OBJEXT) \
 	game_config.$(OBJEXT) game_ctrl.$(OBJEXT) game_over.$(OBJEXT) \
-	gui.$(OBJEXT) hud.$(OBJEXT) intro.$(OBJEXT) keyframe.$(OBJEXT) \
-	loading.$(OBJEXT) main.$(OBJEXT) mathlib.$(OBJEXT) \
-	matrices.$(OBJEXT) ogl.$(OBJEXT) particles.$(OBJEXT) \
-	paused.$(OBJEXT) physics.$(OBJEXT) quadtree.$(OBJEXT) \
-	race_select.$(OBJEXT) racing.$(OBJEXT) regist.$(OBJEXT) \
-	reset.$(OBJEXT) splash_screen.$(OBJEXT) spx.$(OBJEXT) \
-	states.$(OBJEXT) textures.$(OBJEXT) track_marks.$(OBJEXT) \
-	translation.$(OBJEXT) tux.$(OBJEXT) vectors.$(OBJEXT) \
-	view.$(OBJEXT) winsys.$(OBJEXT) n_color.$(OBJEXT) \
-	n_clock.$(OBJEXT) n_image.$(OBJEXT) n_texture.$(OBJEXT) \
-	n_font.$(OBJEXT) n_draw.$(OBJEXT) n_window.$(OBJEXT) \
-	n_audio.$(OBJEXT)
+	highscore.$(OBJEXT) gui.$(OBJEXT) hud.$(OBJEXT) \
+	intro.$(OBJEXT) keyframe.$(OBJEXT) loading.$(OBJEXT) \
+	main.$(OBJEXT) mathlib.$(OBJEXT) matrices.$(OBJEXT) \
+	ogl.$(OBJEXT) particles.$(OBJEXT) paused.$(OBJEXT) \
+	physics.$(OBJEXT) quadtree.$(OBJEXT) race_select.$(OBJEXT) \
+	racing.$(OBJEXT) regist.$(OBJEXT) reset.$(OBJEXT) \
+	splash_screen.$(OBJEXT) spx.$(OBJEXT) states.$(OBJEXT) \
+	textures.$(OBJEXT) track_marks.$(OBJEXT) translation.$(OBJEXT) \
+	tux.$(OBJEXT) vectors.$(OBJEXT) view.$(OBJEXT) \
+	winsys.$(OBJEXT) n_color.$(OBJEXT) n_clock.$(OBJEXT) \
+	n_image.$(OBJEXT) n_texture.$(OBJEXT) n_font.$(OBJEXT) \
+	n_draw.$(OBJEXT) n_window.$(OBJEXT) n_audio.$(OBJEXT)
 etr_OBJECTS = $(am_etr_OBJECTS)
 etr_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -140,7 +140,8 @@ am__depfiles_remade = ./$(DEPDIR)/audio.Po ./$(DEPDIR)/common.Po \
 	./$(DEPDIR)/course.Po ./$(DEPDIR)/course_render.Po \
 	./$(DEPDIR)/env.Po ./$(DEPDIR)/font.Po \
 	./$(DEPDIR)/game_config.Po ./$(DEPDIR)/game_ctrl.Po \
-	./$(DEPDIR)/game_over.Po ./$(DEPDIR)/gui.Po ./$(DEPDIR)/hud.Po \
+	./$(DEPDIR)/game_over.Po ./$(DEPDIR)/gui.Po \
+	./$(DEPDIR)/highscore.Po ./$(DEPDIR)/hud.Po \
 	./$(DEPDIR)/intro.Po ./$(DEPDIR)/keyframe.Po \
 	./$(DEPDIR)/loading.Po ./$(DEPDIR)/main.Po \
 	./$(DEPDIR)/mathlib.Po ./$(DEPDIR)/matrices.Po \
@@ -320,6 +321,7 @@ etr_SOURCES = \
 	game_config.cpp	\
 	game_ctrl.cpp	\
 	game_over.cpp	\
+	highscore.cpp	\
 	gui.cpp		\
 	hud.cpp		\
 	intro.cpp	\
@@ -368,6 +370,7 @@ noinst_HEADERS = \
 	game_config.h	\
 	game_ctrl.h	\
 	game_over.h	\
+	highscore.h	\
 	gui.h		\
 	hud.h		\
 	intro.h		\
@@ -502,6 +505,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/game_ctrl.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/game_over.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gui.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/highscore.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hud.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intro.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/keyframe.Po@am__quote@ # am--include-marker
@@ -695,6 +699,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/game_ctrl.Po
 	-rm -f ./$(DEPDIR)/game_over.Po
 	-rm -f ./$(DEPDIR)/gui.Po
+	-rm -f ./$(DEPDIR)/highscore.Po
 	-rm -f ./$(DEPDIR)/hud.Po
 	-rm -f ./$(DEPDIR)/intro.Po
 	-rm -f ./$(DEPDIR)/keyframe.Po
@@ -784,6 +789,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/game_ctrl.Po
 	-rm -f ./$(DEPDIR)/game_over.Po
 	-rm -f ./$(DEPDIR)/gui.Po
+	-rm -f ./$(DEPDIR)/highscore.Po
 	-rm -f ./$(DEPDIR)/hud.Po
 	-rm -f ./$(DEPDIR)/intro.Po
 	-rm -f ./$(DEPDIR)/keyframe.Po

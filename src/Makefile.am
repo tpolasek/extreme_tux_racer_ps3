@@ -10,6 +10,7 @@ etr_SOURCES =		\
 	game_config.cpp	\
 	game_ctrl.cpp	\
 	game_over.cpp	\
+	highscore.cpp	\
 	gui.cpp		\
 	hud.cpp		\
 	intro.cpp	\
@@ -58,6 +59,7 @@ noinst_HEADERS =	\
 	game_config.h	\
 	game_ctrl.h	\
 	game_over.h	\
+	highscore.h	\
 	gui.h		\
 	hud.h		\
 	intro.h		\

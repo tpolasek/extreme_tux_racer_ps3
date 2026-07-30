@@ -33,6 +33,45 @@ GNU General Public License for more details.
 #include "gui.h"
 #include <algorithm>
 
+namespace {
+
+TTexture* highscore_leader_preview = nullptr;
+const TCourseHighScore* cached_highscore = nullptr;
+std::size_t cached_highscore_revision = 0;
+std::string cached_highscore_time;
+std::string cached_highscore_hundredths;
+
+void RefreshHighScoreHud(const TCourseHighScore& score) {
+	// PNG decoding, texture upload, and time formatting happen only when the
+	// course or record changes. Normal frames take this constant-time exit.
+	if (cached_highscore == &score &&
+	    cached_highscore_revision == score.revision)
+		return;
+
+	delete highscore_leader_preview;
+	highscore_leader_preview = nullptr;
+	cached_highscore = &score;
+	cached_highscore_revision = score.revision;
+
+	int min, sec, hundr;
+	GetTimeComponents(score.time, &min, &sec, &hundr);
+	cached_highscore_time = Int_StrN(min, 2) + ':' + Int_StrN(sec, 2);
+	cached_highscore_hundredths = Int_StrN(hundr, 2);
+
+	if (score.character_dir.empty()) return;
+
+	const std::string preview_file =
+		MakePathStr(param.char_dir, score.character_dir) + SEP "preview.png";
+	highscore_leader_preview = new TTexture();
+	if (!highscore_leader_preview->Load(preview_file, false)) {
+		delete highscore_leader_preview;
+		highscore_leader_preview = nullptr;
+		Message("Unable to load high score leader preview", preview_file);
+	}
+}
+
+} // namespace
+
 
 #define GAUGE_IMG_SIZE 128
 #define ENERGY_GAUGE_BOTTOM 3.0
@@ -83,28 +122,27 @@ static void draw_time(double time, Color color) {
 	}
 }
 
-static void draw_high_score(double time, Color color) {
+static void draw_high_score(const TCourseHighScore& score, Color color) {
 	const int frame_width = 190;
 	const int left = (Winsys.resolution.width - frame_width) / 2;
+	RefreshHighScoreHud(score);
 	DrawFrameX(left, 6, frame_width, 46, 2, colBlack, colWhite, 0.55f);
 
-	int min, sec, hundr;
-	GetTimeComponents(time, &min, &sec, &hundr);
-	std::string timestr = Int_StrN(min, 2) + ':' + Int_StrN(sec, 2);
-	std::string hundrstr = Int_StrN(hundr, 2);
-
 	if (param.use_papercut_font < 2) {
-		Tex.DrawNumStr(timestr, left + 15, 12, 1, color);
-		Tex.DrawNumStr(hundrstr, left + 135, 12, 0.7f, color);
+		Tex.DrawNumStr(cached_highscore_time, left + 15, 12, 1, color);
+		Tex.DrawNumStr(cached_highscore_hundredths, left + 135, 12, 0.7f, color);
 	} else {
 		Winsys.begin2D();
 		FT.SetColor(color);
 		FT.SetSize(30);
-		FT.DrawString(left + 133, 3, hundrstr);
+		FT.DrawString(left + 133, 3, cached_highscore_hundredths);
 		FT.SetSize(42);
-		FT.DrawString(left + 18, 3, timestr);
+		FT.DrawString(left + 18, 3, cached_highscore_time);
 		Winsys.end2D();
 	}
+
+	if (highscore_leader_preview != nullptr)
+		highscore_leader_preview->Draw(left + frame_width + 8, 6, 46, 46);
 }
 
 static void draw_herring_count(int herring_count, Color color) {
@@ -419,7 +457,7 @@ void DrawHud(const CControl *ctrl) {
 
 
 	draw_time(g_game.time, param.use_papercut_font < 2 ? colWhite : colDYell);
-	draw_high_score(GetCourseHighScore(), param.use_papercut_font < 2 ? colWhite : colDYell);
+	draw_high_score(GetCourseHighScoreRecord(), param.use_papercut_font < 2 ? colWhite : colDYell);
 	draw_herring_count(g_game.herring, param.use_papercut_font < 2 ? colWhite : colDYell);
 
 	// rpm
@@ -472,4 +510,17 @@ void DrawHud(const CControl *ctrl) {
 
 
 
+}
+
+void PrepareHudResources() {
+	RefreshHighScoreHud(GetCourseHighScoreRecord());
+}
+
+void FreeHudResources() {
+	delete highscore_leader_preview;
+	highscore_leader_preview = nullptr;
+	cached_highscore = nullptr;
+	cached_highscore_revision = 0;
+	cached_highscore_time.clear();
+	cached_highscore_hundredths.clear();
 }

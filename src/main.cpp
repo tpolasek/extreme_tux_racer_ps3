@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "splash_screen.h"
 #include "audio.h"
 #include "font.h"
+#include "hud.h"
 #include "winsys.h"
 #include <iostream>
 #include <ctime>
@@ -106,6 +107,7 @@ extern "C" int etr_run() {
 	State::manager.Run(SplashScreen);
 
 	ETR_TRACE("shutdown");
+	FreeHudResources();
 #ifdef OS_PS3
 	ps3_perf_close();
 #endif

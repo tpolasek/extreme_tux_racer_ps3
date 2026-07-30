@@ -30,6 +30,7 @@ GNU General Public License for more details.
 #include "translation.h"
 #include "gui.h"
 #include "intro.h"
+#include "hud.h"
 #include "winsys.h"
 
 CLoading Loading;
@@ -64,5 +65,6 @@ void CLoading::Loop(float time_step) {
 	Course.LoadCourse(g_game.course);
 	g_game.location_id = Course.GetEnv();
 	Env.LoadEnvironment(g_game.location_id, g_game.light_id);
+	PrepareHudResources();
 	State::manager.RequestEnterState(Intro);
 }

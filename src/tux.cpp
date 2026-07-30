@@ -370,6 +370,11 @@ void CCharShape::CreateMaterial(const std::string& line) {
 // --------------------------------------------------------------------
 
 void CCharShape::DrawCharSphere(int num_divisions) const {
+#ifdef OS_PS3
+	/* Eight divisions retain a smooth silhouette at 720p while avoiding the
+	 * disproportionate vertex cost of the desktop character tessellation. */
+	if (num_divisions > 8) num_divisions = 8;
+#endif
 	GLUquadricObj *qobj = gluNewQuadric();
 	gluQuadricDrawStyle(qobj, GLU_FILL);
 	gluQuadricOrientation(qobj, GLU_OUTSIDE);

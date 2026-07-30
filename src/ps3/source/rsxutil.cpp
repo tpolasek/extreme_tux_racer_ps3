@@ -26,15 +26,14 @@ u32 color_offset[FRAME_BUFFER_COUNT];
 u32 *color_buffer[FRAME_BUFFER_COUNT];
 float aspect_ratio;
 
-/* Prefer the lowest SD framebuffer for real-hardware performance.  The
- * console/output configuration decides whether the regional 480/576 mode is
- * interlaced or progressive. */
+/* Prefer 1280x720 for enough rendering headroom to sustain 60 Hz on PS3,
+ * then fall back through the other supported output modes. */
 static u32 sResolutionIds[] = {
-	VIDEO_RESOLUTION_480,
-	VIDEO_RESOLUTION_576,
 	VIDEO_RESOLUTION_720,
-	VIDEO_RESOLUTION_960x1080,
-	VIDEO_RESOLUTION_1080
+	VIDEO_RESOLUTION_576,
+	VIDEO_RESOLUTION_480,
+	VIDEO_RESOLUTION_1080,
+	VIDEO_RESOLUTION_960x1080
 };
 static size_t RESOLUTION_ID_COUNT = sizeof(sResolutionIds) / sizeof(u32);
 

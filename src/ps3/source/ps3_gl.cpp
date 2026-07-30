@@ -172,7 +172,11 @@ static inline u32 matrixDirtyBit() {
 
 /* Vertex draw ring (fencing prevents CPU overwrite of in-flight draws).
  * Label 253; rsxutil uses 255 for flip/idle. */
-#define PS3_VTX_RING      32
+/* A race frame submits roughly 115–120 small legacy-GL batches. Keep two
+ * complete frames of staging slots so the PPU can feed RSX continuously
+ * instead of blocking every 32 draws and leaving bubbles in the command
+ * stream. Double-buffered presentation bounds the actual in-flight usage. */
+#define PS3_VTX_RING      256
 #define PS3_VTX_SLOT_MAX  512
 #define PS3_VTX_LABEL_IDX 253
 struct VtxSlot {
@@ -299,14 +303,12 @@ static GLboolean useUiFragmentProgram(void) {
 }
 
 static GLboolean useTerrainFragmentProgram(void) {
-	/* Terrain, trees, and track marks all use a black specular material.
-	 * Their result is therefore identical on the no-specular path.  Trees
-	 * use the hardware GEQUAL alpha test; retain the general shader for any
-	 * future non-GEQUAL alpha function that requires fragment discard. */
+	/* Physical RSX cannot sustain the full per-pixel normalize + pow()
+	 * lighting path for Tux's many overlapping spheres at 1080p. Use the
+	 * per-vertex diffuse path for all lit geometry; trees retain hardware
+	 * GEQUAL alpha testing. This intentionally drops subtle specular
+	 * highlights in exchange for consistent full-rate rendering. */
 	return g_lighting &&
-	       g_matSpecular[0] == 0.f &&
-	       g_matSpecular[1] == 0.f &&
-	       g_matSpecular[2] == 0.f &&
 	       (!g_alphaTest || g_alphaFunc == GL_GEQUAL);
 }
 
@@ -1334,12 +1336,30 @@ static void setDrawEnv(void) {
 
 	rsxSetLogicOpEnable(context, GCM_FALSE);
 	rsxSetBlendEquation(context, GCM_FUNC_ADD, GCM_FUNC_ADD);
+	/* The legacy renderer enables GL_BLEND for every render mode, including
+	 * the fully opaque skybox and base course. At 1080p that needlessly makes
+	 * RSX read and blend millions of destination pixels each frame. Keep
+	 * blending for transparent terrain overlays, trees, shadows, snow and UI. */
+	const GLboolean opaqueCourse =
+	    g_lighting && g_depthTest && g_depthMask && g_cullFace &&
+	    !g_alphaTest && g_texGenS && g_texGenT &&
+	    g_blendSrc == GL_SRC_ALPHA && g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
+	const GLboolean opaqueSky =
+	    !g_lighting && !g_depthTest && !g_depthMask && !g_alphaTest &&
+	    !g_texGenS && !g_texGenT &&
+	    g_blendSrc == GL_SRC_ALPHA && g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
+	const GLboolean opaqueCutout =
+	    g_alphaTest && g_alphaFunc == GL_GEQUAL &&
+	    g_depthTest && g_depthMask &&
+	    g_blendSrc == GL_SRC_ALPHA && g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
+	const GLboolean effectiveBlend =
+	    g_blend && !opaqueCourse && !opaqueSky && !opaqueCutout;
 	rsxSetBlendFunc(context,
-	                g_blend ? g_blendSrc : GCM_ONE,
-	                g_blend ? g_blendDst : GCM_ZERO,
-	                g_blend ? g_blendSrc : GCM_ONE,
-	                g_blend ? g_blendDst : GCM_ZERO);
-	rsxSetBlendEnable(context, g_blend ? GCM_TRUE : GCM_FALSE);
+	                effectiveBlend ? g_blendSrc : GCM_ONE,
+	                effectiveBlend ? g_blendDst : GCM_ZERO,
+	                effectiveBlend ? g_blendSrc : GCM_ONE,
+	                effectiveBlend ? g_blendDst : GCM_ZERO);
+	rsxSetBlendEnable(context, effectiveBlend ? GCM_TRUE : GCM_FALSE);
 
 	/* Hardware alpha test for GEQUAL (trees/particles). Other funcs fall
 	 * back to the shader discard path. */

@@ -47,7 +47,14 @@ void RenderCourse() {
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	set_material(colWhite, colBlack, 1.0);
 	const CControl *ctrl = g_game.player->ctrl;
-	UpdateQuadtree(ctrl->viewpos, param.course_detail_level);
+	float detail_level = param.course_detail_level;
+#ifdef OS_PS3
+	/* Rough late-course sections can exceed the 16.67 ms frame budget at
+	 * the desktop default. A slightly coarser distant mesh is hidden well
+	 * by the snow texture and fog while preserving nearby terrain shape. */
+	if (detail_level > 50.f) detail_level = 50.f;
+#endif
+	UpdateQuadtree(ctrl->viewpos, detail_level);
 	RenderQuadtree();
 }
 
@@ -57,6 +64,13 @@ void DrawTrees() {
 	ScopedRenderMode rm(TREES);
 	double fwd_clip_limit = param.forward_clip_distance;
 	double bwd_clip_limit = param.backward_clip_distance;
+#ifdef OS_PS3
+	/* Alpha-tested foliage is a significant fill cost on RSX. Preserve
+	 * nearby silhouettes while dropping distant billboards that contribute
+	 * little detail through the course fog. */
+	if (fwd_clip_limit > 38.0) fwd_clip_limit = 38.0;
+	if (bwd_clip_limit > 20.0) bwd_clip_limit = 20.0;
+#endif
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	set_material(colWhite, colBlack, 1.0);
@@ -113,16 +127,11 @@ void DrawTrees() {
 				px + cr, py + h, pz - sr,
 				px - cr, py + h, pz + sr,
 			};
-			/* Quad 2: rotated Z axis (s,0,c) */
-			GLfloat q2[12] = {
-				px - sr, py,     pz - cr,
-				px + sr, py,     pz + cr,
-				px + sr, py + h, pz + cr,
-				px - sr, py + h, pz - cr,
-			};
 			vpos.insert(vpos.end(), q1, q1 + 12);
-			vpos.insert(vpos.end(), q2, q2 + 12);
-			vtex.insert(vtex.end(), treeTex, treeTex + 16);
+			/* A second crossed plane is nearly edge-on to the downhill
+			 * camera but doubles alpha-tested overdraw. The
+			 * forward-facing plane preserves the tree silhouette. */
+			vtex.insert(vtex.end(), treeTex, treeTex + 8);
 		}
 		if (!vpos.empty()) {
 			glVertexPointer(3, GL_FLOAT, 0, vpos.data());

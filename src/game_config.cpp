@@ -82,6 +82,14 @@ void LoadConfigFile() {
 		param.credits_music = SPStrN(*line, "credits_music", "credits_1");
 		param.config_music = SPStrN(*line, "config_music", "options_1");
 	}
+
+#ifdef __PPU__
+	/* Keep the PS3 view volume within the RSX's sustained 60 Hz budget.
+	 * Environment fog uses the same distance, so the culled horizon remains
+	 * concealed instead of exposing a hard terrain edge. */
+	if (param.forward_clip_distance > 38)
+		param.forward_clip_distance = 38;
+#endif
 }
 
 void SetConfigDefaults() {
@@ -95,7 +103,11 @@ void SetConfigDefaults() {
 
 	param.framerate = 60;
 
+#ifdef __PPU__
+	param.forward_clip_distance = 38;
+#else
 	param.forward_clip_distance = 75;
+#endif
 	param.backward_clip_distance = 20;
 	param.fov = 60;
 	param.bpp_mode = 0;

@@ -449,6 +449,19 @@ void generate_particles(const CControl *ctrl, double dtime, const TVector3d& pos
 
 static CFlakes Flakes;
 
+#ifdef OS_PS3
+static inline std::size_t race_snowflake_count(std::size_t desktop_count) {
+	/* Alpha-blended flakes are appreciably more expensive on RSX. At 720p,
+	 * five eighths of the desktop density preserves the layered snowfall
+	 * while leaving enough headroom for the late-course terrain. */
+	return desktop_count * 5 / 8;
+}
+#else
+static inline std::size_t race_snowflake_count(std::size_t desktop_count) {
+	return desktop_count;
+}
+#endif
+
 
 TFlakeArea::TFlakeArea(
     std::size_t num_flakes,
@@ -640,9 +653,9 @@ void CFlakes::Init(int grade, const CControl *ctrl) {
 //			areas.emplace_back(400, 5, 4, 4,     -2, 4, 0.01, 0.02,    5, true);
 //			areas.emplace_back(400, 12, 5, 8,      2, 8, 0.03, 0.045,    5, false);
 //			areas.emplace_back(400, 30, 6, 15,      10, 15, 0.06, 0.12,    5, false);
-			areas.emplace_back(400, 5.f, 4.f, 4.f, -2.f, 4.f, 0.015f, 0.03f, 5.f, true);
-			areas.emplace_back(400, 12.f, 5.f, 8.f, 2.f, 8.f, 0.045f, 0.07f, 5.f, false);
-			areas.emplace_back(400, 30.f, 6.f, 15.f, 10.f, 15.f, 0.09f, 0.18f, 5.f, false);
+			areas.emplace_back(race_snowflake_count(400), 5.f, 4.f, 4.f, -2.f, 4.f, 0.015f, 0.03f, 5.f, true);
+			areas.emplace_back(race_snowflake_count(400), 12.f, 5.f, 8.f, 2.f, 8.f, 0.045f, 0.07f, 5.f, false);
+			areas.emplace_back(race_snowflake_count(400), 30.f, 6.f, 15.f, 10.f, 15.f, 0.09f, 0.18f, 5.f, false);
 //			areas.emplace_back(400, 5, 4, 4,     -2, 4, 0.02, 0.04,    5, true);
 //			areas.emplace_back(400, 12, 5, 8,      2, 8, 0.06, 0.09,    5, false);
 //			areas.emplace_back(400, 30, 6, 15,      10, 15, 0.15, 0.25,    5, false);
@@ -651,9 +664,9 @@ void CFlakes::Init(int grade, const CControl *ctrl) {
 //			areas.emplace_back(500, 5, 4, 4,     -2, 4, 0.02, 0.03,    5, true);
 //			areas.emplace_back(500, 12, 5, 8,      2, 8, 0.045, 0.07,    5, false);
 //			areas.emplace_back(500, 30, 6, 15,      10, 15, 0.1, 0.15,    5, false);
-			areas.emplace_back(500, 5.f, 4.f, 4.f, -2.f, 4.f, 0.03f, 0.045f, 5.f, true);
-			areas.emplace_back(500, 12.f, 5.f, 8.f, 2.f, 8.f, 0.07f, 0.1f, 5.f, false);
-			areas.emplace_back(500, 30.f, 6.f, 15.f, 10.f, 15.f, 0.15f, 0.22f, 5.f, false);
+			areas.emplace_back(race_snowflake_count(500), 5.f, 4.f, 4.f, -2.f, 4.f, 0.03f, 0.045f, 5.f, true);
+			areas.emplace_back(race_snowflake_count(500), 12.f, 5.f, 8.f, 2.f, 8.f, 0.07f, 0.1f, 5.f, false);
+			areas.emplace_back(race_snowflake_count(500), 30.f, 6.f, 15.f, 10.f, 15.f, 0.15f, 0.22f, 5.f, false);
 //			areas.emplace_back(500, 5, 4, 4,     -2, 4, 0.04, 0.06,    5, true);
 //			areas.emplace_back(500, 12, 5, 8,      2, 8, 0.09, 0.15,    5, false);
 //			areas.emplace_back(500, 30, 6, 15,      10, 15, 0.2, 0.32,    5, false);
@@ -662,9 +675,9 @@ void CFlakes::Init(int grade, const CControl *ctrl) {
 //			areas.emplace_back(1000, 5, 4, 4,     -2, 4, 0.025, 0.04,    5, true);
 //			areas.emplace_back(1000, 12, 5, 9,      2, 8, 0.06, 0.10,    5, false);
 //			areas.emplace_back(1000, 30, 6, 15,      10, 15, 0.12, 0.2,    5, false);
-			areas.emplace_back(1000, 5.f, 4.f, 4.f, -2.f, 4.f, 0.037f, 0.05f, 5.f, true);
-			areas.emplace_back(1000, 12.f, 5.f, 9.f, 2.f, 8.f, 0.09f, 0.15f, 5.f, false);
-			areas.emplace_back(1000, 30.f, 6.f, 15.f, 10.f, 15.f, 0.18f, 0.35f, 5.f, false);
+			areas.emplace_back(race_snowflake_count(1000), 5.f, 4.f, 4.f, -2.f, 4.f, 0.037f, 0.05f, 5.f, true);
+			areas.emplace_back(race_snowflake_count(1000), 12.f, 5.f, 9.f, 2.f, 8.f, 0.09f, 0.15f, 5.f, false);
+			areas.emplace_back(race_snowflake_count(1000), 30.f, 6.f, 15.f, 10.f, 15.f, 0.18f, 0.35f, 5.f, false);
 //			areas.emplace_back(800, 5, 4, 4,     -2, 4, 0.05, 0.08,    5, true);
 //			areas.emplace_back(800, 12, 5, 9,      2, 8, 0.12, 0.20,    5, false);
 //			areas.emplace_back(800, 30, 6, 15,      10, 15, 0.25, 0.5,    5, false);

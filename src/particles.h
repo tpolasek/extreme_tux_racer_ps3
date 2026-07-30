@@ -53,6 +53,10 @@ struct TFlake {
 
 struct TFlakeArea {
 	std::vector<TFlake> flakes;
+	/* Reused draw buffers avoid allocating and growing two temporary vectors
+	 * for every snow area on every frame. */
+	mutable std::vector<GLfloat> vertex_scratch;
+	mutable std::vector<GLfloat> texcoord_scratch;
 
 	float left;
 	float right;
@@ -122,6 +126,8 @@ struct TCurtainElement {
 struct TCurtain {
 	TCurtainElement curtains[MAX_CURTAIN_COLS][MAX_CURTAIN_ROWS];
 	int chg[MAX_CURTAIN_ROWS];	// for each row
+	mutable std::vector<GLfloat> vertex_scratch;
+	mutable std::vector<GLfloat> texcoord_scratch;
 
 	unsigned int numCols;
 	unsigned int numRows;

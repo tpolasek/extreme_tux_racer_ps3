@@ -852,6 +852,22 @@ void glColorPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) 
 
 void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
 	if (count <= 0) return;
+	/* Snow flakes and curtains provide separate packed float position and
+	 * texture-coordinate arrays, with the current normal and colour applying
+	 * to every vertex. This is also a common legacy-GL layout elsewhere in
+	 * the game. Select the layout once per draw instead of sending every
+	 * component through readArrayComp()'s pointer/type/stride decoder. */
+	const bool fastPosTexFloat =
+	    g_vertexArray.enabled && g_vertexArray.pointer &&
+	    g_vertexArray.type == GL_FLOAT && g_vertexArray.size == 3 &&
+	    g_texCoordArray.enabled && g_texCoordArray.pointer &&
+	    g_texCoordArray.type == GL_FLOAT && g_texCoordArray.size == 2 &&
+	    !g_normalArray.enabled && !g_colorArray.enabled;
+	const GLsizei fastPosStride =
+	    g_vertexArray.stride ? g_vertexArray.stride : 3 * (GLsizei)sizeof(float);
+	const GLsizei fastTexStride =
+	    g_texCoordArray.stride ? g_texCoordArray.stride : 2 * (GLsizei)sizeof(float);
+
 	/* pull into ImmVtx, flushing as the ring capacity is filled so large
 	 * draws never overflow. Primitive restarts (fan/strip) only of primitive
 	 * types that are restart-safe from an index of 0: we only split TRIANGLES
@@ -870,8 +886,28 @@ void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
 		}
 		if (batch > PS3_IMM_MAX) batch = PS3_IMM_MAX;
 		g_immCount = 0;
-		for (GLint i = 0; i < batch; i++)
-			fetchVertex(first + issued + i, g_immVtx[g_immCount++]);
+		if (fastPosTexFloat) {
+			const GLint sourceFirst = first + issued;
+			const u8 *pos = (const u8 *)g_vertexArray.pointer +
+			                (u32)sourceFirst * (u32)fastPosStride;
+			const u8 *tex = (const u8 *)g_texCoordArray.pointer +
+			                (u32)sourceFirst * (u32)fastTexStride;
+			for (GLint i = 0; i < batch; ++i) {
+				const float *p = (const float *)pos;
+				const float *t = (const float *)tex;
+				ImmVtx &v = g_immVtx[g_immCount++];
+				v.x = p[0]; v.y = p[1]; v.z = p[2];
+				v.nx = g_curNx; v.ny = g_curNy; v.nz = g_curNz;
+				v.u = t[0]; v.v = t[1];
+				v.r = g_color[0]; v.g = g_color[1];
+				v.b = g_color[2]; v.a = g_color[3];
+				pos += fastPosStride;
+				tex += fastTexStride;
+			}
+		} else {
+			for (GLint i = 0; i < batch; i++)
+				fetchVertex(first + issued + i, g_immVtx[g_immCount++]);
+		}
 		g_primMode = mode;
 		ps3_gl_flush();
 		issued += batch;

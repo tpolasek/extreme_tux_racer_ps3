@@ -485,6 +485,8 @@ TFlakeArea::TFlakeArea(
 	speed = speed_;
 	rotate_flake = rotate;
 	left = right = bottom = top = front = back = 0.f;
+	vertex_scratch.resize(num_flakes * 12);
+	texcoord_scratch.resize(num_flakes * 8);
 }
 
 /* Batched flake draw.
@@ -519,9 +521,7 @@ void TFlakeArea::Draw(const CControl *ctrl) const {
 		sa = std::sin(r);
 	}
 
-	std::vector<GLfloat> verts, tcoords;
-	verts.reserve(flakes.size() * 12);
-	tcoords.reserve(flakes.size() * 8);
+	std::size_t visible = 0;
 
 	for (std::size_t i = 0; i < flakes.size(); i++) {
 		const TFlake &f = flakes[i];
@@ -532,16 +532,18 @@ void TFlakeArea::Draw(const CControl *ctrl) const {
 		const float cs = ca * s;
 		const float ss = sa * s;
 		const float px = f.pt.x, py = f.pt.y, pz = f.pt.z;
+		GLfloat *v = &vertex_scratch[visible * 12];
+		v[0] = px;      v[1] = py;     v[2]  = pz;       /* v0 */
+		v[3] = px + cs; v[4] = py;     v[5]  = pz - ss;  /* v1 */
+		v[6] = px + cs; v[7] = py + s; v[8]  = pz - ss;  /* v2 */
+		v[9] = px;      v[10] = py + s; v[11] = pz;      /* v3 */
 
-		verts.push_back(px);       verts.push_back(py);     verts.push_back(pz);       /* v0 */
-		verts.push_back(px + cs);  verts.push_back(py);     verts.push_back(pz - ss);  /* v1 */
-		verts.push_back(px + cs);  verts.push_back(py + s); verts.push_back(pz - ss);  /* v2 */
-		verts.push_back(px);       verts.push_back(py + s); verts.push_back(pz);       /* v3 */
-
-		for (int j = 0; j < 8; j++) tcoords.push_back(f.tex[j]);
+		GLfloat *t = &texcoord_scratch[visible * 8];
+		for (int j = 0; j < 8; j++) t[j] = f.tex[j];
+		++visible;
 	}
 
-	if (verts.empty()) return;
+	if (visible == 0) return;
 
 	ScopedRenderMode rm(PARTICLES);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
@@ -551,9 +553,9 @@ void TFlakeArea::Draw(const CControl *ctrl) const {
 
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glVertexPointer(3, GL_FLOAT, 0, verts.data());
-	glTexCoordPointer(2, GL_FLOAT, 0, tcoords.data());
-	glDrawArrays(GL_QUADS, 0, (GLsizei)(verts.size() / 3));
+	glVertexPointer(3, GL_FLOAT, 0, vertex_scratch.data());
+	glTexCoordPointer(2, GL_FLOAT, 0, texcoord_scratch.data());
+	glDrawArrays(GL_QUADS, 0, (GLsizei)(visible * 4));
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 }
@@ -784,6 +786,8 @@ TCurtain::TCurtain(int num_rows, float z_dist, float tex_size,
 	numCols = (unsigned int)(-2 * startangle / angledist) + 1;
 	if (numCols > MAX_CURTAIN_COLS) numCols = MAX_CURTAIN_COLS;
 	lastangle = startangle + (numCols-1) * angledist;
+	vertex_scratch.resize((std::size_t)numCols * numRows * 12);
+	texcoord_scratch.resize((std::size_t)numCols * numRows * 8);
 
 	for (unsigned int i=0; i<numRows; i++)
 		chg[i] = IRandom(0, 5);
@@ -812,12 +816,7 @@ void TCurtain::SetStartParams(const CControl* ctrl) {
  * glRotatef(-angle, 0, 1, 0) maps (x,y,0) -> (cos·x, y, sin·x) with
  * cos/sin of -angle. Then translate by pt. */
 void TCurtain::Draw() const {
-	Tex.BindTex(texture);
 	float halfsize = size / 2.f;
-
-	std::vector<GLfloat> verts, tcoords;
-	verts.reserve((std::size_t)numCols * numRows * 12);
-	tcoords.reserve((std::size_t)numCols * numRows * 8);
 
 	static const GLfloat tex[8] = {
 		0.f, 1.f,
@@ -826,6 +825,7 @@ void TCurtain::Draw() const {
 		0.f, 0.f
 	};
 
+	std::size_t quad = 0;
 	for (unsigned int co = 0; co < numCols; co++) {
 		for (unsigned int row = 0; row < numRows; row++) {
 			const TCurtainElement &c = curtains[co][row];
@@ -836,23 +836,26 @@ void TCurtain::Draw() const {
 			const float cch = cc * h;
 			const float sch = sc * h;
 			const float px  = c.pt.x, py = c.pt.y, pz = c.pt.z;
+			GLfloat *v = &vertex_scratch[quad * 12];
+			v[0] = px - cch; v[1] = py - h; v[2]  = pz + sch; /* v0 */
+			v[3] = px + cch; v[4] = py - h; v[5]  = pz - sch; /* v1 */
+			v[6] = px + cch; v[7] = py + h; v[8]  = pz - sch; /* v2 */
+			v[9] = px - cch; v[10] = py + h; v[11] = pz + sch; /* v3 */
 
-			verts.push_back(px - cch); verts.push_back(py - h); verts.push_back(pz + sch); /* v0 */
-			verts.push_back(px + cch); verts.push_back(py - h); verts.push_back(pz - sch); /* v1 */
-			verts.push_back(px + cch); verts.push_back(py + h); verts.push_back(pz - sch); /* v2 */
-			verts.push_back(px - cch); verts.push_back(py + h); verts.push_back(pz + sch); /* v3 */
-
-			for (int j = 0; j < 8; j++) tcoords.push_back(tex[j]);
+			GLfloat *t = &texcoord_scratch[quad * 8];
+			for (int j = 0; j < 8; j++) t[j] = tex[j];
+			++quad;
 		}
 	}
 
-	if (verts.empty()) return;
+	if (vertex_scratch.empty()) return;
 
+	Tex.BindTex(texture);
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glVertexPointer(3, GL_FLOAT, 0, verts.data());
-	glTexCoordPointer(2, GL_FLOAT, 0, tcoords.data());
-	glDrawArrays(GL_QUADS, 0, (GLsizei)(verts.size() / 3));
+	glVertexPointer(3, GL_FLOAT, 0, vertex_scratch.data());
+	glTexCoordPointer(2, GL_FLOAT, 0, texcoord_scratch.data());
+	glDrawArrays(GL_QUADS, 0, (GLsizei)(vertex_scratch.size() / 3));
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 	glDisableClientState(GL_VERTEX_ARRAY);
 }
@@ -908,7 +911,6 @@ void CCurtain::Update(float timestep, const CControl *ctrl) {
 	for (std::size_t i=0; i<curtains.size(); i++) {
 		curtains[i].Update(timestep, drift, ctrl);
 	}
-	Draw();
 }
 
 void CCurtain::Reset() {

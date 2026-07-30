@@ -1,9 +1,9 @@
 # characters.list
 # [type] can be "spheres" or "3d"
 
+*[name] Samuel [type] spheres [dir] samuel
+*[name] Jane [type] spheres [dir] jane
+*[name] Dad [type] spheres [dir] beastie
 *[name] Tux [type] spheres [dir] tux
 *[name] Trixi [type] spheres [dir] trixi
 *[name] Boris [type] spheres [dir] boris
-*[name] Samuel [type] spheres [dir] samuel
-*[name] Beastie [type] spheres [dir] beastie
-*[name] Jane [type] spheres [dir] jane

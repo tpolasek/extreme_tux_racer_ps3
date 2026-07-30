@@ -96,6 +96,7 @@ public:
 	~CCharacter();
 
 	bool LoadCharacterList();
+	void LoadCharacterPreviews();
 	void FreeCharacterPreviews();
 };
 

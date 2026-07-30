@@ -157,6 +157,21 @@ bool CCharacter::LoadCharacterList() {
 	return !CharList.empty();
 }
 
+void CCharacter::LoadCharacterPreviews() {
+	for (std::size_t i = 0; i < CharList.size(); i++) {
+		if (CharList[i].preview != nullptr) continue;
+
+		std::string charpath = MakePathStr(param.char_dir, CharList[i].dir);
+		std::string previewfile = charpath + SEP "preview.png";
+		CharList[i].preview = new TTexture();
+		if (!CharList[i].preview->Load(previewfile, false)) {
+			delete CharList[i].preview;
+			CharList[i].preview = nullptr;
+			Message("could not load previewfile of character");
+		}
+	}
+}
+
 void CCharacter::FreeCharacterPreviews() {
 	for (std::size_t i=0; i<CharList.size(); i++) {
 		delete CharList[i].preview;

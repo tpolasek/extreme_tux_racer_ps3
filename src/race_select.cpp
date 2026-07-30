@@ -28,9 +28,11 @@ GNU General Public License for more details.
 #include "course.h"
 #include "gui.h"
 #include "font.h"
+#include "game_ctrl.h"
 #include "translation.h"
 #include "spx.h"
 #include "loading.h"
+#include "regist.h"
 #include "winsys.h"
 
 CRaceSelect RaceSelect;
@@ -43,6 +45,7 @@ void SetRaceConditions() {
 	// Map attributes are hardcoded to defaults: Sunny, Light snow, Breeze, mirror Off.
 	g_game.course = &(*Course.currentCourseList)[course->GetValue()];
 	g_game.theme_id = (*Course.currentCourseList)[course->GetValue()].music_theme;
+	Char.FreeCharacterPreviews();
 	State::manager.RequestEnterState(Loading);
 }
 
@@ -53,6 +56,7 @@ void CRaceSelect::Jbutt(int button, bool pressed) {
 			SetRaceConditions();
 			break;
 		case 1: // B / Back
+			State::manager.RequestEnterState(Regist);
 			break;
 	}
 }

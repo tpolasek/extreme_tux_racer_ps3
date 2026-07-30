@@ -45,7 +45,6 @@ void QuitRegistration() {
 	g_game.player = Players.GetPlayer(0);
 
 	g_game.character = &Char.CharList[character->GetValue()];
-	Char.FreeCharacterPreviews(); // From here on, character previews are no longer required
 	State::manager.RequestEnterState(RaceSelect);
 }
 
@@ -90,8 +89,20 @@ void CRegist::Enter() {
 	area = AutoAreaN(30, 80, framewidth);
 	texsize = 128 * Winsys.scale;
 
+	Char.LoadCharacterPreviews();
+	int initial_character = 0;
+	if (g_game.character != nullptr) {
+		for (std::size_t i = 0; i < Char.CharList.size(); i++) {
+			if (&Char.CharList[i] == g_game.character) {
+				initial_character = (int)i;
+				break;
+			}
+		}
+	}
+
 	ResetGUI();
-	character = AddUpDown(area.left + framewidth + 8, area.top, 0, (int)Char.CharList.size() - 1, 0);
+	character = AddUpDown(area.left + framewidth + 8, area.top, 0,
+		(int)Char.CharList.size() - 1, initial_character);
 	int siz = FT.AutoSizeN(5);
 	textbutton = AddTextButton(Trans.Text(60), CENTER, AutoYPosN(70), siz);
 
@@ -103,6 +114,7 @@ void CRegist::Enter() {
 	sCharFrame = AddFramedText(area.left, area.top, framewidth, frameheight, 3, colMBackgr, "", FT.GetSize());
 
 	// Hardcode the single player name as "bunny".
+	Players.ResetControls();
 	Players.SetSinglePlayer(hardcodedName);
 
 	SetFocus(character);

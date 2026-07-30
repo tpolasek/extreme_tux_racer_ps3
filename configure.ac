@@ -109,6 +109,7 @@ AC_CONFIG_FILES([
         data/char/Makefile
         data/char/beastie/Makefile
         data/char/boris/Makefile
+        data/char/jane/Makefile
         data/char/samuel/Makefile
         data/char/trixi/Makefile
         data/char/tux/Makefile

@@ -87,8 +87,8 @@ void LoadConfigFile() {
 	/* Keep the PS3 view volume within the RSX's sustained 60 Hz budget.
 	 * Environment fog uses the same distance, so the culled horizon remains
 	 * concealed instead of exposing a hard terrain edge. */
-	if (param.forward_clip_distance > 42)
-		param.forward_clip_distance = 42;
+	if (param.forward_clip_distance > 53)
+		param.forward_clip_distance = 53;
 #endif
 }
 
@@ -104,7 +104,7 @@ void SetConfigDefaults() {
 	param.framerate = 60;
 
 #ifdef __PPU__
-	param.forward_clip_distance = 42;
+	param.forward_clip_distance = 53;
 #else
 	param.forward_clip_distance = 75;
 #endif

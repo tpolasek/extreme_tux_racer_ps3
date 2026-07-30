@@ -158,6 +158,7 @@ private:
 	int			GetTerrain(const unsigned char* pixel) const;
 
 	void		MirrorCourseData();
+	TVector3d	FindCourseNormalImpl(double x, double z, double* y) const;
 public:
 	CCourse();
 	~CCourse();
@@ -200,6 +201,7 @@ public:
 	void GetIndicesForPoint(double x, double z, unsigned int* x0, unsigned int* y0, unsigned int* x1, unsigned int* y1) const;
 	void FindBarycentricCoords(double x, double z,
 	                           TVector2i *idx0, TVector2i *idx1, TVector2i *idx2, double *u, double *v) const;
+	void FindCourseNormalAndY(double x, double z, TVector3d& normal, double& y) const;
 	TVector3d FindCourseNormal(double x, double z) const;
 	double FindYCoord(double x, double z) const;
 	void GetSurfaceType(double x, double z, double weights[]) const;

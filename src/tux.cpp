@@ -680,8 +680,10 @@ void CCharShape::DrawShadowVertex(double x, double y, double z, const TMatrix<4,
 	TVector3d pt(x, y, z);
 	pt = TransformPoint(mat, pt);
 	double old_y = pt.y;
-	TVector3d nml = Course.FindCourseNormal(pt.x, pt.z);
-	pt.y = Course.FindYCoord(pt.x, pt.z) + SHADOW_HEIGHT;
+	TVector3d nml;
+	double course_y;
+	Course.FindCourseNormalAndY(pt.x, pt.z, nml, course_y);
+	pt.y = course_y + SHADOW_HEIGHT;
 	if (pt.y > old_y) pt.y = old_y;
 	glNormal3(nml);
 	glVertex3(pt);

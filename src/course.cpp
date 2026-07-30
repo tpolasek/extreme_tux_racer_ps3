@@ -942,7 +942,7 @@ void CCourse::FindBarycentricCoords(double x, double z, TVector2i *idx0,
 #define COURSE_VERTX(_x, _y) TVector3d ( (double)(_x)/(nx-1.)*curr_course->size.x, \
                        ELEV((_x),(_y)), -(double)(_y)/(ny-1.)*curr_course->size.y )
 
-TVector3d CCourse::FindCourseNormal(double x, double z) const {
+TVector3d CCourse::FindCourseNormalImpl(double x, double z, double* y) const {
 	TVector2i idx0, idx1, idx2;
 	double u, v;
 	FindBarycentricCoords(x, z, &idx0, &idx1, &idx2, &u, &v);
@@ -954,6 +954,8 @@ TVector3d CCourse::FindCourseNormal(double x, double z) const {
 	TVector3d p0 = COURSE_VERTX(idx0.x, idx0.y);
 	TVector3d p1 = COURSE_VERTX(idx1.x, idx1.y);
 	TVector3d p2 = COURSE_VERTX(idx2.x, idx2.y);
+	if (y)
+		*y = u * p0.y + v * p1.y + (1. - u - v) * p2.y;
 
 	TVector3d smooth_nml = u * n0 +
 	                       v * n1 +
@@ -965,10 +967,17 @@ TVector3d CCourse::FindCourseNormal(double x, double z) const {
 	double min_bary = std::min(u, std::min(v, 1. - u - v));
 	double interp_factor = std::min(min_bary / NORM_INTERPOL, 1.0);
 
-	TVector3d interp_nml = interp_factor * tri_nml + (1.-interp_factor) * smooth_nml;
-	interp_nml.Norm();
+	TVector3d normal = interp_factor * tri_nml + (1.-interp_factor) * smooth_nml;
+	normal.Norm();
+	return normal;
+}
 
-	return interp_nml;
+void CCourse::FindCourseNormalAndY(double x, double z, TVector3d& normal, double& y) const {
+	normal = FindCourseNormalImpl(x, z, &y);
+}
+
+TVector3d CCourse::FindCourseNormal(double x, double z) const {
+	return FindCourseNormalImpl(x, z, nullptr);
 }
 
 double CCourse::FindYCoord(double x, double z) const {

@@ -1730,6 +1730,111 @@ void gluQuadricDrawStyle(GLUquadricObj*, GLenum)   { }
 void gluQuadricOrientation(GLUquadricObj*, GLenum) { }
 void gluQuadricNormals(GLUquadricObj*, GLenum)     { }
 
+/* Tux is assembled from the same small set of unit-sphere tessellations every
+ * frame. Cache their position/normal/UV streams so each body part only copies
+ * and colours vertices instead of recalculating trigonometry. The model-view
+ * matrix still supplies each node's scale and pose.
+ *
+ * The public shim accepts up to 24 slices and 16 stacks, whose connected-strip
+ * representation tops out at 830 vertices. Tux itself currently uses six
+ * tessellations, so eight lazy cache slots leave room without permanent
+ * worst-case storage for every possible slices/stacks pair. */
+#define PS3_GLU_SPHERE_CACHE_SLOTS 8
+#define PS3_GLU_SPHERE_MAX_VERTS   830
+struct SphereTemplateVtx {
+	float x, y, z;
+	float nx, ny, nz;
+	float u, v;
+};
+struct SphereTemplate {
+	GLint slices;
+	GLint stacks;
+	GLint count;
+	SphereTemplateVtx *vertices;
+};
+static SphereTemplate g_sphereTemplates[PS3_GLU_SPHERE_CACHE_SLOTS];
+static SphereTemplateVtx g_sphereScratch[PS3_GLU_SPHERE_MAX_VERTS];
+
+static void appendSphereTemplateVertex(SphereTemplateVtx *out, GLint *count,
+                                       float x, float y, float z,
+                                       float u, float v) {
+	if (*count >= PS3_GLU_SPHERE_MAX_VERTS) return;
+	SphereTemplateVtx &dst = out[(*count)++];
+	dst.x = x; dst.y = y; dst.z = z;
+	dst.nx = x; dst.ny = y; dst.nz = z;
+	dst.u = u; dst.v = v;
+}
+
+static GLint buildSphereTemplate(GLint slices, GLint stacks,
+                                 SphereTemplateVtx *out) {
+	const float dTheta = 2.f * 3.14159265f / (float)slices;
+	const float dPhi   = 3.14159265f / (float)stacks;
+	GLint count = 0;
+	SphereTemplateVtx previousLast = {};
+
+	for (GLint i = 0; i < stacks; ++i) {
+		const float phi0 = (float)i * dPhi;
+		const float phi1 = (float)(i + 1) * dPhi;
+		const float y0 = cosf(phi0), r0 = sinf(phi0);
+		const float y1 = cosf(phi1), r1 = sinf(phi1);
+
+		if (i > 0) {
+			/* Preserve the original strip's two-vertex degenerate restart. */
+			if (count < PS3_GLU_SPHERE_MAX_VERTS)
+				out[count++] = previousLast;
+			appendSphereTemplateVertex(out, &count, r1, y1, 0.f,
+			                           0.f, (float)(i + 1) / (float)stacks);
+		}
+
+		for (GLint j = 0; j <= slices; ++j) {
+			const float th = (float)j * dTheta;
+			const float ct = cosf(th), st = sinf(th);
+			const float nx1 = r1 * ct, ny1 = y1, nz1 = r1 * st;
+			appendSphereTemplateVertex(out, &count, nx1, ny1, nz1,
+			                           (float)j / (float)slices,
+			                           (float)(i + 1) / (float)stacks);
+
+			const float nx0 = r0 * ct, ny0 = y0, nz0 = r0 * st;
+			appendSphereTemplateVertex(out, &count, nx0, ny0, nz0,
+			                           (float)j / (float)slices,
+			                           (float)i / (float)stacks);
+			if (j == slices)
+				previousLast = out[count - 1];
+		}
+	}
+	return count;
+}
+
+static const SphereTemplateVtx *getSphereTemplate(GLint slices, GLint stacks,
+                                                   GLint *count) {
+	for (GLint i = 0; i < PS3_GLU_SPHERE_CACHE_SLOTS; ++i) {
+		const SphereTemplate &entry = g_sphereTemplates[i];
+		if (entry.vertices && entry.slices == slices && entry.stacks == stacks) {
+			*count = entry.count;
+			return entry.vertices;
+		}
+	}
+
+	*count = buildSphereTemplate(slices, stacks, g_sphereScratch);
+	for (GLint i = 0; i < PS3_GLU_SPHERE_CACHE_SLOTS; ++i) {
+		SphereTemplate &entry = g_sphereTemplates[i];
+		if (entry.vertices) continue;
+		entry.vertices = (SphereTemplateVtx *)malloc(
+		    (size_t)*count * sizeof(SphereTemplateVtx));
+		if (!entry.vertices) break;
+		memcpy(entry.vertices, g_sphereScratch,
+		       (size_t)*count * sizeof(SphereTemplateVtx));
+		entry.slices = slices;
+		entry.stacks = stacks;
+		entry.count = *count;
+		return entry.vertices;
+	}
+
+	/* Allocation failure or an unexpected ninth tessellation remains correct;
+	 * only that call falls back to the freshly generated scratch stream. */
+	return g_sphereScratch;
+}
+
 void gluSphere(GLUquadricObj*, GLdouble radius, GLint slices, GLint stacks) {
 	if (slices < 3) slices = 3;
 	if (stacks < 2) stacks = 2;
@@ -1738,55 +1843,29 @@ void gluSphere(GLUquadricObj*, GLdouble radius, GLint slices, GLint stacks) {
 	if (stacks > 16) stacks = 16;
 
 	const float R = (float)radius;
-	const float dTheta = 2.f * 3.14159265f / (float)slices;
-	const float dPhi   = 3.14159265f / (float)stacks;
 
 	/* Submit the whole sphere as one connected strip.  The old implementation
 	 * called glEnd() once per latitude band, so every visible Tux body part
 	 * generated `stacks` RSX draws.  Degenerate vertices join adjacent bands
 	 * without producing visible triangles and preserve the winding because
 	 * every band contains an even number of vertices. */
+	GLint vertexCount = 0;
+	const SphereTemplateVtx *vertices =
+	    getSphereTemplate(slices, stacks, &vertexCount);
 	glBegin(GL_TRIANGLE_STRIP);
-	float previousLastX = 0.f, previousLastY = 0.f, previousLastZ = 0.f;
-	for (int i = 0; i < stacks; i++) {
-		float phi0 = (float)i * dPhi;
-		float phi1 = (float)(i + 1) * dPhi;
-		float y0 = cosf(phi0), r0 = sinf(phi0);
-		float y1 = cosf(phi1), r1 = sinf(phi1);
-
-		if (i > 0) {
-			/* Repeat the previous band's last vertex, then seed the next
-			 * band's first vertex.  The regular loop repeats that first
-			 * vertex once more, completing the degenerate restart. */
-			glVertex3d(previousLastX, previousLastY, previousLastZ);
-			float phi2 = (float)(i + 1) * dPhi;
-			float y2 = cosf(phi2), r2 = sinf(phi2);
-			glNormal3d(r2, y2, 0.f);
-			glTexCoord2f(0.f, (float)(i + 1) / (float)stacks);
-			glVertex3d(R * r2, R * y2, 0.f);
-		}
-
-		for (int j = 0; j <= slices; j++) {
-			float th = (float)j * dTheta;
-			float ct = cosf(th), st = sinf(th);
-
-			/* bottom of strip */
-			float nx1 = r1 * ct, ny1 = y1, nz1 = r1 * st;
-			glNormal3d(nx1, ny1, nz1);
-			glTexCoord2f((float)j / (float)slices, (float)(i + 1) / (float)stacks);
-			glVertex3d(R * nx1, R * ny1, R * nz1);
-
-			/* top of strip */
-			float nx0 = r0 * ct, ny0 = y0, nz0 = r0 * st;
-			glNormal3d(nx0, ny0, nz0);
-			glTexCoord2f((float)j / (float)slices, (float)i / (float)stacks);
-			glVertex3d(R * nx0, R * ny0, R * nz0);
-			if (j == slices) {
-				previousLastX = R * nx0;
-				previousLastY = R * ny0;
-				previousLastZ = R * nz0;
-			}
-		}
+	for (GLint i = 0; i < vertexCount && g_immCount < PS3_IMM_MAX; ++i) {
+		const SphereTemplateVtx &src = vertices[i];
+		ImmVtx &dst = g_immVtx[g_immCount++];
+		dst.x = R * src.x; dst.y = R * src.y; dst.z = R * src.z;
+		dst.nx = src.nx; dst.ny = src.ny; dst.nz = src.nz;
+		dst.u = src.u; dst.v = src.v;
+		dst.r = g_color[0]; dst.g = g_color[1];
+		dst.b = g_color[2]; dst.a = g_color[3];
+	}
+	if (vertexCount > 0) {
+		const SphereTemplateVtx &last = vertices[vertexCount - 1];
+		g_curNx = last.nx; g_curNy = last.ny; g_curNz = last.nz;
+		g_curU = last.u; g_curV = last.v;
 	}
 	glEnd();
 }

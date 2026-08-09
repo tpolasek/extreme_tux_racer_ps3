@@ -2,8 +2,15 @@
 
 Minimum viable PS3 port of Extreme Tux Racer 0.8.4. The 2D menu path renders
 via an OpenGL-to-RSX emulation shim; pad input, TTY logging, and asset
-packaging are working. Sound is stubbed and the 3D race rendering is deferred
-(menu-only scope).
+packaging are working.
+
+## Modifications:
+* Highscore with picture
+* RPM and "Gears" and Speed -- my son likes for racing games :)
+* Simplified menus, combined level selection
+
+<img width="1973" height="1117" alt="image" src="https://github.com/user-attachments/assets/71e9aee3-d274-478f-b75d-694540980b20" />
+
 
 Upstream project: https://sourceforge.net/projects/extremetuxracer/
 

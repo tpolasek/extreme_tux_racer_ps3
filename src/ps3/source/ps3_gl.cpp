@@ -830,6 +830,107 @@ static float readArrayComp(const ClientArray &a, GLint idx, GLint comp) {
 	}
 }
 
+/* Decoded view of a client array, computed once per draw call.
+ * Hoists the per-vertex pointer-NULL check, stride normalization
+ * (stride==0 → tightly packed), and the type switch out of the inner
+ * loop in the gather fast paths below. */
+struct ArrayView {
+	const u8 *base;
+	GLsizei   stride;
+	GLenum    type;
+	GLint     size;
+	bool      enabled;
+};
+static inline ArrayView decodeArray(const ClientArray &a) {
+	ArrayView v;
+	v.enabled = (a.enabled == GL_TRUE) && a.pointer != NULL;
+	if (v.enabled) {
+		v.base   = (const u8 *)a.pointer;
+		v.stride = a.stride ? a.stride : (GLsizei)(sizeofGlType(a.type) * a.size);
+		v.type   = a.type;
+		v.size   = a.size;
+	} else {
+		v.base = NULL; v.stride = 0; v.type = GL_FLOAT; v.size = 0;
+	}
+	return v;
+}
+
+/* Indexed vertex gather for the common float3 position / float3 normal /
+ * float2 texcoord / ubyte4 color layouts ETR uses for course geometry.
+ * Hoisting the type dispatch out of the inner loop cuts per-vertex work
+ * from ~8 readArrayComp calls (each doing NULL-check + stride compute +
+ * type switch) down to one byte-stride pointer add per array.
+ *
+ * Template flags specialize at compile time so the inner loop has no
+ * per-vertex branches for missing arrays; Idx selects the index type. */
+template<bool HasNrm, bool HasColUbyte, typename Idx>
+static inline void gatherIndexed(const ArrayView &pos, const ArrayView &nrm,
+                                 const ArrayView &tex, const ArrayView &col,
+                                 GLsizei count, const Idx *indices,
+                                 ImmVtx *out) {
+	static const float kInv255 = 1.f / 255.f;
+	const u8   *const pB = pos.base;
+	const u8   *const nB = nrm.base;
+	const u8   *const tB = tex.base;
+	const u8   *const cB = col.base;
+	const GLsizei pS = pos.stride;
+	const GLsizei nS = nrm.stride;
+	const GLsizei tS = tex.stride;
+	const GLsizei cS = col.stride;
+	const GLint   cSz = col.size;
+	const float cr = g_color[0], cg = g_color[1], cb = g_color[2], ca = g_color[3];
+	const float cnx = g_curNx, cny = g_curNy, cnz = g_curNz;
+
+	for (GLsizei i = 0; i < count; i++) {
+		const GLuint idx = (GLuint)indices[i];
+		ImmVtx &v = out[i];
+		const float *p = (const float *)(pB + (u32)idx * (u32)pS);
+		v.x = p[0]; v.y = p[1]; v.z = p[2];
+		if (HasNrm) {
+			const float *n = (const float *)(nB + (u32)idx * (u32)nS);
+			v.nx = n[0]; v.ny = n[1]; v.nz = n[2];
+		} else {
+			v.nx = cnx; v.ny = cny; v.nz = cnz;
+		}
+		const float *t = (const float *)(tB + (u32)idx * (u32)tS);
+		v.u = t[0]; v.v = t[1];
+		if (HasColUbyte) {
+			const u8 *c = cB + (u32)idx * (u32)cS;
+			v.r = c[0] * kInv255; v.g = c[1] * kInv255;
+			v.b = c[2] * kInv255;
+			v.a = (cSz > 3) ? c[3] * kInv255 : 1.f;
+		} else {
+			v.r = cr; v.g = cg; v.b = cb; v.a = ca;
+		}
+	}
+}
+
+/* Pick the gather variant for the current client-array state. Returns
+ * true and fills outHasNrm/outHasColUbyte on a fast-path match; false
+ * means fall back to fetchVertex(). Only float position+texcoord (with
+ * optional float normal and ubyte color) are fast-pathed — these are
+ * the only layouts the game's course geometry uses. */
+static bool pickGatherVariant(const ArrayView &pos, const ArrayView &nrm,
+                              const ArrayView &tex, const ArrayView &col,
+                              bool &outHasNrm, bool &outHasColUbyte) {
+	const bool posF3 = pos.enabled && pos.type == GL_FLOAT && pos.size == 3;
+	const bool texF2 = tex.enabled && tex.type == GL_FLOAT && tex.size == 2;
+	if (!posF3 || !texF2) return false;
+	const bool nrmF3 = nrm.enabled && nrm.type == GL_FLOAT && nrm.size == 3;
+	const bool colUB = col.enabled && col.type == GL_UNSIGNED_BYTE;
+	if (nrmF3) {
+		if (colUB) { outHasNrm = true;  outHasColUbyte = true;  return true; }
+		if (!col.enabled) {
+			outHasNrm = true;  outHasColUbyte = false; return true;
+		}
+		return false;
+	}
+	if (!nrm.enabled && !col.enabled) {
+		outHasNrm = false; outHasColUbyte = false; return true;
+	}
+	return false;
+}
+
 /* color arrays are GLubyte[4] or float[4] — normalize ubyte to 0..1 */
 static void readColor(const ClientArray &a, GLint idx, float *out) {
 	if (!a.pointer || !a.enabled) {
@@ -962,6 +1063,20 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 	if (count <= 0 || !indices) return;
 	/* expand fully-indexed draw into de-indexed ImmVtx and reuse DrawArrays
 	 * batching path. 32-bit indices are the course's preferred form. */
+
+	/* Decode client arrays once per draw and pick a specialized gather
+	 * loop. The variants below cover the float3-position + float2-texcoord
+	 * combinations ETR actually uses; anything else falls back to the
+	 * per-component fetchVertex() decoder. Index-type dispatch happens
+	 * once per batch — the inner gather loop is branchless on type. */
+	const ArrayView pos = decodeArray(g_vertexArray);
+	const ArrayView nrm = decodeArray(g_normalArray);
+	const ArrayView tex = decodeArray(g_texCoordArray);
+	const ArrayView col = decodeArray(g_colorArray);
+	bool hasNrm = false, hasColUbyte = false;
+	const bool fastGather = pickGatherVariant(pos, nrm, tex, col,
+	                                           hasNrm, hasColUbyte);
+
 	GLint issued = 0;
 	bool canSplit = (mode == GL_TRIANGLES || mode == GL_QUADS);
 	while (issued < count) {
@@ -973,15 +1088,43 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 		}
 		if (batch > PS3_IMM_MAX) batch = PS3_IMM_MAX;
 		g_immCount = 0;
-		for (GLsizei i = 0; i < batch; i++) {
-			GLuint idx;
-			if (type == GL_UNSIGNED_INT)
-				idx = ((const GLuint *)indices)[issued + i];
-			else if (type == GL_UNSIGNED_SHORT)
-				idx = ((const GLushort *)indices)[issued + i];
-			else
-				idx = ((const GLubyte *)indices)[issued + i];
-			fetchVertex((GLint)idx, g_immVtx[g_immCount++]);
+		if (fastGather) {
+			/* `issued` advances the index base each batch so the inner
+			 * gather can read indices[0..batch-1] directly. */
+			if (hasNrm && hasColUbyte) {
+				if (type == GL_UNSIGNED_INT)
+					gatherIndexed<true, true, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
+				else if (type == GL_UNSIGNED_SHORT)
+					gatherIndexed<true, true, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
+				else
+					gatherIndexed<true, true, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
+			} else if (hasNrm) {
+				if (type == GL_UNSIGNED_INT)
+					gatherIndexed<true, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
+				else if (type == GL_UNSIGNED_SHORT)
+					gatherIndexed<true, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
+				else
+					gatherIndexed<true, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
+			} else {
+				if (type == GL_UNSIGNED_INT)
+					gatherIndexed<false, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
+				else if (type == GL_UNSIGNED_SHORT)
+					gatherIndexed<false, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
+				else
+					gatherIndexed<false, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
+			}
+			g_immCount = batch;
+		} else {
+			for (GLsizei i = 0; i < batch; i++) {
+				GLuint idx;
+				if (type == GL_UNSIGNED_INT)
+					idx = ((const GLuint *)indices)[issued + i];
+				else if (type == GL_UNSIGNED_SHORT)
+					idx = ((const GLushort *)indices)[issued + i];
+				else
+					idx = ((const GLubyte *)indices)[issued + i];
+				fetchVertex((GLint)idx, g_immVtx[g_immCount++]);
+			}
 		}
 		g_primMode = mode;
 		ps3_gl_flush();

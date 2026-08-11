@@ -50,6 +50,7 @@ extern "C" const u8 etr_terrain_fpo[];
 extern "C" const u8 etr_ui_fpo[];
 
 extern "C" void ps3_gl_flush(void);
+static void waitVtxLabel(u32 val);
 
 /* =====================================================================
  * Internal state
@@ -206,6 +207,14 @@ static int      g_vtxOversizeRingHead = 0;
 static vu32    *g_vtxLabel       = NULL;
 static u32      g_vtxLabelNext   = 1;
 static u32      g_unflushedDraws = 0;
+
+/* Array draws can decode directly into an acquired RSX ring slot. The next
+ * ps3_gl_flush consumes this one-shot reservation instead of acquiring a
+ * second slot and memcpying g_immVtx into it. */
+static ImmVtx  *g_preparedDrawBuf = NULL;
+static u32      g_preparedDrawOffset = 0;
+static int      g_preparedRingSlot = -1;
+static int      g_preparedOversizeRingSlot = -1;
 
 /* textures */
 #define PS3_MAX_TEXTURES 512
@@ -1102,6 +1111,30 @@ static void fetchVertex(GLint idx, ImmVtx &v) {
 	v.r = c[0]; v.g = c[1]; v.b = c[2]; v.a = c[3];
 }
 
+static ImmVtx *prepareDirectArrayDraw(GLsizei count) {
+	GFX_ASSERT(g_preparedDrawBuf == NULL,
+	           "nested direct array-draw reservation");
+	g_preparedRingSlot = -1;
+	g_preparedOversizeRingSlot = -1;
+	if (count <= PS3_VTX_SLOT_MAX) {
+		g_preparedRingSlot = g_vtxRingHead;
+		VtxSlot &slot = g_vtxRing[g_preparedRingSlot];
+		waitVtxLabel(slot.labelVal);
+		g_preparedDrawBuf = slot.buf;
+		g_preparedDrawOffset = slot.offset;
+		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
+	} else {
+		g_preparedOversizeRingSlot = g_vtxOversizeRingHead;
+		VtxSlot &slot = g_vtxOversizeRing[g_preparedOversizeRingSlot];
+		waitVtxLabel(slot.labelVal);
+		g_preparedDrawBuf = slot.buf;
+		g_preparedDrawOffset = slot.offset;
+		g_vtxOversizeRingHead =
+		    (g_vtxOversizeRingHead + 1) % PS3_OVERSIZE_RING;
+	}
+	return g_preparedDrawBuf;
+}
+
 void glVertexPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
 	g_vertexArray.size = size; g_vertexArray.type = type;
 	g_vertexArray.stride = stride; g_vertexArray.pointer = ptr;
@@ -1216,30 +1249,32 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 		}
 		if (batch > PS3_IMM_MAX) batch = PS3_IMM_MAX;
 		g_immCount = 0;
+		ImmVtx *drawVertices = prepareDirectArrayDraw(batch);
+		if (!drawVertices) return;
 		if (fastGather) {
 			/* `issued` advances the index base each batch so the inner
 			 * gather can read indices[0..batch-1] directly. */
 			if (hasNrm && hasColUbyte) {
 				if (type == GL_UNSIGNED_INT)
-					gatherIndexed<true, true, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
+					gatherIndexed<true, true, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, drawVertices);
 				else if (type == GL_UNSIGNED_SHORT)
-					gatherIndexed<true, true, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
+					gatherIndexed<true, true, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, drawVertices);
 				else
-					gatherIndexed<true, true, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
+					gatherIndexed<true, true, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, drawVertices);
 			} else if (hasNrm) {
 				if (type == GL_UNSIGNED_INT)
-					gatherIndexed<true, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
+					gatherIndexed<true, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, drawVertices);
 				else if (type == GL_UNSIGNED_SHORT)
-					gatherIndexed<true, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
+					gatherIndexed<true, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, drawVertices);
 				else
-					gatherIndexed<true, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
+					gatherIndexed<true, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, drawVertices);
 			} else {
 				if (type == GL_UNSIGNED_INT)
-					gatherIndexed<false, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
+					gatherIndexed<false, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, drawVertices);
 				else if (type == GL_UNSIGNED_SHORT)
-					gatherIndexed<false, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
+					gatherIndexed<false, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, drawVertices);
 				else
-					gatherIndexed<false, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
+					gatherIndexed<false, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, drawVertices);
 			}
 			g_immCount = batch;
 		} else {
@@ -1251,7 +1286,7 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 					idx = ((const GLushort *)indices)[issued + i];
 				else
 					idx = ((const GLubyte *)indices)[issued + i];
-				fetchVertex((GLint)idx, g_immVtx[g_immCount++]);
+				fetchVertex((GLint)idx, drawVertices[g_immCount++]);
 			}
 		}
 		g_primMode = mode;
@@ -1885,8 +1920,19 @@ extern "C" void ps3_gl_flush(void) {
 	const GLboolean terrainDraw = useTerrainFragmentProgram();
 	const GLboolean uiDraw = useUiFragmentProgram();
 	const GLboolean liteDraw = useLiteFragmentProgram();
+	const GLboolean drawAlreadyPrepared =
+	    g_preparedDrawBuf ? GL_TRUE : GL_FALSE;
 
-	if (n <= PS3_VTX_SLOT_MAX) {
+	if (drawAlreadyPrepared) {
+		drawBuf = g_preparedDrawBuf;
+		drawOffset = g_preparedDrawOffset;
+		ringSlot = g_preparedRingSlot;
+		oversizeRingSlot = g_preparedOversizeRingSlot;
+		g_preparedDrawBuf = NULL;
+		g_preparedDrawOffset = 0;
+		g_preparedRingSlot = -1;
+		g_preparedOversizeRingSlot = -1;
+	} else if (n <= PS3_VTX_SLOT_MAX) {
 		/* Acquire next ring slot for BOTH vertex data and the fragment-program
 		 * ucode copy. Waiting on the same label keeps the two in lockstep. */
 		ringSlot = g_vtxRingHead;
@@ -1959,7 +2005,8 @@ extern "C" void ps3_gl_flush(void) {
 	 * fan. RSX also produces nothing for those cases. The strict checks
 	 * here caused false halts during gameplay. */
 
-	memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
+	if (!drawAlreadyPrepared)
+		memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
 	/* Publish PPU stores to RSX-visible local memory before the invalidate
 	 * and draw commands can reach the GPU.  RPCS3 presents coherent memory,
 	 * but real hardware can otherwise fetch a mixture of old/new cache lines

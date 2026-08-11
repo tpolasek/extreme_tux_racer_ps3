@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <altivec.h>
 
 #include "rsxutil.h"
 #include "ps3_gl_internal.h"
@@ -60,10 +61,12 @@ extern "C" void ps3_gl_flush(void);
 #define PS3_NUM_LIGHTS         4
 
 struct MatrixStack {
-	float m[16];
+	alignas(16) float m[16];
 	float stack[PS3_MATRIX_STACK_DEPTH][16];
 	int   top;
 };
+static_assert(alignof(MatrixStack) >= 16,
+              "MatrixStack must be 16-byte aligned for VMX loads");
 
 static MatrixStack g_proj;
 static MatrixStack g_mv;
@@ -343,29 +346,68 @@ static int g_rsxReady = 0;
 
 /* =====================================================================
  * Matrix math (column-major)
+ *
+ * VMX-accelerated 4x4 multiply / transpose. Column-major storage means
+ * a column of A is one contiguous vector float — exactly the input shape
+ * vec_madd wants. Inputs must be 16-byte aligned (MatrixStack::m carries
+ * alignas(16); every local float[16] matrix in this file is annotated the
+ * same way so the same vec_ld/vec_st path is safe for callers like
+ * glTranslatef/glRotatef that pass a stack-local temporary).
  * ===================================================================== */
+static inline vector float vmxLoadMatCol(const float *m, int col) {
+	return vec_ld(col * 16, m);
+}
+
 static void matIdentity(float *m) {
 	memset(m, 0, sizeof(float) * 16);
 	m[0] = m[5] = m[10] = m[15] = 1.f;
 }
 
 static void matMul(float *out, const float *a, const float *b) {
-	float t[16];
+	/* out[col][row] = sum_k a[k][row] * b[col][k]
+	 * = sum_k a_col_k * b[col][k]
+	 * Load A's four columns once; each output column is then four splat/
+	 * madd operations weighted by the corresponding element of B's column. */
+	alignas(16) float t[16];
+	const vector float a0 = vmxLoadMatCol(a, 0);
+	const vector float a1 = vmxLoadMatCol(a, 1);
+	const vector float a2 = vmxLoadMatCol(a, 2);
+	const vector float a3 = vmxLoadMatCol(a, 3);
+	const vector float zero = (vector float){0.f, 0.f, 0.f, 0.f};
+
 	for (int col = 0; col < 4; col++) {
-		for (int row = 0; row < 4; row++) {
-			float s = 0.f;
-			for (int k = 0; k < 4; k++)
-				s += a[k * 4 + row] * b[col * 4 + k];
-			t[col * 4 + row] = s;
-		}
+		const vector float bc = vmxLoadMatCol(b, col);
+		vector float r = vec_madd(a0, vec_splat(bc, 0), zero);
+		r = vec_madd(a1, vec_splat(bc, 1), r);
+		r = vec_madd(a2, vec_splat(bc, 2), r);
+		r = vec_madd(a3, vec_splat(bc, 3), r);
+		vec_st(r, col * 16, t);
 	}
 	memcpy(out, t, sizeof(float) * 16);
 }
 
 static void matTranspose(float *out, const float *m) {
-	for (int i = 0; i < 4; i++)
-		for (int j = 0; j < 4; j++)
-			out[i * 4 + j] = m[j * 4 + i];
+	/* Canonical AltiVec 4x4 transpose: load four column vectors, two
+	 * mergeh/mergel pairs build two intermediate shuffles, two more
+	 * produce the four output rows. out never aliases m here (the only
+	 * caller passes &tmp in ps3_gl_flush), and every input is consumed
+	 * into registers before any store issues, so aliasing is moot.
+	 * Inline the final merge into vec_st — GCC's -Wunused-but-set-variable
+	 * doesn't track vector intrinsic argument uses cleanly. */
+	const vector float c0 = vmxLoadMatCol(m, 0);
+	const vector float c1 = vmxLoadMatCol(m, 1);
+	const vector float c2 = vmxLoadMatCol(m, 2);
+	const vector float c3 = vmxLoadMatCol(m, 3);
+
+	const vector float t0 = vec_mergeh(c0, c2);
+	const vector float t1 = vec_mergel(c0, c2);
+	const vector float t2 = vec_mergeh(c1, c3);
+	const vector float t3 = vec_mergel(c1, c3);
+
+	vec_st(vec_mergeh(t0, t2), 0,  out);
+	vec_st(vec_mergel(t0, t2), 16, out);
+	vec_st(vec_mergeh(t1, t3), 32, out);
+	vec_st(vec_mergel(t1, t3), 48, out);
 }
 
 /* Transform a vec4 by column-major m → out. */
@@ -410,17 +452,17 @@ void glLoadMatrixd(const GLdouble *m) {
 }
 
 void glMultMatrixd(const GLdouble *m) {
-	float mf[16];
+	alignas(16) float mf[16];
 	for (int i = 0; i < 16; i++) mf[i] = (float)m[i];
 	MatrixStack *s = activeMatrix();
-	float tmp[16];
+	alignas(16) float tmp[16];
 	matMul(tmp, s->m, mf);
 	memcpy(s->m, tmp, sizeof(float) * 16);
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
-	float m[16];
+	alignas(16) float m[16];
 	matIdentity(m);
 	m[0]  = 2.f / (float)(r - l);
 	m[5]  = 2.f / (float)(t - b);
@@ -429,14 +471,14 @@ void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdoubl
 	m[13] = -(float)(t + b) / (float)(t - b);
 	m[14] = -(float)(f + n) / (float)(f - n);
 	MatrixStack *s = activeMatrix();
-	float tmp[16];
+	alignas(16) float tmp[16];
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
-	float m[16];
+	alignas(16) float m[16];
 	memset(m, 0, sizeof(float) * 16);
 	m[0]  = (float)(2.0 * n / (r - l));
 	m[5]  = (float)(2.0 * n / (t - b));
@@ -446,18 +488,18 @@ void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdou
 	m[11] = -1.f;
 	m[14] = (float)(-2.0 * f * n / (f - n));
 	MatrixStack *s = activeMatrix();
-	float tmp[16];
+	alignas(16) float tmp[16];
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
-	float m[16];
+	alignas(16) float m[16];
 	matIdentity(m);
 	m[12] = x; m[13] = y; m[14] = z;
 	MatrixStack *s = activeMatrix();
-	float tmp[16];
+	alignas(16) float tmp[16];
 	matMul(tmp, s->m, m);
 	memcpy(s->m, tmp, sizeof(float) * 16);
 	g_dirtyBits |= matrixDirtyBit();
@@ -472,14 +514,14 @@ void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
 	float len = sqrtf(x * x + y * y + z * z);
 	if (len == 0.f) return;
 	x /= len; y /= len; z /= len;
-	float m[16];
+	alignas(16) float m[16];
 	memset(m, 0, sizeof(float) * 16);
 	m[0]  = x*x*(1-c)+c;   m[4]  = x*y*(1-c)-z*s; m[8]  = x*z*(1-c)+y*s;
 	m[1]  = y*x*(1-c)+z*s; m[5]  = y*y*(1-c)+c;   m[9]  = y*z*(1-c)-x*s;
 	m[2]  = x*z*(1-c)-y*s; m[6]  = y*z*(1-c)+x*s; m[10] = z*z*(1-c)+c;
 	m[15] = 1.f;
 	MatrixStack *stk = activeMatrix();
-	float tmp[16];
+	alignas(16) float tmp[16];
 	matMul(tmp, stk->m, m);
 	memcpy(stk->m, tmp, sizeof(float) * 16);
 	g_dirtyBits |= matrixDirtyBit();
@@ -1007,10 +1049,39 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 
 	const u8 *src = (const u8 *)data;
 	if (src) {
+		/* RGBA→A8R8G8B8 byte permutation: dst[0..3] = src[3,0,1,2].
+		 * vec_perm(out[i]) = in[perm[i]], so the pattern picks bytes
+		 * {A,R,G,B} from each 4-byte pixel. One constant covers four
+		 * pixels per vector. */
+		static const vector unsigned char kArgbSwizzle =
+		    (vector unsigned char){3, 0, 1, 2,
+		                           7, 4, 5, 6,
+		                           11, 8, 9, 10,
+		                           15, 12, 13, 14};
+		/* The unaligned-load idiom (vec_lvsl + two vec_ld + vec_perm)
+		 * reads 32 bytes from the aligned base containing each chunk's
+		 * start. To guarantee that span stays within the source on the
+		 * last row, SIMD processes at most (w-4)/4 four-pixel chunks;
+		 * the remaining pixels fall through to the scalar tail. For
+		 * w <= 4 the SIMD loop is skipped entirely. */
+		const GLsizei simdChunks = (w >= 4) ? (w - 4) / 4 : 0;
+		const GLsizei simdPixels = simdChunks * 4;
+
 		for (GLsizei y = 0; y < h; y++) {
 			const u8 *srow = src + y * srcRowBytes;
 			u8 *drow = T.buffer + (u32)y * pitch;
-			for (GLsizei x = 0; x < w; x++) {
+			for (GLsizei c = 0; c < simdChunks; c++) {
+				const u8 *sp = srow + c * 16;
+				const vector unsigned char perm = vec_lvsl(0, sp);
+				const vector unsigned char hi  = vec_ld(0,  sp);
+				const vector unsigned char lo  = vec_ld(16, sp);
+				const vector unsigned char v   = vec_perm(hi, lo, perm);
+				const vector unsigned char out = vec_perm(v, v, kArgbSwizzle);
+				/* drow is 64-aligned (T.buffer 128-aligned, pitch a
+				 * multiple of 64); c*16 is 16-aligned. */
+				vec_st(out, c * 16, drow);
+			}
+			for (GLsizei x = simdPixels; x < w; x++) {
 				u32 di = (u32)x * 4u, si = (u32)x * 4u;
 				drow[di + 1] = srow[si + 0]; /* R */
 				drow[di + 2] = srow[si + 1]; /* G */
@@ -1616,7 +1687,7 @@ extern "C" void ps3_gl_flush(void) {
 	/* Vertex program + uniforms (transposed matrices).  A program switch must
 	 * reload matrix/texgen constants even when the corresponding GL state did
 	 * not change, because the two Cg programs may use different registers. */
-	float tmp[16];
+	alignas(16) float tmp[16];
 	if (terrainDraw) {
 		rsxLoadVertexProgram(context, g_terrainVpo, g_terrainVpUcode);
 		if (g_tvProj) {

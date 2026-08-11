@@ -191,6 +191,7 @@ static inline u32 matrixDirtyBit() {
 #define PS3_VTX_SLOT_MAX  512
 #define PS3_OVERSIZE_RING 16
 #define PS3_VTX_LABEL_IDX 253
+#define PS3_SUBMIT_BATCH_DRAWS 16
 struct VtxSlot {
 	ImmVtx *buf;
 	u32     offset;
@@ -202,6 +203,7 @@ static VtxSlot  g_vtxOversizeRing[PS3_OVERSIZE_RING];
 static int      g_vtxOversizeRingHead = 0;
 static vu32    *g_vtxLabel       = NULL;
 static u32      g_vtxLabelNext   = 1;
+static u32      g_unflushedDraws = 0;
 
 /* textures */
 #define PS3_MAX_TEXTURES 512
@@ -1586,6 +1588,7 @@ void ps3_gl_init(void) {
 	g_vtxLabel = (vu32 *)gcmGetLabelAddress(PS3_VTX_LABEL_IDX);
 	*g_vtxLabel = 0;
 	g_vtxLabelNext = 1;
+	g_unflushedDraws = 0;
 
 	matIdentity(g_proj.m);
 	matIdentity(g_mv.m);
@@ -1759,8 +1762,18 @@ static void composeLighting(float *outAmbient, float *outLightPosEye,
 	outSpec[0] = L.specular[0]; outSpec[1] = L.specular[1]; outSpec[2] = L.specular[2];
 }
 
+static void submitPendingRsxCommands(void) {
+	if (g_unflushedDraws == 0) return;
+	rsxFlushBuffer(context);
+	g_unflushedDraws = 0;
+}
+
 static void waitVtxLabel(u32 val) {
 	if (val == 0 || !g_vtxLabel) return;
+	/* A label cannot advance until its command buffer has been published.
+	 * Flush here before a ring reuse can block; ordinary draws publish in
+	 * larger groups below. */
+	submitPendingRsxCommands();
 	TIMER_START("GL_FLUSH_WAIT");
 	while ((s32)(*g_vtxLabel - val) < 0)
 		usleep(10);
@@ -2006,7 +2019,8 @@ extern "C" void ps3_gl_flush(void) {
 	u32 doneVal = g_vtxLabelNext++;
 	if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
 	rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, doneVal);
-	rsxFlushBuffer(context);
+	if (++g_unflushedDraws >= PS3_SUBMIT_BATCH_DRAWS)
+		submitPendingRsxCommands();
 	if (ringSlot >= 0)
 		g_vtxRing[ringSlot].labelVal = doneVal;
 	else if (oversizeRingSlot >= 0)

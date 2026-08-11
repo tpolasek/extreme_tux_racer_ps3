@@ -41,6 +41,9 @@ race_work_tags = [
     "RACE_DRAW_PARTICLES", "RACE_DRAW_TUX", "RACE_DRAW_SNOW",
     "RACE_DRAW_HUD",
 ]
+# Sub-tags that decompose an umbrella (currently RACE_DRAW_TUX's shadow).
+# Shown in the breakdown table; excluded from the race-work sum.
+race_sub_tags = ["RACE_TUX_SHADOW"]
 race_wins = [w for w in windows if "RACE_UPDATE" in rows[w]]
 menu_wins = [w for w in windows if "RACE_UPDATE" not in rows[w]]
 print(f"phases: race={len(race_wins)}s, menu/other={len(menu_wins)}s")
@@ -83,7 +86,7 @@ print(f"{'tag':<22}{'us/frame':>10}{'stdev':>9}{'min':>7}{'max':>7}"
 series = defaultdict(list)
 for w in race_wins:
     fr = rows[w]["MAIN_LOOP"][0]  # frames in this window
-    for tag in (race_work_tags +
+    for tag in (race_work_tags + race_sub_tags +
                 ["MAIN_LOOP", "GL_FLUSH", "GL_FLUSH_WAIT",
                  "FLIP", "CLEAR", "FLUSH_FP_PATCHES", "FREE_TIME"]):
         if tag in rows[w]:

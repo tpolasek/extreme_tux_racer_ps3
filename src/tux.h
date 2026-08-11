@@ -118,6 +118,10 @@ public:
 	bool useHighlighting;
 	bool   highlighted;
 	std::size_t highlight_node;
+	/* Pointer-equality cache of the last material bound in DrawNodes, so
+	 * repeated nodes sharing a material skip redundant set_material() GL
+	 * state churn. Reset to nullptr at the top of Draw(). */
+	const TCharMaterial *m_lastDrawMat;
 	std::unordered_map<std::string, std::size_t> NodeIndex;
 
 	// nodes

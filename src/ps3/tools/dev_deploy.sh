@@ -10,6 +10,11 @@
 #
 #   src/ps3/tools/dev_deploy.sh
 #
+# Override the build configuration by setting env vars:
+#
+#   DEMO_MODE=1 src/ps3/tools/dev_deploy.sh        # 10s auto-race + quit
+#   DEMO_MODE=1 DEMO_SHOTS=1 src/ps3/tools/dev_deploy.sh  # demo + screenshots
+#
 # Override the destination by setting env vars:
 #
 #   PS3_FTP_HOST=192.168.1.245 \
@@ -53,7 +58,14 @@ echo "[1/4] Rebuilding PPU binary"
 cd "$ROOT/src"
 BUILD_LOG="$(mktemp)"
 trap 'rm -f "$BUILD_LOG"' EXIT
-if ! make -f Makefile.ps3 DEMO_MODE= -j"$(nproc)" >"$BUILD_LOG" 2>&1; then
+# Forward DEMO_MODE / DEMO_SHOTS from the environment. Defaults match the
+# Makefile (DEMO_MODE off, DEMO_SHOTS on) so unset = menu-driven build.
+DEMO_MODE_ARG="${DEMO_MODE-}"
+DEMO_SHOTS_ARG="${DEMO_SHOTS-}"
+if ! make -f Makefile.ps3 \
+        ${DEMO_MODE_ARG:+DEMO_MODE=$DEMO_MODE_ARG} \
+        DEMO_SHOTS=$DEMO_SHOTS_ARG \
+        -j"$(nproc)" >"$BUILD_LOG" 2>&1; then
     echo "=== BUILD FAILED -- full output: ==="
     cat "$BUILD_LOG"
     exit 1

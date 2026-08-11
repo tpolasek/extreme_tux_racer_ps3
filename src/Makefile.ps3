@@ -43,7 +43,12 @@ CONTENTID	:=	UP0001-$(APPID)_00-0000000000000001
 # DEMO_MODE defaults on (auto-pick char+course, play 10s, exit). Disable with
 # `make DEMO_MODE=` for a normal menu-driven build.
 DEMO_MODE	?=	0
-CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(DEMO_MODE),-DDEMO_MODE=1)
+# DEMO_SHOTS controls screenshot capture inside DEMO_MODE (frame 150 + exit).
+# Defaults off so the headless validation loop gets clean perf numbers; pass
+# `DEMO_SHOTS=1` to capture for visual verification. No effect when
+# DEMO_MODE is off.
+DEMO_SHOTS	?=	0
+CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(DEMO_MODE),-DDEMO_MODE=1) $(if $(DEMO_SHOTS),-DDEMO_SHOTS=1)
 CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map

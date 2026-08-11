@@ -329,9 +329,11 @@ void CRacing::Loop(float time_step) {
 #ifdef DEMO_MODE
 	static int sDemoFrame = 0;
 	if (g_game.time >= 10.f) {
+#if defined(DEMO_SHOTS) && DEMO_SHOTS
 		// Capture right before the demo exits: <=480p, aspect-correct bilinear.
 		std::string p = param.save_dir + SEP "demo_close.png";
 		demoScreenshot(p.c_str(), 640, 480);
+#endif
 		State::manager.RequestQuit();
 		return;
 	}
@@ -395,11 +397,13 @@ void CRacing::Loop(float time_step) {
 	Reshape(Winsys.resolution.width, Winsys.resolution.height);
 	Winsys.SwapBuffers();
 #ifdef DEMO_MODE
+#if defined(DEMO_SHOTS) && DEMO_SHOTS
 	if (++sDemoFrame == 150) {
 		// Full native-resolution capture mid-race.
 		std::string p = param.save_dir + SEP "demo_frame150.png";
 		demoScreenshot(p.c_str(), 0, 0);
 	}
+#endif
 #endif
 	if (g_game.finish == false) g_game.time += time_step;
 }

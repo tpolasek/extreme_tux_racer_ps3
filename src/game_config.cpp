@@ -70,7 +70,7 @@ void LoadConfigFile() {
 		param.bpp_mode = SPIntN(*line, "bpp_mode", 0);
 		param.tree_detail_distance = SPIntN(*line, "tree_detail_distance", 20);
 		param.tux_sphere_divisions = SPIntN(*line, "tux_sphere_divisions", 10);
-		param.tux_shadow_sphere_divisions = SPIntN(*line, "tux_shadow_sphere_div", 3);
+		param.tux_shadow_sphere_divisions = SPIntN(*line, "tux_shadow_sphere_div", 2);
 		param.course_detail_level = SPIntN(*line, "course_detail_level", 75);
 
 		param.use_papercut_font = SPIntN(*line, "use_papercut_font", 1);
@@ -113,7 +113,7 @@ void SetConfigDefaults() {
 	param.bpp_mode = 0;
 	param.tree_detail_distance = 20;
 	param.tux_sphere_divisions = 10;
-	param.tux_shadow_sphere_divisions = 3;
+	param.tux_shadow_sphere_divisions = 2;
 	param.course_detail_level = 75;
 
 	param.use_papercut_font = 1;

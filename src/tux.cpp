@@ -30,6 +30,7 @@ still shaped with spheres.
 #include "textures.h"
 #include "course.h"
 #include "physics.h"
+#include "ps3_log.h"
 #include <GL/glu.h>
 #include <algorithm>
 
@@ -71,6 +72,7 @@ CCharShape::CCharShape() {
 	useHighlighting = false;
 	highlighted = false;
 	highlight_node = -1;
+	m_lastDrawMat = nullptr;
 }
 
 CCharShape::~CCharShape() {
@@ -409,7 +411,10 @@ void CCharShape::DrawNodes(const TCharNode *node, const TMatrix<4, 4>& accum,
 		TVector3d nodeEye(nodeAccum[3][0], nodeAccum[3][1], nodeAccum[3][2]);
 		double s = DotProduct(nodeEye - rootEye, viewDir);
 		if (s > -TUX_CULL_MARGIN) {
-			set_material(mat->diffuse, mat->specular, mat->exp);
+			if (mat != m_lastDrawMat) {
+				set_material(mat->diffuse, mat->specular, mat->exp);
+				m_lastDrawMat = mat;
+			}
 			DrawCharSphere(node->divisions);
 		}
 	}
@@ -449,9 +454,14 @@ void CCharShape::Draw() {
 	double camLen = toCam.Length();
 	TVector3d viewDir = (camLen > 1e-6) ? (1.0 / camLen) * toCam : TVector3d(0.0, 0.0, 1.0);
 
+	m_lastDrawMat = nullptr;
 	DrawNodes(node, base, rootEye, viewDir);
 	glDisable(GL_NORMALIZE);
-	if (param.perf_level > 2) DrawShadow();
+	if (param.perf_level > 2) {
+		TIMER_START("RACE_TUX_SHADOW");
+		DrawShadow();
+		TIMER_END("RACE_TUX_SHADOW");
+	}
 	highlighted = false;
 }
 
@@ -680,12 +690,12 @@ void CCharShape::DrawShadowVertex(double x, double y, double z, const TMatrix<4,
 	TVector3d pt(x, y, z);
 	pt = TransformPoint(mat, pt);
 	double old_y = pt.y;
-	TVector3d nml;
-	double course_y;
-	Course.FindCourseNormalAndY(pt.x, pt.z, nml, course_y);
+	// TUX_SHADOW mode disables GL_LIGHTING, so the per-vertex normal is dead
+	// work -- skip the cross+normalize in FindCourseNormalAndY and just sample
+	// the course Y (FindYCoord has a 1-entry cache too).
+	double course_y = Course.FindYCoord(pt.x, pt.z);
 	pt.y = course_y + SHADOW_HEIGHT;
 	if (pt.y > old_y) pt.y = old_y;
-	glNormal3(nml);
 	glVertex3(pt);
 }
 
@@ -698,13 +708,11 @@ void CCharShape::DrawShadowSphere(const TMatrix<4, 4>& mat) const {
 	const double d_theta = 2.0 * M_PI / slices;
 	const double d_phi = M_PI / stacks;
 
-	/* One connected strip per projected shadow sphere.  The previous north
-	 * fan + middle strips + south fan issued `div` separate RSX draws for
-	 * every shadow-casting body node.  Repeated pole vertices and degenerate
-	 * joins preserve the same surface while reducing that to one draw. */
-	glBegin(GL_TRIANGLE_STRIP);
-	/* Two leading degenerates put the north-cap triangles on the same
-	 * outward-facing winding as the old GL_TRIANGLE_FAN. */
+	/* Appends into the enclosing glBegin(GL_TRIANGLE_STRIP) opened by
+	 * DrawShadow -- one draw for the whole silhouette rather than one per
+	 * shadow-casting body node. Two leading north-pole duplicates form two
+	 * degenerate triangles that bridge cleanly to the previous sphere's last
+	 * vert (and are harmless on the first sphere). */
 	DrawShadowVertex(0.0, 0.0, 1.0, mat);
 	DrawShadowVertex(0.0, 0.0, 1.0, mat);
 	double previous_x = 0.0, previous_y = 0.0, previous_z = 1.0;
@@ -736,7 +744,6 @@ void CCharShape::DrawShadowSphere(const TMatrix<4, 4>& mat) const {
 			DrawShadowVertex(previous_x, previous_y, previous_z, mat);
 		}
 	}
-	glEnd();
 }
 
 void CCharShape::TraverseDagForShadow(const TCharNode *node, const TMatrix<4, 4>& mat) const {
@@ -762,7 +769,12 @@ void CCharShape::DrawShadow() const {
 		Message("couldn't find tux's root node");
 		return;
 	}
+	/* One strip for the whole silhouette: each shadow sphere's two leading
+	 * north-pole duplicates form degenerate bridges to the previous sphere,
+	 * so all body nodes flush in a single RSX draw. */
+	glBegin(GL_TRIANGLE_STRIP);
 	TraverseDagForShadow(node, TMatrix<4, 4>::getIdentity());
+	glEnd();
 }
 
 // --------------------------------------------------------------------

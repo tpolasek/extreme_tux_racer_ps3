@@ -181,6 +181,7 @@ static inline u32 matrixDirtyBit() {
  * stream. Double-buffered presentation bounds the actual in-flight usage. */
 #define PS3_VTX_RING      256
 #define PS3_VTX_SLOT_MAX  512
+#define PS3_OVERSIZE_RING 16
 #define PS3_VTX_LABEL_IDX 253
 struct VtxSlot {
 	ImmVtx *buf;
@@ -189,8 +190,8 @@ struct VtxSlot {
 };
 static VtxSlot  g_vtxRing[PS3_VTX_RING];
 static int      g_vtxRingHead = 0;
-static ImmVtx  *g_vtxOversize    = NULL;
-static u32      g_vtxOversizeOff = 0;
+static VtxSlot  g_vtxOversizeRing[PS3_OVERSIZE_RING];
+static int      g_vtxOversizeRingHead = 0;
 static vu32    *g_vtxLabel       = NULL;
 static u32      g_vtxLabelNext   = 1;
 
@@ -243,7 +244,7 @@ struct FpSlot {
 	u32  offset;
 };
 static FpSlot g_fpRing[PS3_VTX_RING];
-static FpSlot g_fpOversize;
+static FpSlot g_fpOversizeRing[PS3_OVERSIZE_RING];
 
 /* Terrain uses a no-specular fragment variant.  It is ringed independently
  * because its constants are patched per draw just like the general 3D path. */
@@ -251,7 +252,7 @@ static rsxFragmentProgram *g_terrainFpo = NULL;
 static void               *g_terrainFpUcode = NULL;
 static u32                 g_terrainFpUcodeSize = 0;
 static FpSlot              g_terrainFpRing[PS3_VTX_RING];
-static FpSlot              g_terrainFpOversize;
+static FpSlot              g_terrainFpOversizeRing[PS3_OVERSIZE_RING];
 static rsxProgramConst     *g_tFogColor = NULL;
 static rsxProgramConst     *g_tFogSE = NULL;
 static rsxProgramConst     *g_tDoFog = NULL;
@@ -1462,24 +1463,32 @@ void ps3_gl_init(void) {
 		           "rsxAddressToOffset(terrain fp ring) failed");
 		GFX_ASSERT_ALIGNED(g_terrainFpRing[i].offset, 64);
 	}
-	g_fpOversize.buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
-	if (g_fpOversize.buf) {
-		GFX_ASSERT_ALIGNED(g_fpOversize.buf, 64);
-		memcpy(g_fpOversize.buf, g_fpUcode, g_fpUcodeSize);
-		GFX_ASSERT(rsxAddressToOffset(g_fpOversize.buf, &g_fpOversize.offset) == 0,
-		           "rsxAddressToOffset(fp oversize) failed");
-		GFX_ASSERT_ALIGNED(g_fpOversize.offset, 64);
-	}
-	g_terrainFpOversize.buf =
-	    (u32 *)rsxMemalign(64, g_terrainFpUcodeSize);
-	if (g_terrainFpOversize.buf) {
-		GFX_ASSERT_ALIGNED(g_terrainFpOversize.buf, 64);
-		memcpy(g_terrainFpOversize.buf, g_terrainFpUcode,
+	for (int i = 0; i < PS3_OVERSIZE_RING; ++i) {
+		g_fpOversizeRing[i].buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
+		if (!g_fpOversizeRing[i].buf) {
+			sysTtyTrace("[etr] ps3_gl_init: fp oversize ring alloc FAILED\n");
+			return;
+		}
+		GFX_ASSERT_ALIGNED(g_fpOversizeRing[i].buf, 64);
+		memcpy(g_fpOversizeRing[i].buf, g_fpUcode, g_fpUcodeSize);
+		GFX_ASSERT(rsxAddressToOffset(g_fpOversizeRing[i].buf,
+		                             &g_fpOversizeRing[i].offset) == 0,
+		           "rsxAddressToOffset(fp oversize ring) failed");
+		GFX_ASSERT_ALIGNED(g_fpOversizeRing[i].offset, 64);
+
+		g_terrainFpOversizeRing[i].buf =
+		    (u32 *)rsxMemalign(64, g_terrainFpUcodeSize);
+		if (!g_terrainFpOversizeRing[i].buf) {
+			sysTtyTrace("[etr] ps3_gl_init: terrain fp oversize ring alloc FAILED\n");
+			return;
+		}
+		GFX_ASSERT_ALIGNED(g_terrainFpOversizeRing[i].buf, 64);
+		memcpy(g_terrainFpOversizeRing[i].buf, g_terrainFpUcode,
 		       g_terrainFpUcodeSize);
-		GFX_ASSERT(rsxAddressToOffset(g_terrainFpOversize.buf,
-		                             &g_terrainFpOversize.offset) == 0,
-		           "rsxAddressToOffset(terrain fp oversize) failed");
-		GFX_ASSERT_ALIGNED(g_terrainFpOversize.offset, 64);
+		GFX_ASSERT(rsxAddressToOffset(g_terrainFpOversizeRing[i].buf,
+		                             &g_terrainFpOversizeRing[i].offset) == 0,
+		           "rsxAddressToOffset(terrain fp oversize ring) failed");
+		GFX_ASSERT_ALIGNED(g_terrainFpOversizeRing[i].offset, 64);
 	}
 
 	g_uGlobalAmbient = rsxFragmentProgramGetConst(g_fpo, "globalAmbient");
@@ -1538,12 +1547,21 @@ void ps3_gl_init(void) {
 		g_vtxRing[i].labelVal = 0;
 	}
 	g_vtxRingHead = 0;
-	g_vtxOversize = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_IMM_MAX);
-	GFX_ASSERT(g_vtxOversize != NULL, "vtx oversize alloc failed");
-	GFX_ASSERT_ALIGNED(g_vtxOversize, 64);
-	GFX_ASSERT(rsxAddressToOffset(g_vtxOversize, &g_vtxOversizeOff) == 0,
-	           "rsxAddressToOffset(vtx oversize) failed");
-	GFX_ASSERT_ALIGNED(g_vtxOversizeOff, 64);
+	for (int i = 0; i < PS3_OVERSIZE_RING; ++i) {
+		VtxSlot &slot = g_vtxOversizeRing[i];
+		slot.buf = (ImmVtx *)rsxMemalign(64,
+		                                  sizeof(ImmVtx) * PS3_IMM_MAX);
+		if (!slot.buf) {
+			sysTtyTrace("[etr] ps3_gl_init: vtx oversize ring alloc FAILED\n");
+			return;
+		}
+		GFX_ASSERT_ALIGNED(slot.buf, 64);
+		GFX_ASSERT(rsxAddressToOffset(slot.buf, &slot.offset) == 0,
+		           "rsxAddressToOffset(vtx oversize ring) failed");
+		GFX_ASSERT_ALIGNED(slot.offset, 64);
+		slot.labelVal = 0;
+	}
+	g_vtxOversizeRingHead = 0;
 
 	g_vtxLabel = (vu32 *)gcmGetLabelAddress(PS3_VTX_LABEL_IDX);
 	*g_vtxLabel = 0;
@@ -1738,6 +1756,7 @@ extern "C" void ps3_gl_flush(void) {
 	u32 drawOffset;
 	ImmVtx *drawBuf;
 	int ringSlot = -1;
+	int oversizeRingSlot = -1;
 	u32 *fpBuf = NULL;
 	u32  fpOffset = 0;
 	const GLboolean terrainDraw = useTerrainFragmentProgram();
@@ -1758,17 +1777,20 @@ extern "C" void ps3_gl_flush(void) {
 		                      : g_fpRing[ringSlot].offset;
 		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
 	} else {
-		u32 idleVal = g_vtxLabelNext++;
-		if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
-		rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, idleVal);
-		rsxFlushBuffer(context);
-		waitVtxLabel(idleVal);
-		drawBuf    = g_vtxOversize;
-		drawOffset = g_vtxOversizeOff;
-		fpBuf      = liteDraw ? g_terrainFpOversize.buf
-		                      : g_fpOversize.buf;
-		fpOffset   = liteDraw ? g_terrainFpOversize.offset
-		                      : g_fpOversize.offset;
+		/* Large strips/fans cannot be split without preserving topology. Keep
+		 * them asynchronous in a smaller ring instead of draining the whole
+		 * RSX before every large Tux sphere. */
+		oversizeRingSlot = g_vtxOversizeRingHead;
+		VtxSlot &slot = g_vtxOversizeRing[oversizeRingSlot];
+		waitVtxLabel(slot.labelVal);
+		drawBuf    = slot.buf;
+		drawOffset = slot.offset;
+		fpBuf      = liteDraw ? g_terrainFpOversizeRing[oversizeRingSlot].buf
+		                      : g_fpOversizeRing[oversizeRingSlot].buf;
+		fpOffset   = liteDraw ? g_terrainFpOversizeRing[oversizeRingSlot].offset
+		                      : g_fpOversizeRing[oversizeRingSlot].offset;
+		g_vtxOversizeRingHead =
+		    (g_vtxOversizeRingHead + 1) % PS3_OVERSIZE_RING;
 	}
 	if (!fpBuf || !fpOffset) return;
 
@@ -1950,6 +1972,8 @@ extern "C" void ps3_gl_flush(void) {
 	rsxFlushBuffer(context);
 	if (ringSlot >= 0)
 		g_vtxRing[ringSlot].labelVal = doneVal;
+	else if (oversizeRingSlot >= 0)
+		g_vtxOversizeRing[oversizeRingSlot].labelVal = doneVal;
 
 	/* State uploaded this flush is now the RSX's current state; clears
 	 * let subsequent mutators re-arm only what they actually change. */

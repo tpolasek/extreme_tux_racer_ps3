@@ -266,6 +266,7 @@ void RenderWindow::display() {
 		}
 	}
 	TIMER_START("FLIP");
+	ps3_gl_flush_pending();
 	flip();
 	TIMER_END("FLIP");
 	lastSwapUs_ = (long long)nowUs();

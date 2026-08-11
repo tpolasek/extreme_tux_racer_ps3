@@ -16,6 +16,10 @@ extern "C" {
  * state to sane defaults. */
 void ps3_gl_init(void);
 
+/* Submit compatible immediate-mode primitives retained for batching. Called
+ * by the window backend immediately before presenting the framebuffer. */
+void ps3_gl_flush_pending(void);
+
 #ifdef __cplusplus
 }
 #endif

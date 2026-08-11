@@ -148,6 +148,8 @@ static ImmVtx  g_immVtx[PS3_IMM_MAX];
 static int     g_immCount = 0;
 static GLenum  g_primMode = GL_TRIANGLES;
 static int     g_inBegin  = 0;
+static int     g_beginStartCount = 0;
+static GLboolean g_batchPending = GL_FALSE;
 static float   g_curU = 0.f, g_curV = 0.f;
 static float   g_curNx = 0.f, g_curNy = 1.f, g_curNz = 0.f;
 
@@ -383,6 +385,17 @@ static int        g_attribTop = 0;
 
 static int g_rsxReady = 0;
 
+static void flushPendingImmediate(void) {
+	if (!g_batchPending || g_immCount == 0 || g_inBegin) return;
+	ps3_gl_flush();
+	g_immCount = 0;
+	g_batchPending = GL_FALSE;
+}
+
+extern "C" void ps3_gl_flush_pending(void) {
+	flushPendingImmediate();
+}
+
 /* =====================================================================
  * Matrix math (column-major)
  *
@@ -472,6 +485,7 @@ void glPushMatrix(void) {
 }
 
 void glPopMatrix(void) {
+	flushPendingImmediate();
 	MatrixStack *s = activeMatrix();
 	if (s->top > 0) {
 		s->top--;
@@ -481,16 +495,19 @@ void glPopMatrix(void) {
 }
 
 void glLoadIdentity(void) {
+	flushPendingImmediate();
 	matIdentity(activeMatrix()->m);
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glLoadMatrixd(const GLdouble *m) {
+	flushPendingImmediate();
 	for (int i = 0; i < 16; i++) activeMatrix()->m[i] = (float)m[i];
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glMultMatrixd(const GLdouble *m) {
+	flushPendingImmediate();
 	alignas(16) float mf[16];
 	for (int i = 0; i < 16; i++) mf[i] = (float)m[i];
 	MatrixStack *s = activeMatrix();
@@ -501,6 +518,7 @@ void glMultMatrixd(const GLdouble *m) {
 }
 
 void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
+	flushPendingImmediate();
 	alignas(16) float m[16];
 	matIdentity(m);
 	m[0]  = 2.f / (float)(r - l);
@@ -517,6 +535,7 @@ void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdoubl
 }
 
 void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
+	flushPendingImmediate();
 	alignas(16) float m[16];
 	memset(m, 0, sizeof(float) * 16);
 	m[0]  = (float)(2.0 * n / (r - l));
@@ -534,6 +553,7 @@ void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdou
 }
 
 void glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
+	flushPendingImmediate();
 	alignas(16) float m[16];
 	matIdentity(m);
 	m[12] = x; m[13] = y; m[14] = z;
@@ -548,6 +568,7 @@ void glTranslated(GLdouble x, GLdouble y, GLdouble z) {
 }
 
 void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
+	flushPendingImmediate();
 	float c = cosf(angle * (3.14159265f / 180.f));
 	float s = sinf(angle * (3.14159265f / 180.f));
 	float len = sqrtf(x * x + y * y + z * z);
@@ -567,6 +588,7 @@ void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
 }
 
 void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
+	flushPendingImmediate();
 	g_viewport[0] = x; g_viewport[1] = y; g_viewport[2] = w; g_viewport[3] = h;
 	g_dirtyBits |= DIRTY_DRAW_ENV;
 }
@@ -607,6 +629,7 @@ void glPushAttrib(GLbitfield) {
 		snapshotState(&g_attrib[g_attribTop++]);
 }
 void glPopAttrib(void) {
+	flushPendingImmediate();
 	if (g_attribTop > 0)
 		restoreState(&g_attrib[--g_attribTop]);
 	/* restoreState touches draw-env caps, current texture, and texgen
@@ -623,6 +646,7 @@ static int lightIndex(GLenum cap) {
 }
 
 void glEnable(GLenum cap) {
+	flushPendingImmediate();
 	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:     g_tex2d = GL_TRUE; g_dirtyBits |= DIRTY_TEXTURE;  break;
@@ -648,6 +672,7 @@ void glEnable(GLenum cap) {
 }
 
 void glDisable(GLenum cap) {
+	flushPendingImmediate();
 	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:     g_tex2d = GL_FALSE; g_dirtyBits |= DIRTY_TEXTURE;  break;
@@ -686,18 +711,19 @@ GLboolean glIsEnabled(GLenum cap) {
 	}
 }
 
-void glDepthMask(GLboolean f) { g_depthMask = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
-void glDepthFunc(GLenum f)    { g_depthFunc = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
+void glDepthMask(GLboolean f) { flushPendingImmediate(); g_depthMask = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
+void glDepthFunc(GLenum f)    { flushPendingImmediate(); g_depthFunc = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glShadeModel(GLenum)     { }
-void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; g_dirtyBits |= DIRTY_DRAW_ENV; dirtyFullFragmentProgram(); }
+void glAlphaFunc(GLenum f, GLclampf r) { flushPendingImmediate(); g_alphaFunc = f; g_alphaRef = r; g_dirtyBits |= DIRTY_DRAW_ENV; dirtyFullFragmentProgram(); }
 void glStencilFunc(GLenum, GLint, GLuint) { }
 void glStencilOp(GLenum, GLenum, GLenum)  { }
-void glBlendFunc(GLenum sf, GLenum df)    { g_blendSrc = sf; g_blendDst = df; g_dirtyBits |= DIRTY_DRAW_ENV; }
+void glBlendFunc(GLenum sf, GLenum df)    { flushPendingImmediate(); g_blendSrc = sf; g_blendDst = df; g_dirtyBits |= DIRTY_DRAW_ENV; }
 
 /* =====================================================================
  * GL: lighting / material / fog / texgen
  * ===================================================================== */
 void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
+	flushPendingImmediate();
 	int li = lightIndex(light);
 	if (li < 0 || !p) return;
 	Light &L = g_light[li];
@@ -729,6 +755,7 @@ void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
 }
 
 void glMaterialf(GLenum, GLenum pname, GLfloat v) {
+	flushPendingImmediate();
 	if (pname == GL_SHININESS) {
 		g_matShininess = v;
 		g_dirtyBits |= DIRTY_VP_LIGHTING;
@@ -737,6 +764,7 @@ void glMaterialf(GLenum, GLenum pname, GLfloat v) {
 }
 
 void glMaterialfv(GLenum, GLenum pname, const GLfloat *p) {
+	flushPendingImmediate();
 	if (!p) return;
 	switch (pname) {
 		case GL_AMBIENT_AND_DIFFUSE:
@@ -753,10 +781,12 @@ void glFogi(GLenum pname, GLint v) {
 	(void)pname; (void)v; /* only GL_LINEAR is supported */
 }
 void glFogf(GLenum pname, GLfloat v) {
+	flushPendingImmediate();
 	if (pname == GL_FOG_START) { g_fogStart = v; dirtyFogFragmentPrograms(); }
 	else if (pname == GL_FOG_END) { g_fogEnd = v; dirtyFogFragmentPrograms(); }
 }
 void glFogfv(GLenum pname, const GLfloat *p) {
+	flushPendingImmediate();
 	if (pname == GL_FOG_COLOR && p) {
 		memcpy(g_fogColor, p, 4 * sizeof(float));
 		dirtyFogFragmentPrograms();
@@ -766,6 +796,7 @@ void glHint(GLenum, GLenum) { }
 
 void glTexGeni(GLenum, GLenum, GLint) { /* only OBJECT_LINEAR is used */ }
 void glTexGenfv(GLenum coord, GLenum pname, const GLfloat *p) {
+	flushPendingImmediate();
 	if (pname != GL_OBJECT_PLANE || !p) return;
 	if (coord == GL_S) memcpy(g_texPlaneS, p, 4 * sizeof(float));
 	else if (coord == GL_T) memcpy(g_texPlaneT, p, 4 * sizeof(float));
@@ -789,19 +820,54 @@ static GLenum mapPrim(GLenum p) {
 	}
 }
 
+static int batchablePrimitiveStep(GLenum mode) {
+	switch (mode) {
+		case GL_QUADS:     return 4;
+		case GL_TRIANGLES: return 3;
+		case GL_LINES:     return 2;
+		case GL_POINTS:    return 1;
+		default:           return 0;
+	}
+}
+
 void glBegin(GLenum mode) {
-	g_primMode = mode;
-	g_immCount = 0;
+	const int step = batchablePrimitiveStep(mode);
+	if (g_batchPending && (mode != g_primMode || step == 0))
+		flushPendingImmediate();
+	if (!g_batchPending) {
+		g_primMode = mode;
+		g_immCount = 0;
+	}
+	g_beginStartCount = g_immCount;
 	g_inBegin = 1;
 }
 
 void glEnd(void) {
+	if (!g_inBegin) return;
 	g_inBegin = 0;
+	const int step = batchablePrimitiveStep(g_primMode);
+	if (step > 0) {
+		/* Incomplete primitives are discarded at each glBegin/glEnd boundary;
+		 * otherwise their vertices could incorrectly join the next batch. */
+		const int added = g_immCount - g_beginStartCount;
+		g_immCount -= added % step;
+		g_batchPending = (g_immCount > 0) ? GL_TRUE : GL_FALSE;
+		return;
+	}
 	if (g_immCount > 0) ps3_gl_flush();
 	g_immCount = 0;
+	g_batchPending = GL_FALSE;
 }
 
 static void pushImm(float x, float y, float z) {
+	const int step = batchablePrimitiveStep(g_primMode);
+	const int limit = step ? (PS3_IMM_MAX / step) * step : PS3_IMM_MAX;
+	if (step && g_immCount >= limit) {
+		ps3_gl_flush();
+		g_immCount = 0;
+		g_beginStartCount = 0;
+		g_batchPending = GL_FALSE;
+	}
 	if (g_immCount >= PS3_IMM_MAX) return;
 	ImmVtx &v = g_immVtx[g_immCount++];
 	v.x = x; v.y = y; v.z = z;
@@ -1054,6 +1120,7 @@ void glColorPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) 
 }
 
 void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
+	flushPendingImmediate();
 	if (count <= 0) return;
 	/* Snow flakes and curtains provide separate packed float position and
 	 * texture-coordinate arrays, with the current normal and colour applying
@@ -1120,6 +1187,7 @@ void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
 }
 
 void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
+	flushPendingImmediate();
 	if (count <= 0 || !indices) return;
 	/* expand fully-indexed draw into de-indexed ImmVtx and reuse DrawArrays
 	 * batching path. 32-bit indices are the course's preferred form. */
@@ -1205,6 +1273,7 @@ void glGenTextures(GLsizei n, GLuint *t) {
 }
 
 void glDeleteTextures(GLsizei n, const GLuint *t) {
+	flushPendingImmediate();
 	for (GLsizei i = 0; i < n; i++) {
 		GLuint id = t[i];
 		if (id > 0 && id < PS3_MAX_TEXTURES) {
@@ -1221,6 +1290,7 @@ void glDeleteTextures(GLsizei n, const GLuint *t) {
 }
 
 void glBindTexture(GLenum, GLuint t) {
+	flushPendingImmediate();
 	if (t > 0 && t < PS3_MAX_TEXTURES) g_currentTex = t;
 	else if (t == 0) g_currentTex = 0;
 	g_dirtyBits |= DIRTY_TEXTURE;
@@ -1228,6 +1298,7 @@ void glBindTexture(GLenum, GLuint t) {
 
 void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
                   GLenum, GLenum, const GLvoid *data) {
+	flushPendingImmediate();
 	if (g_currentTex == 0 || g_currentTex >= PS3_MAX_TEXTURES) return;
 	TIMER_START("TEXIMAGE2D");
 	/* RSX caps A8R8G8B8 dimensions at 4096 and needs w,h > 0. A 0 dim
@@ -1311,6 +1382,7 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 }
 
 void glTexParameteri(GLenum, GLenum pname, GLint param) {
+	flushPendingImmediate();
 	if (g_currentTex == 0 || g_currentTex >= PS3_MAX_TEXTURES) return;
 	GlTex &T = g_tex[g_currentTex];
 	switch (pname) {
@@ -1339,6 +1411,7 @@ void glClearColor(GLclampf r, GLclampf g, GLclampf b, GLclampf a) {
 void glClearStencil(GLint s) { g_clearStencil = s; }
 
 void glClear(GLbitfield) {
+	flushPendingImmediate();
 	if (!g_rsxReady) return;
 	TIMER_START("CLEAR");
 	u32 col = ((u32)(g_clearA * 255.f) & 0xFF) << 24 |
@@ -1421,7 +1494,7 @@ extern "C" void *glXGetVisualFromFBConfig(void *, GLXFBConfig) { return NULL; }
 extern "C" GLXContext glXCreateNewContext(void *, GLXFBConfig, int, GLXContext, GLboolean) { return NULL; }
 extern "C" void  glXDestroyContext(void *, GLXContext) { }
 extern "C" int   glXMakeCurrent(void *, unsigned long, GLXContext) { return 1; }
-extern "C" void  glXSwapBuffers(void *, unsigned long) { }
+extern "C" void  glXSwapBuffers(void *, unsigned long) { ps3_gl_flush_pending(); }
 
 /* =====================================================================
  * init / draw-env / bind-texture / flush

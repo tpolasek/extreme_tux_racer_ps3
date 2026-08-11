@@ -252,9 +252,13 @@ static rsxProgramAttrib   *g_uiTexSampler = NULL;
 struct FpSlot {
 	u32 *buf;
 	u32  offset;
+	u32  labelVal;
+	u32  generation;
 };
 static FpSlot g_fpRing[PS3_VTX_RING];
-static FpSlot g_fpOversizeRing[PS3_OVERSIZE_RING];
+static int g_fpRingHead = 0;
+static FpSlot *g_currentFpSlot = NULL;
+static u32 g_fullFpGeneration = 1;
 
 /* Terrain uses a no-specular fragment variant.  It is ringed independently
  * because its constants are patched per draw just like the general 3D path. */
@@ -262,7 +266,9 @@ static rsxFragmentProgram *g_terrainFpo = NULL;
 static void               *g_terrainFpUcode = NULL;
 static u32                 g_terrainFpUcodeSize = 0;
 static FpSlot              g_terrainFpRing[PS3_VTX_RING];
-static FpSlot              g_terrainFpOversizeRing[PS3_OVERSIZE_RING];
+static int                 g_terrainFpRingHead = 0;
+static FpSlot             *g_currentTerrainFpSlot = NULL;
+static u32                 g_liteFpGeneration = 1;
 static rsxProgramConst     *g_tFogColor = NULL;
 static rsxProgramConst     *g_tFogSE = NULL;
 static rsxProgramConst     *g_tDoFog = NULL;
@@ -304,6 +310,28 @@ static rsxProgramConst *g_uAlphaRef = NULL;
 static rsxProgramConst *g_uDoAlphaTest = NULL;
 static rsxProgramConst *g_uOutputScale = NULL;
 static rsxProgramAttrib *g_texSampler = NULL;
+
+enum FragmentProgramKind {
+	FP_NONE,
+	FP_UI,
+	FP_LITE,
+	FP_FULL,
+};
+static FragmentProgramKind g_loadedFragmentProgram = FP_NONE;
+static u32 g_loadedFragmentOffset = 0;
+
+static inline void bumpGeneration(u32 &generation) {
+	if (++generation == 0) generation = 1;
+}
+
+static inline void dirtyFullFragmentProgram(void) {
+	bumpGeneration(g_fullFpGeneration);
+}
+
+static inline void dirtyFogFragmentPrograms(void) {
+	bumpGeneration(g_fullFpGeneration);
+	bumpGeneration(g_liteFpGeneration);
+}
 
 /* white 1x1 fallback */
 static u32 *g_whiteBuf = NULL;
@@ -585,6 +613,7 @@ void glPopAttrib(void) {
 	 * enables. Conservatively re-emit all of those on the next flush. */
 	g_dirtyBits |= DIRTY_DRAW_ENV | DIRTY_TEXTURE | DIRTY_TEXGEN |
 	               DIRTY_VP_LIGHTING;
+	dirtyFogFragmentPrograms();
 }
 
 static int lightIndex(GLenum cap) {
@@ -600,10 +629,10 @@ void glEnable(GLenum cap) {
 		case GL_BLEND:          g_blend = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_DEPTH_TEST:     g_depthTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_CULL_FACE:      g_cullFace = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
-		case GL_LIGHTING:       g_lighting = GL_TRUE; g_dirtyBits |= DIRTY_VP_LIGHTING; break;
-		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_LIGHTING:       g_lighting = GL_TRUE; g_dirtyBits |= DIRTY_VP_LIGHTING; dirtyFullFragmentProgram(); break;
+		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; dirtyFullFragmentProgram(); break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_TRUE; break;  /* not emitted by setDrawEnv */
-		case GL_FOG:            g_fog = GL_TRUE; break;  /* FP uniform, not tracked */
+		case GL_FOG:            g_fog = GL_TRUE; dirtyFogFragmentPrograms(); break;
 		case GL_TEXTURE_GEN_S:  g_texGenS = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_TEXTURE_GEN_T:  g_texGenT = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_NORMALIZE:      g_normalize = GL_TRUE; break;  /* not uploaded */
@@ -612,6 +641,7 @@ void glEnable(GLenum cap) {
 			if ((li = lightIndex(cap)) >= 0) {
 				g_light[li].enabled = GL_TRUE;
 				g_dirtyBits |= DIRTY_VP_LIGHTING;
+				dirtyFullFragmentProgram();
 			}
 			break;
 	}
@@ -624,10 +654,10 @@ void glDisable(GLenum cap) {
 		case GL_BLEND:          g_blend = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_DEPTH_TEST:     g_depthTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_CULL_FACE:      g_cullFace = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
-		case GL_LIGHTING:       g_lighting = GL_FALSE; g_dirtyBits |= DIRTY_VP_LIGHTING; break;
-		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_LIGHTING:       g_lighting = GL_FALSE; g_dirtyBits |= DIRTY_VP_LIGHTING; dirtyFullFragmentProgram(); break;
+		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; dirtyFullFragmentProgram(); break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_FALSE; break;
-		case GL_FOG:            g_fog = GL_FALSE; break;
+		case GL_FOG:            g_fog = GL_FALSE; dirtyFogFragmentPrograms(); break;
 		case GL_TEXTURE_GEN_S:  g_texGenS = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_TEXTURE_GEN_T:  g_texGenT = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_NORMALIZE:      g_normalize = GL_FALSE; break;
@@ -635,6 +665,7 @@ void glDisable(GLenum cap) {
 			if ((li = lightIndex(cap)) >= 0) {
 				g_light[li].enabled = GL_FALSE;
 				g_dirtyBits |= DIRTY_VP_LIGHTING;
+				dirtyFullFragmentProgram();
 			}
 			break;
 	}
@@ -658,7 +689,7 @@ GLboolean glIsEnabled(GLenum cap) {
 void glDepthMask(GLboolean f) { g_depthMask = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glDepthFunc(GLenum f)    { g_depthFunc = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glShadeModel(GLenum)     { }
-void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; g_dirtyBits |= DIRTY_DRAW_ENV; }
+void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; g_dirtyBits |= DIRTY_DRAW_ENV; dirtyFullFragmentProgram(); }
 void glStencilFunc(GLenum, GLint, GLuint) { }
 void glStencilOp(GLenum, GLenum, GLenum)  { }
 void glBlendFunc(GLenum sf, GLenum df)    { g_blendSrc = sf; g_blendDst = df; g_dirtyBits |= DIRTY_DRAW_ENV; }
@@ -694,12 +725,14 @@ void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
 		default: break;
 	}
 	g_dirtyBits |= DIRTY_VP_LIGHTING;
+	dirtyFullFragmentProgram();
 }
 
 void glMaterialf(GLenum, GLenum pname, GLfloat v) {
 	if (pname == GL_SHININESS) {
 		g_matShininess = v;
 		g_dirtyBits |= DIRTY_VP_LIGHTING;
+		dirtyFullFragmentProgram();
 	}
 }
 
@@ -713,17 +746,21 @@ void glMaterialfv(GLenum, GLenum pname, const GLfloat *p) {
 		default: break;
 	}
 	g_dirtyBits |= DIRTY_VP_LIGHTING;
+	dirtyFullFragmentProgram();
 }
 
 void glFogi(GLenum pname, GLint v) {
 	(void)pname; (void)v; /* only GL_LINEAR is supported */
 }
 void glFogf(GLenum pname, GLfloat v) {
-	if (pname == GL_FOG_START) g_fogStart = v;
-	else if (pname == GL_FOG_END) g_fogEnd = v;
+	if (pname == GL_FOG_START) { g_fogStart = v; dirtyFogFragmentPrograms(); }
+	else if (pname == GL_FOG_END) { g_fogEnd = v; dirtyFogFragmentPrograms(); }
 }
 void glFogfv(GLenum pname, const GLfloat *p) {
-	if (pname == GL_FOG_COLOR && p) memcpy(g_fogColor, p, 4 * sizeof(float));
+	if (pname == GL_FOG_COLOR && p) {
+		memcpy(g_fogColor, p, 4 * sizeof(float));
+		dirtyFogFragmentPrograms();
+	}
 }
 void glHint(GLenum, GLenum) { }
 
@@ -1470,6 +1507,8 @@ void ps3_gl_init(void) {
 		GFX_ASSERT(rsxAddressToOffset(g_fpRing[i].buf, &g_fpRing[i].offset) == 0,
 		           "rsxAddressToOffset(fp ring) failed");
 		GFX_ASSERT_ALIGNED(g_fpRing[i].offset, 64);
+		g_fpRing[i].labelVal = 0;
+		g_fpRing[i].generation = 0;
 
 		g_terrainFpRing[i].buf =
 		    (u32 *)rsxMemalign(64, g_terrainFpUcodeSize);
@@ -1484,34 +1523,11 @@ void ps3_gl_init(void) {
 		                             &g_terrainFpRing[i].offset) == 0,
 		           "rsxAddressToOffset(terrain fp ring) failed");
 		GFX_ASSERT_ALIGNED(g_terrainFpRing[i].offset, 64);
+		g_terrainFpRing[i].labelVal = 0;
+		g_terrainFpRing[i].generation = 0;
 	}
-	for (int i = 0; i < PS3_OVERSIZE_RING; ++i) {
-		g_fpOversizeRing[i].buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
-		if (!g_fpOversizeRing[i].buf) {
-			sysTtyTrace("[etr] ps3_gl_init: fp oversize ring alloc FAILED\n");
-			return;
-		}
-		GFX_ASSERT_ALIGNED(g_fpOversizeRing[i].buf, 64);
-		memcpy(g_fpOversizeRing[i].buf, g_fpUcode, g_fpUcodeSize);
-		GFX_ASSERT(rsxAddressToOffset(g_fpOversizeRing[i].buf,
-		                             &g_fpOversizeRing[i].offset) == 0,
-		           "rsxAddressToOffset(fp oversize ring) failed");
-		GFX_ASSERT_ALIGNED(g_fpOversizeRing[i].offset, 64);
-
-		g_terrainFpOversizeRing[i].buf =
-		    (u32 *)rsxMemalign(64, g_terrainFpUcodeSize);
-		if (!g_terrainFpOversizeRing[i].buf) {
-			sysTtyTrace("[etr] ps3_gl_init: terrain fp oversize ring alloc FAILED\n");
-			return;
-		}
-		GFX_ASSERT_ALIGNED(g_terrainFpOversizeRing[i].buf, 64);
-		memcpy(g_terrainFpOversizeRing[i].buf, g_terrainFpUcode,
-		       g_terrainFpUcodeSize);
-		GFX_ASSERT(rsxAddressToOffset(g_terrainFpOversizeRing[i].buf,
-		                             &g_terrainFpOversizeRing[i].offset) == 0,
-		           "rsxAddressToOffset(terrain fp oversize ring) failed");
-		GFX_ASSERT_ALIGNED(g_terrainFpOversizeRing[i].offset, 64);
-	}
+	g_fpRingHead = g_terrainFpRingHead = 0;
+	g_currentFpSlot = g_currentTerrainFpSlot = NULL;
 
 	g_uGlobalAmbient = rsxFragmentProgramGetConst(g_fpo, "globalAmbient");
 	g_uLightPos      = rsxFragmentProgramGetConst(g_fpo, "lightPosition");
@@ -1790,8 +1806,9 @@ extern "C" void ps3_gl_flush(void) {
 	ImmVtx *drawBuf;
 	int ringSlot = -1;
 	int oversizeRingSlot = -1;
-	u32 *fpBuf = NULL;
+	FpSlot *activeFpSlot = NULL;
 	u32  fpOffset = 0;
+	GLboolean patchFragmentProgram = GL_FALSE;
 	const GLboolean terrainDraw = useTerrainFragmentProgram();
 	const GLboolean uiDraw = useUiFragmentProgram();
 	const GLboolean liteDraw = useLiteFragmentProgram();
@@ -1804,10 +1821,6 @@ extern "C" void ps3_gl_flush(void) {
 		waitVtxLabel(slot.labelVal);
 		drawBuf    = slot.buf;
 		drawOffset = slot.offset;
-		fpBuf      = liteDraw ? g_terrainFpRing[ringSlot].buf
-		                      : g_fpRing[ringSlot].buf;
-		fpOffset   = liteDraw ? g_terrainFpRing[ringSlot].offset
-		                      : g_fpRing[ringSlot].offset;
 		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
 	} else {
 		/* Large strips/fans cannot be split without preserving topology. Keep
@@ -1818,14 +1831,39 @@ extern "C" void ps3_gl_flush(void) {
 		waitVtxLabel(slot.labelVal);
 		drawBuf    = slot.buf;
 		drawOffset = slot.offset;
-		fpBuf      = liteDraw ? g_terrainFpOversizeRing[oversizeRingSlot].buf
-		                      : g_fpOversizeRing[oversizeRingSlot].buf;
-		fpOffset   = liteDraw ? g_terrainFpOversizeRing[oversizeRingSlot].offset
-		                      : g_fpOversizeRing[oversizeRingSlot].offset;
 		g_vtxOversizeRingHead =
 		    (g_vtxOversizeRingHead + 1) % PS3_OVERSIZE_RING;
 	}
-	if (!fpBuf || !fpOffset) return;
+
+	/* Fragment-program storage rotates only when its constants change. The
+	 * selected slot remains immutable and can be shared by any number of
+	 * consecutive draws without being tied to the vertex-ring cadence. */
+	if (liteDraw) {
+		if (!g_currentTerrainFpSlot ||
+		    g_currentTerrainFpSlot->generation != g_liteFpGeneration) {
+			FpSlot &slot = g_terrainFpRing[g_terrainFpRingHead];
+			waitVtxLabel(slot.labelVal);
+			g_currentTerrainFpSlot = &slot;
+			g_terrainFpRingHead = (g_terrainFpRingHead + 1) % PS3_VTX_RING;
+			patchFragmentProgram = GL_TRUE;
+		}
+		activeFpSlot = g_currentTerrainFpSlot;
+	} else if (!uiDraw) {
+		if (!g_currentFpSlot ||
+		    g_currentFpSlot->generation != g_fullFpGeneration) {
+			FpSlot &slot = g_fpRing[g_fpRingHead];
+			waitVtxLabel(slot.labelVal);
+			g_currentFpSlot = &slot;
+			g_fpRingHead = (g_fpRingHead + 1) % PS3_VTX_RING;
+			patchFragmentProgram = GL_TRUE;
+		}
+		activeFpSlot = g_currentFpSlot;
+	}
+	if (!uiDraw) {
+		if (!activeFpSlot || !activeFpSlot->buf || !activeFpSlot->offset)
+			return;
+		fpOffset = activeFpSlot->offset;
+	}
 
 	TIMER_START("GL_FLUSH");
 
@@ -1837,7 +1875,7 @@ extern "C" void ps3_gl_flush(void) {
 	GFX_ASSERT(drawBuf != NULL, "drawBuf NULL at flush");
 	GFX_ASSERT_ALIGNED(drawBuf, 64);
 	GFX_ASSERT_ALIGNED(drawOffset, 64);
-	GFX_ASSERT_ALIGNED(fpOffset, 64);
+	if (!uiDraw) GFX_ASSERT_ALIGNED(fpOffset, 64);
 	/* Stride must be a multiple of 4 for F32 attribs (true at 48). */
 	GFX_ASSERT(GFX_IS_MULT(sizeof(ImmVtx), 4), "stride not 4-aligned");
 	/* Note: we deliberately do NOT assert on primitive-count-vs-mode here.
@@ -1857,7 +1895,6 @@ extern "C" void ps3_gl_flush(void) {
 
 	if (g_dirtyBits & DIRTY_DRAW_ENV) setDrawEnv();
 	if (g_dirtyBits & DIRTY_TEXTURE)  bindTextureForDraw();
-	(void)fpBuf; /* buffer contents are patched via InlineTransfer on fpOffset */
 
 	/* POS / NRM / TEX0 / COL attribs.
 	 * F32 attribs require each per-vertex offset to be 4-byte aligned;
@@ -1947,61 +1984,85 @@ extern "C" void ps3_gl_flush(void) {
 		/* The immutable UI shader has no per-draw constants.  Patching the
 		 * unused 3D lighting/fog program here used to emit fifteen inline
 		 * transfers for every HUD quad before immediately loading etr_ui. */
-		rsxLoadFragmentProgramLocation(context, g_uiFpo, g_uiFpOffset, GCM_LOCATION_RSX);
+		if (g_loadedFragmentProgram != FP_UI ||
+		    g_loadedFragmentOffset != g_uiFpOffset) {
+			rsxLoadFragmentProgramLocation(context, g_uiFpo, g_uiFpOffset,
+			                               GCM_LOCATION_RSX);
+			g_loadedFragmentProgram = FP_UI;
+			g_loadedFragmentOffset = g_uiFpOffset;
+		}
 	} else if (liteDraw) {
-		float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
-		float fogSE[2] = { g_fogStart, g_fogEnd };
-		float doFog = g_fog ? 1.f : 0.f;
-		float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
+		if (patchFragmentProgram) {
+			float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
+			float fogSE[2] = { g_fogStart, g_fogEnd };
+			float doFog = g_fog ? 1.f : 0.f;
+			float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
 
-		TIMER_START("FLUSH_FP_PATCHES");
-		if (g_tFogColor)      rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
-		if (g_tFogSE)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
-		if (g_tDoFog)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
-		if (g_tOutputScale)   rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
-		TIMER_END("FLUSH_FP_PATCHES");
+			TIMER_START("FLUSH_FP_PATCHES");
+			if (g_tFogColor)      rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
+			if (g_tFogSE)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
+			if (g_tDoFog)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
+			if (g_tOutputScale)   rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
+			TIMER_END("FLUSH_FP_PATCHES");
+			activeFpSlot->generation = g_liteFpGeneration;
+		}
 
-		rsxLoadFragmentProgramLocation(context, g_terrainFpo, fpOffset,
-		                               GCM_LOCATION_RSX);
+		if (patchFragmentProgram ||
+		    g_loadedFragmentProgram != FP_LITE ||
+		    g_loadedFragmentOffset != fpOffset) {
+			rsxLoadFragmentProgramLocation(context, g_terrainFpo, fpOffset,
+			                               GCM_LOCATION_RSX);
+			g_loadedFragmentProgram = FP_LITE;
+			g_loadedFragmentOffset = fpOffset;
+		}
 	} else {
-		/* 3D fragment uniforms — patched into fpBuf, then the slot is loaded. */
-		float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
-		composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
+		if (patchFragmentProgram) {
+			float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
+			composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
 
-		float anyLight = (g_light[0].enabled || g_light[1].enabled ||
-		                  g_light[2].enabled || g_light[3].enabled) ? 1.f : 0.f;
-		float doLighting = (g_lighting && anyLight) ? 1.f : 0.f;
+			float anyLight = (g_light[0].enabled || g_light[1].enabled ||
+			                  g_light[2].enabled || g_light[3].enabled) ? 1.f : 0.f;
+			float doLighting = (g_lighting && anyLight) ? 1.f : 0.f;
 
-		float doFog = g_fog ? 1.f : 0.f;
-		float fogSE[2] = { g_fogStart, g_fogEnd };
-		float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
-		float matDiff[3] = { g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2] };
-		float matSpec[3] = { g_matSpecular[0], g_matSpecular[1], g_matSpecular[2] };
-		float shin = g_matShininess > 0.f ? g_matShininess : 1.f;
-		/* shader discard only for non-GEQUAL alpha tests (hw path covers GEQUAL) */
-		float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
-		float aRef = g_alphaRef;
-		float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
+			float doFog = g_fog ? 1.f : 0.f;
+			float fogSE[2] = { g_fogStart, g_fogEnd };
+			float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
+			float matDiff[3] = { g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2] };
+			float matSpec[3] = { g_matSpecular[0], g_matSpecular[1], g_matSpecular[2] };
+			float shin = g_matShininess > 0.f ? g_matShininess : 1.f;
+			/* shader discard only for non-GEQUAL alpha tests (hw path covers GEQUAL) */
+			float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
+			float aRef = g_alphaRef;
+			float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
 
-		TIMER_START("FLUSH_FP_PATCHES");
-		if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
-		if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
-		if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, fpOffset, GCM_LOCATION_RSX);
-		if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, fpOffset, GCM_LOCATION_RSX);
-		if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, fpOffset, GCM_LOCATION_RSX);
-		if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, fpOffset, GCM_LOCATION_RSX);
-		if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, fpOffset, GCM_LOCATION_RSX);
-		if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, fpOffset, GCM_LOCATION_RSX);
-		if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, fpOffset, GCM_LOCATION_RSX);
-		if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
-		if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
-		if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
-		if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
-		if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
-		if (g_uOutputScale)   rsxSetFragmentProgramParameter(context, g_fpo, g_uOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
-		TIMER_END("FLUSH_FP_PATCHES");
+			TIMER_START("FLUSH_FP_PATCHES");
+			if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
+			if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
+			if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, fpOffset, GCM_LOCATION_RSX);
+			if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, fpOffset, GCM_LOCATION_RSX);
+			if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, fpOffset, GCM_LOCATION_RSX);
+			if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, fpOffset, GCM_LOCATION_RSX);
+			if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, fpOffset, GCM_LOCATION_RSX);
+			if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, fpOffset, GCM_LOCATION_RSX);
+			if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, fpOffset, GCM_LOCATION_RSX);
+			if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
+			if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
+			if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
+			if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
+			if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
+			if (g_uOutputScale)   rsxSetFragmentProgramParameter(context, g_fpo, g_uOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
+			TIMER_END("FLUSH_FP_PATCHES");
+			activeFpSlot->generation = g_fullFpGeneration;
+		}
 
-		rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset, GCM_LOCATION_RSX);
+		if (patchFragmentProgram ||
+		    g_loadedFragmentProgram != FP_FULL ||
+		    g_loadedFragmentOffset != fpOffset) {
+			rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset,
+			                               GCM_LOCATION_RSX);
+			g_loadedFragmentProgram = FP_FULL;
+			g_loadedFragmentOffset = fpOffset;
+		}
 	}
 
 	if (g_dirtyBits & DIRTY_DRAW_ENV) {
@@ -2025,6 +2086,8 @@ extern "C" void ps3_gl_flush(void) {
 		g_vtxRing[ringSlot].labelVal = doneVal;
 	else if (oversizeRingSlot >= 0)
 		g_vtxOversizeRing[oversizeRingSlot].labelVal = doneVal;
+	if (activeFpSlot)
+		activeFpSlot->labelVal = doneVal;
 
 	/* State uploaded this flush is now the RSX's current state; clears
 	 * let subsequent mutators re-arm only what they actually change. */

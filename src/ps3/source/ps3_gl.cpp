@@ -412,6 +412,16 @@ extern "C" void ps3_gl_flush_pending(void) {
 	flushPendingImmediate();
 }
 
+extern "C" void ps3_gl_invalidate_rsx_state(void) {
+	/* flip()/setRenderTarget() is outside this shim and can invalidate the
+	 * assumptions behind its per-category state cache. Force one complete
+	 * state/program/texture rebind on the first draw of the new surface. */
+	g_dirtyBits = DIRTY_ALL;
+	g_loadedVertexProgram = VP_NONE;
+	g_loadedFragmentProgram = FP_NONE;
+	g_loadedFragmentOffset = 0;
+}
+
 /* =====================================================================
  * Matrix math (column-major)
  *

@@ -20,6 +20,9 @@ void ps3_gl_init(void);
  * by the window backend immediately before presenting the framebuffer. */
 void ps3_gl_flush_pending(void);
 
+/* Forget cached RSX register/program state after an external surface change. */
+void ps3_gl_invalidate_rsx_state(void);
+
 #ifdef __cplusplus
 }
 #endif

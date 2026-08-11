@@ -12,9 +12,9 @@
  * bounded — five tags produce ~5 lines/second instead of one line per
  * call. The file is fflushed at each window flush and on close.
  *
- * Active only when both __PPU__ and DEMO_MODE are defined. Off-PS3 or
- * non-demo builds compile every TIMER_* site to nothing, so instrumented
- * code in the hot path costs zero.
+ * Active only when DEMO_MODE is defined. Non-demo builds compile every
+ * TIMER_* site to nothing, so instrumented code in the hot path costs
+ * zero.
  *
  * The log file is opened with ps3_perf_open() and closed with
  * ps3_perf_close(); every other call is a no-op while the file is not
@@ -23,10 +23,7 @@
 #ifndef PS3_LOG_H
 #define PS3_LOG_H
 
-/* bh.h derives OS_PS3 from __PPU__ for game sources, but PS3 backend TUs
- * (ps3_gl.cpp, n_window_ps3.cpp) don't include bh.h — so gate on __PPU__
- * directly. ppu-g++ always defines it; it's never set on the Linux build. */
-#if defined(__PPU__) && defined(DEMO_MODE) && DEMO_MODE
+#if defined(DEMO_MODE) && DEMO_MODE
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,11 +49,11 @@ void ps3_perf_end  (const char *tag);
 #define TIMER_START(tag) ps3_perf_begin(tag)
 #define TIMER_END(tag)   ps3_perf_end(tag)
 
-#else /* !__PPU__ or DEMO_MODE off */
+#else /* DEMO_MODE off */
 
 #define TIMER_START(tag) ((void)0)
 #define TIMER_END(tag)   ((void)0)
 
-#endif /* __PPU__ && DEMO_MODE */
+#endif /* DEMO_MODE */
 
 #endif /* PS3_LOG_H */

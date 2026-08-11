@@ -12,17 +12,9 @@
  * All functions early-return when g_logFile is NULL, so failed-open (or
  * not-opened-yet) is harmless.
  */
-/* bh.h defines OS_PS3 from __PPU__ for the game sources; this TU doesn't
- * include bh.h, so mirror the same detection before including ps3_log.h. */
-#ifdef __PPU__
-#	ifndef OS_PS3
-#		define OS_PS3
-#	endif
-#endif
-
 #include "ps3_log.h"
 
-#ifdef OS_PS3
+#if defined(DEMO_MODE) && DEMO_MODE
 
 #include <cstdio>
 #include <cstring>
@@ -140,4 +132,4 @@ void ps3_perf_end(const char *tag) {
 
 } /* extern "C" */
 
-#endif /* OS_PS3 */
+#endif /* DEMO_MODE */

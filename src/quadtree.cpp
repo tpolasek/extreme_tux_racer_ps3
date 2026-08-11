@@ -18,11 +18,7 @@
  * surface as momentary black/white triangle flashes.  Ordinary two-terrain
  * blending remains enabled; only the problematic extra junction pass is
  * suppressed on PS3. */
-#ifdef __PPU__
 static const bool PS3_DISABLE_SPECIAL_TERRAIN_PASS = true;
-#else
-static const bool PS3_DISABLE_SPECIAL_TERRAIN_PASS = false;
-#endif
 
 static inline bool use_special_terrain_pass() {
 	return param.perf_level > 1 && !PS3_DISABLE_SPECIAL_TERRAIN_PASS;

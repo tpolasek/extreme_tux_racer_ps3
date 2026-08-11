@@ -20,7 +20,6 @@ GNU General Public License for more details.
 
 #include <cmath>
 
-#ifdef __PPU__
 // PS3 PSL1GHT: libstdc++ wasn't configured with _GLIBCXX_USE_C99_MATH_TR1, so
 // the C99 math functions newlib declares in <math.h> never reach std::. This
 // header uses std::hypot directly; the .cpp sources (via bh.h) use a few more
@@ -34,7 +33,6 @@ namespace std {
 	using ::llround;
 	using ::lrint;
 }
-#endif
 
 
 template<typename T>

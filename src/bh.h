@@ -38,13 +38,7 @@ GNU General Public License for more details.
 #include "n_draw.h"
 #include "n_window.h"
 
-#ifdef __PPU__
-#	define OS_PS3
-#elif defined(__APPLE__)
-#	define OS_MAC
-#elif defined(__linux__)
-#	define OS_LINUX
-#endif
+#define OS_PS3
 
 // Unix platform (Linux, Mac OS X, BSD, ...)
 #include <unistd.h>

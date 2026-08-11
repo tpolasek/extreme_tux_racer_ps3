@@ -195,13 +195,8 @@ void CEnvironment::LoadLight(const std::string& EnvDir) {
 void CEnvironment::DrawSkybox(const TVector3d& pos) const {
 	ScopedRenderMode rm(SKY);
 
-#if defined (OS_LINUX)
-	static const float aa = 0.0f;
-	static const float bb = 1.0f;
-#else
 	static const float aa = 0.005f;
 	static const float bb = 0.995f;
-#endif
 
 	glColor4ub(255, 255, 255, 255);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);

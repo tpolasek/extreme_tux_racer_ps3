@@ -4,4 +4,6 @@ src/.deps/*
 *.self
 src/etr.elf
 src/ps3_build/
+src/build/
+etr_perf.log
 etr.pkg

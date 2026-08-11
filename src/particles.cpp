@@ -30,6 +30,7 @@ GNU General Public License for more details.
 #include "physics.h"
 #include <cstdlib>
 #include <list>
+#include <vector>
 #include <algorithm>
 
 // ====================================================================
@@ -224,97 +225,17 @@ struct Particle {
 	double death;
 	double alpha;
 	TVector3d vel;
-
-	void Draw(const CControl* ctrl) const;
-private:
-	void draw_billboard(const CControl *ctrl, double width, double height, bool use_world_y_axis, const GLfloat* tex) const;
 };
 
 static std::list<Particle> particles;
 
-void Particle::Draw(const CControl* ctrl) const {
-	static const GLfloat tex_coords[4][8] = {
-		{
-			0.0, 0.5,
-			0.5, 0.5,
-			0.5, 0.0,
-			0.0, 0.0
-		}, {
-			0.5, 0.5,
-			1.0, 0.5,
-			1.0, 0.0,
-			0.5, 0.0
-		}, {
-			0.0, 1.0,
-			0.5, 1.0,
-			0.5, 0.5,
-			0.0, 0.5
-		}, {
-			0.5, 1.0,
-			1.0, 1.0,
-			1.0, 0.5,
-			0.5, 0.5
-		}
-	};
-
-	const Color& particle_colour = Env.ParticleColor();
-	glColor(particle_colour, particle_colour.a * alpha);
-
-	draw_billboard(ctrl, cur_size, cur_size, false, tex_coords[type]);
-}
-
-void Particle::draw_billboard(const CControl *ctrl, double width, double height, bool use_world_y_axis, const GLfloat* tex) const {
-	TVector3d x_vec;
-	TVector3d y_vec;
-	TVector3d z_vec;
-
-	x_vec.x = ctrl->view_mat[0][0];
-	x_vec.y = ctrl->view_mat[0][1];
-	x_vec.z = ctrl->view_mat[0][2];
-
-	if (use_world_y_axis) {
-		y_vec = TVector3d(0, 1, 0);
-		x_vec = ProjectToPlane(y_vec, x_vec);
-		x_vec.Norm();
-		z_vec = CrossProduct(x_vec, y_vec);
-	} else {
-		y_vec.x = ctrl->view_mat[1][0];
-		y_vec.y = ctrl->view_mat[1][1];
-		y_vec.z = ctrl->view_mat[1][2];
-		z_vec.x = ctrl->view_mat[2][0];
-		z_vec.y = ctrl->view_mat[2][1];
-		z_vec.z = ctrl->view_mat[2][2];
-	}
-
-	TVector3d pt1 = pt - width/2.0 * x_vec - height/2.0 * y_vec;
-	TVector3d pt2 = pt1 + width * x_vec;
-	TVector3d pt3 = pt2 + height * y_vec;
-	TVector3d pt4 = pt3 + -width * x_vec;
-	const GLfloat vtx[] = {
-		static_cast<GLfloat>(pt1.x),
-		static_cast<GLfloat>(pt1.y),
-		static_cast<GLfloat>(pt1.z),
-		static_cast<GLfloat>(pt2.x),
-		static_cast<GLfloat>(pt2.y),
-		static_cast<GLfloat>(pt2.z),
-		static_cast<GLfloat>(pt3.x),
-		static_cast<GLfloat>(pt3.y),
-		static_cast<GLfloat>(pt3.z),
-		static_cast<GLfloat>(pt4.x),
-		static_cast<GLfloat>(pt4.y),
-		static_cast<GLfloat>(pt4.z),
-	};
-
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-	glVertexPointer(3, GL_FLOAT, 0, vtx);
-	glTexCoordPointer(2, GL_FLOAT, 0, tex);
-	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
-}
+/* The four tiles of SNOW_PART. Each particle picks one by `type` (0..3). */
+static const GLfloat kParticleTexCoords[4][8] = {
+	{ 0.0f, 0.5f,  0.5f, 0.5f,  0.5f, 0.0f,  0.0f, 0.0f },
+	{ 0.5f, 0.5f,  1.0f, 0.5f,  1.0f, 0.0f,  0.5f, 0.0f },
+	{ 0.0f, 1.0f,  0.5f, 1.0f,  0.5f, 0.5f,  0.0f, 0.5f },
+	{ 0.5f, 1.0f,  1.0f, 1.0f,  1.0f, 0.5f,  0.5f, 0.5f },
+};
 
 void create_new_particles(const TVector3d& loc, const TVector3d& vel, std::size_t num) {
 	double speed = vel.Length();
@@ -371,9 +292,72 @@ void draw_particles(const CControl *ctrl) {
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glColor4f(1.f, 1.f, 1.f, 0.8f);
 
+	/* Camera right/up basis — constant for every particle this frame. */
+	TVector3d x_vec(ctrl->view_mat[0][0], ctrl->view_mat[0][1], ctrl->view_mat[0][2]);
+	TVector3d y_vec(ctrl->view_mat[1][0], ctrl->view_mat[1][1], ctrl->view_mat[1][2]);
+	const Color& particle_colour = Env.ParticleColor();
+	const uint8_t base_r = particle_colour.r;
+	const uint8_t base_g = particle_colour.g;
+	const uint8_t base_b = particle_colour.b;
+
+	/* Reused per-frame buffers: clear() keeps capacity, so after the first
+	 * heavy frame these are plain pointer writes with no heap churn. */
+	static std::vector<GLfloat> pos_buf;
+	static std::vector<GLfloat> tex_buf;
+	static std::vector<GLubyte> col_buf;
+	pos_buf.clear();
+	tex_buf.clear();
+	col_buf.clear();
+
 	for (std::list<Particle>::const_iterator p = particles.begin(); p != particles.end(); ++p) {
-		if (p->age >= 0)
-			p->Draw(ctrl);
+		if (p->age < 0)
+			continue;
+
+		const double w = p->cur_size;
+		const double h = p->cur_size;
+		TVector3d pt1 = p->pt - w * 0.5 * x_vec - h * 0.5 * y_vec;
+		TVector3d pt2 = pt1 + w * x_vec;
+		TVector3d pt3 = pt2 + h * y_vec;
+		TVector3d pt4 = pt3 - w * x_vec;
+
+		pos_buf.push_back(static_cast<GLfloat>(pt1.x));
+		pos_buf.push_back(static_cast<GLfloat>(pt1.y));
+		pos_buf.push_back(static_cast<GLfloat>(pt1.z));
+		pos_buf.push_back(static_cast<GLfloat>(pt2.x));
+		pos_buf.push_back(static_cast<GLfloat>(pt2.y));
+		pos_buf.push_back(static_cast<GLfloat>(pt2.z));
+		pos_buf.push_back(static_cast<GLfloat>(pt3.x));
+		pos_buf.push_back(static_cast<GLfloat>(pt3.y));
+		pos_buf.push_back(static_cast<GLfloat>(pt3.z));
+		pos_buf.push_back(static_cast<GLfloat>(pt4.x));
+		pos_buf.push_back(static_cast<GLfloat>(pt4.y));
+		pos_buf.push_back(static_cast<GLfloat>(pt4.z));
+
+		const GLfloat* tex = kParticleTexCoords[p->type];
+		tex_buf.insert(tex_buf.end(), tex, tex + 8);
+
+		const GLubyte a = static_cast<GLubyte>(particle_colour.a * p->alpha);
+		for (int i = 0; i < 4; ++i) {
+			col_buf.push_back(base_r);
+			col_buf.push_back(base_g);
+			col_buf.push_back(base_b);
+			col_buf.push_back(a);
+		}
+	}
+
+	if (!pos_buf.empty()) {
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glEnableClientState(GL_COLOR_ARRAY);
+
+		glVertexPointer(3, GL_FLOAT, 0, pos_buf.data());
+		glTexCoordPointer(2, GL_FLOAT, 0, tex_buf.data());
+		glColorPointer(4, GL_UNSIGNED_BYTE, 0, col_buf.data());
+		glDrawArrays(GL_QUADS, 0, static_cast<GLsizei>(pos_buf.size() / 3));
+
+		glDisableClientState(GL_COLOR_ARRAY);
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+		glDisableClientState(GL_VERTEX_ARRAY);
 	}
 }
 void clear_particles() {

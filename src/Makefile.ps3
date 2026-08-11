@@ -40,15 +40,17 @@ CONTENTID	:=	UP0001-$(APPID)_00-0000000000000001
 # -std=gnu++14 (not c++14): the GNU dialect leaves __STRICT_ANSI__ undefined,
 # which is what PS3 newlib's <stdio.h> checks to expose snprintf/vsnprintf.
 # With plain -std=c++14 the C++ standard library fails to find ::vsnprintf.
-# DEMO_MODE defaults on (auto-pick char+course, play 10s, exit). Disable with
-# `make DEMO_MODE=` for a normal menu-driven build.
+# DEMO_MODE: auto-pick char+course, play 10s, exit (headless validation
+# loop). Off by default. Enable with `make DEMO_MODE=1`.
+# Use `$(filter-out 0,$(VAR))` rather than `$(if $(VAR),...)` -- GNU make
+# treats "0" as a non-empty (truthy) string, so plain $(if) would still
+# pass -DDEMO_MODE=1 when DEMO_MODE=0 is set explicitly.
 DEMO_MODE	?=	0
-# DEMO_SHOTS controls screenshot capture inside DEMO_MODE (frame 150 + exit).
-# Defaults off so the headless validation loop gets clean perf numbers; pass
-# `DEMO_SHOTS=1` to capture for visual verification. No effect when
+# DEMO_SHOTS: screenshot capture inside DEMO_MODE (frame 150 + exit).
+# Off by default. Enable with `make DEMO_SHOTS=1`. No effect when
 # DEMO_MODE is off.
 DEMO_SHOTS	?=	0
-CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(DEMO_MODE),-DDEMO_MODE=1) $(if $(DEMO_SHOTS),-DDEMO_SHOTS=1)
+CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(filter-out 0,$(DEMO_MODE)),-DDEMO_MODE=1) $(if $(filter-out 0,$(DEMO_SHOTS)),-DDEMO_SHOTS=1)
 CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map

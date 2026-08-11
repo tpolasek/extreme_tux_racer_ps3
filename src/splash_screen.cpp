@@ -32,7 +32,7 @@ GNU General Public License for more details.
 #include "translation.h"
 #include "regist.h"
 #include "winsys.h"
-#ifdef DEMO_MODE
+#if defined(DEMO_MODE) && DEMO_MODE
 #include "loading.h"
 #endif
 
@@ -93,7 +93,7 @@ void CSplashScreen::Loop(float time_step) {
 			reason += Trans.Text(94) + "\n";
 
 		if (reason.empty()) {
-#ifdef DEMO_MODE
+#if defined(DEMO_MODE) && DEMO_MODE
 			// Auto-pick first character + first course, skip menus.
 			// Mirrors CRegist::Enter() (SetSinglePlayer) + QuitRegistration()
 			// (regist.cpp) + SetRaceConditions() (race_select.cpp), using

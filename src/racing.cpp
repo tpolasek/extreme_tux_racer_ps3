@@ -42,7 +42,7 @@ GNU General Public License for more details.
 #include "physics.h"
 #include "tux.h"
 #include "ps3_log.h"
-#ifdef DEMO_MODE
+#if defined(DEMO_MODE) && DEMO_MODE
 #include "screenshot.h"
 #include "game_config.h"
 #include <string>
@@ -326,7 +326,7 @@ static void CalcTrickControls(CControl *ctrl, float time_step, bool airborne) {
 // ====================================================================
 
 void CRacing::Loop(float time_step) {
-#ifdef DEMO_MODE
+#if defined(DEMO_MODE) && DEMO_MODE
 	static int sDemoFrame = 0;
 	if (g_game.time >= 10.f) {
 #if defined(DEMO_SHOTS) && DEMO_SHOTS
@@ -396,7 +396,7 @@ void CRacing::Loop(float time_step) {
 
 	Reshape(Winsys.resolution.width, Winsys.resolution.height);
 	Winsys.SwapBuffers();
-#ifdef DEMO_MODE
+#if defined(DEMO_MODE) && DEMO_MODE
 #if defined(DEMO_SHOTS) && DEMO_SHOTS
 	if (++sDemoFrame == 150) {
 		// Full native-resolution capture mid-race.

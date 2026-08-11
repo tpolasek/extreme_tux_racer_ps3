@@ -44,6 +44,7 @@ src/ps3/tools/dev_launch.sh    # mount + auto-play installed ETR via webMAN
 src/ps3/tools/dev_close.sh     # close running game -> XMB, block until done
 src/ps3/tools/dev_screenshots.sh  # fetch DEMO_MODE PNGs to /tmp, print paths
 src/ps3/tools/dev_perflog.sh   # fetch etr_perf.log to stdout
+src/ps3/tools/dev_perf_analyze.py  # summarize etr_perf.log (per-tag cost, FPS, spikes)
 ```
 
 - `dev_deploy.sh` recompiles, then `ppu-strip`+`sprxlinker`+
@@ -53,6 +54,11 @@ src/ps3/tools/dev_perflog.sh   # fetch etr_perf.log to stdout
 - `dev_perflog.sh` fetches the runtime perf log (`etr_perf.log`, written to
   the same USRDIR by the perf-timer instrumentation). Print it to a file
   with `> etr_perf.log` or pipe through `tail`/`grep`.
+- `dev_perf_analyze.py` parses that log into a per-tag breakdown: phase
+  detection (menu vs race), per-frame us and % of frame budget, σ/min/max
+  to surface spike-prone paths, and overall FPS. Pipe the log in via
+  `dev_perflog.sh > etr_perf.log` then run `dev_perf_analyze.py [etr_perf.log]`.
+  Use this instead of eyeballing the raw CSV when comparing runs.
 - Defaults target FTP host `192.168.1.245`, user `anonymous`. Override via
   env vars: `PS3_FTP_HOST`, `PS3_FTP_USER`, `PS3_FTP_PASS`,
   `PS3_INSTALL_DIR`.
@@ -157,6 +163,7 @@ Stored column-major (OpenGL). Uploaded **TRANSPOSED** via
 | `src/ps3/tools/build_ps3.sh` | One-shot build + pkg wrapper |
 | `src/ps3/tools/dev_deploy.sh` | FTP hot-deploy: build + sign + upload EBOOT.BIN |
 | `src/ps3/tools/dev_perflog.sh` | FTP fetch `etr_perf.log` to stdout |
+| `src/ps3/tools/dev_perf_analyze.py` | Summarize `etr_perf.log`: per-tag cost, FPS, spikes |
 
 ## Key constants (`ps3_gl.cpp`)
 

@@ -50,7 +50,6 @@ extern "C" const u8 etr_terrain_fpo[];
 extern "C" const u8 etr_ui_fpo[];
 
 extern "C" void ps3_gl_flush(void);
-static void waitVtxLabel(u32 val);
 
 /* =====================================================================
  * Internal state
@@ -149,8 +148,6 @@ static ImmVtx  g_immVtx[PS3_IMM_MAX];
 static int     g_immCount = 0;
 static GLenum  g_primMode = GL_TRIANGLES;
 static int     g_inBegin  = 0;
-static int     g_beginStartCount = 0;
-static GLboolean g_batchPending = GL_FALSE;
 static float   g_curU = 0.f, g_curV = 0.f;
 static float   g_curNx = 0.f, g_curNy = 1.f, g_curNz = 0.f;
 
@@ -160,31 +157,14 @@ static float   g_curNx = 0.f, g_curNy = 1.f, g_curNz = 0.f;
  * the last-emitted value for any state we don't re-send, so skipping is
  * equivalent to "state hasn't changed, don't bother re-emitting". */
 enum DirtyBit {
-	DIRTY_VIEWPORT     = 1 << 0,
-	DIRTY_DEPTH        = 1 << 1,
-	DIRTY_CULL         = 1 << 2,
-	DIRTY_BLEND        = 1 << 3,
-	DIRTY_ALPHA        = 1 << 4,
-	DIRTY_FIXED_ENV    = 1 << 5,
-	DIRTY_TEXTURE_BIND = 1 << 6,
-	DIRTY_TEXTURE_DATA = 1 << 7,
-	DIRTY_TEXTURE      = DIRTY_TEXTURE_BIND | DIRTY_TEXTURE_DATA,
-	DIRTY_PROJ_MATRIX  = 1 << 8,
-	DIRTY_MV_MATRIX    = 1 << 9,
-	DIRTY_TEXGEN       = 1 << 10,
-	DIRTY_VP_LIGHTING  = 1 << 11,
-	DIRTY_DRAW_ENV     = DIRTY_VIEWPORT | DIRTY_DEPTH | DIRTY_CULL |
-	                     DIRTY_BLEND | DIRTY_ALPHA | DIRTY_FIXED_ENV,
+	DIRTY_DRAW_ENV    = 1 << 0, /* viewport/depth/blend/cull/alpha + clip planes */
+	DIRTY_TEXTURE     = 1 << 1, /* bind + params + data cache inval */
+	DIRTY_PROJ_MATRIX = 1 << 2,
+	DIRTY_MV_MATRIX   = 1 << 3,
+	DIRTY_TEXGEN      = 1 << 4,
 	DIRTY_ALL         = ~0u,
 };
 static u32 g_dirtyBits = DIRTY_ALL;
-
-enum VertexProgramKind {
-	VP_NONE,
-	VP_GENERAL,
-	VP_TERRAIN,
-};
-static VertexProgramKind g_loadedVertexProgram = VP_NONE;
 
 /* Route a matrix mutation to the bit for the currently-active stack.
  * Mirrors activeMatrix(): only PROJECTION and MODELVIEW are uploaded
@@ -201,9 +181,7 @@ static inline u32 matrixDirtyBit() {
  * stream. Double-buffered presentation bounds the actual in-flight usage. */
 #define PS3_VTX_RING      256
 #define PS3_VTX_SLOT_MAX  512
-#define PS3_OVERSIZE_RING 16
 #define PS3_VTX_LABEL_IDX 253
-#define PS3_SUBMIT_BATCH_DRAWS 16
 struct VtxSlot {
 	ImmVtx *buf;
 	u32     offset;
@@ -211,19 +189,10 @@ struct VtxSlot {
 };
 static VtxSlot  g_vtxRing[PS3_VTX_RING];
 static int      g_vtxRingHead = 0;
-static VtxSlot  g_vtxOversizeRing[PS3_OVERSIZE_RING];
-static int      g_vtxOversizeRingHead = 0;
+static ImmVtx  *g_vtxOversize    = NULL;
+static u32      g_vtxOversizeOff = 0;
 static vu32    *g_vtxLabel       = NULL;
 static u32      g_vtxLabelNext   = 1;
-static u32      g_unflushedDraws = 0;
-
-/* Array draws can decode directly into an acquired RSX ring slot. The next
- * ps3_gl_flush consumes this one-shot reservation instead of acquiring a
- * second slot and memcpying g_immVtx into it. */
-static ImmVtx  *g_preparedDrawBuf = NULL;
-static u32      g_preparedDrawOffset = 0;
-static int      g_preparedRingSlot = -1;
-static int      g_preparedOversizeRingSlot = -1;
 
 /* textures */
 #define PS3_MAX_TEXTURES 512
@@ -241,7 +210,6 @@ static GLuint g_currentTex = 0;
 static GLuint g_nextTexId  = 1;
 static GLuint g_freeIds[PS3_MAX_TEXTURES];
 static u32    g_freeCount = 0;
-static u8     g_boundTextureUnit = 0xff;
 
 /* shader handles (etr3d) */
 static rsxVertexProgram   *g_vpo = NULL;
@@ -273,13 +241,9 @@ static rsxProgramAttrib   *g_uiTexSampler = NULL;
 struct FpSlot {
 	u32 *buf;
 	u32  offset;
-	u32  labelVal;
-	u32  generation;
 };
 static FpSlot g_fpRing[PS3_VTX_RING];
-static int g_fpRingHead = 0;
-static FpSlot *g_currentFpSlot = NULL;
-static u32 g_fullFpGeneration = 1;
+static FpSlot g_fpOversize;
 
 /* Terrain uses a no-specular fragment variant.  It is ringed independently
  * because its constants are patched per draw just like the general 3D path. */
@@ -287,9 +251,7 @@ static rsxFragmentProgram *g_terrainFpo = NULL;
 static void               *g_terrainFpUcode = NULL;
 static u32                 g_terrainFpUcodeSize = 0;
 static FpSlot              g_terrainFpRing[PS3_VTX_RING];
-static int                 g_terrainFpRingHead = 0;
-static FpSlot             *g_currentTerrainFpSlot = NULL;
-static u32                 g_liteFpGeneration = 1;
+static FpSlot              g_terrainFpOversize;
 static rsxProgramConst     *g_tFogColor = NULL;
 static rsxProgramConst     *g_tFogSE = NULL;
 static rsxProgramConst     *g_tDoFog = NULL;
@@ -331,28 +293,6 @@ static rsxProgramConst *g_uAlphaRef = NULL;
 static rsxProgramConst *g_uDoAlphaTest = NULL;
 static rsxProgramConst *g_uOutputScale = NULL;
 static rsxProgramAttrib *g_texSampler = NULL;
-
-enum FragmentProgramKind {
-	FP_NONE,
-	FP_UI,
-	FP_LITE,
-	FP_FULL,
-};
-static FragmentProgramKind g_loadedFragmentProgram = FP_NONE;
-static u32 g_loadedFragmentOffset = 0;
-
-static inline void bumpGeneration(u32 &generation) {
-	if (++generation == 0) generation = 1;
-}
-
-static inline void dirtyFullFragmentProgram(void) {
-	bumpGeneration(g_fullFpGeneration);
-}
-
-static inline void dirtyFogFragmentPrograms(void) {
-	bumpGeneration(g_fullFpGeneration);
-	bumpGeneration(g_liteFpGeneration);
-}
 
 /* white 1x1 fallback */
 static u32 *g_whiteBuf = NULL;
@@ -403,17 +343,6 @@ static AttribSave g_attrib[PS3_ATTRIB_STACK_DEPTH];
 static int        g_attribTop = 0;
 
 static int g_rsxReady = 0;
-
-static void flushPendingImmediate(void) {
-	if (!g_batchPending || g_immCount == 0 || g_inBegin) return;
-	ps3_gl_flush();
-	g_immCount = 0;
-	g_batchPending = GL_FALSE;
-}
-
-extern "C" void ps3_gl_flush_pending(void) {
-	flushPendingImmediate();
-}
 
 /* =====================================================================
  * Matrix math (column-major)
@@ -504,7 +433,6 @@ void glPushMatrix(void) {
 }
 
 void glPopMatrix(void) {
-	flushPendingImmediate();
 	MatrixStack *s = activeMatrix();
 	if (s->top > 0) {
 		s->top--;
@@ -514,19 +442,16 @@ void glPopMatrix(void) {
 }
 
 void glLoadIdentity(void) {
-	flushPendingImmediate();
 	matIdentity(activeMatrix()->m);
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glLoadMatrixd(const GLdouble *m) {
-	flushPendingImmediate();
 	for (int i = 0; i < 16; i++) activeMatrix()->m[i] = (float)m[i];
 	g_dirtyBits |= matrixDirtyBit();
 }
 
 void glMultMatrixd(const GLdouble *m) {
-	flushPendingImmediate();
 	alignas(16) float mf[16];
 	for (int i = 0; i < 16; i++) mf[i] = (float)m[i];
 	MatrixStack *s = activeMatrix();
@@ -537,7 +462,6 @@ void glMultMatrixd(const GLdouble *m) {
 }
 
 void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
-	flushPendingImmediate();
 	alignas(16) float m[16];
 	matIdentity(m);
 	m[0]  = 2.f / (float)(r - l);
@@ -554,7 +478,6 @@ void glOrtho(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdoubl
 }
 
 void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdouble f) {
-	flushPendingImmediate();
 	alignas(16) float m[16];
 	memset(m, 0, sizeof(float) * 16);
 	m[0]  = (float)(2.0 * n / (r - l));
@@ -572,7 +495,6 @@ void glFrustum(GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble n, GLdou
 }
 
 void glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
-	flushPendingImmediate();
 	alignas(16) float m[16];
 	matIdentity(m);
 	m[12] = x; m[13] = y; m[14] = z;
@@ -587,7 +509,6 @@ void glTranslated(GLdouble x, GLdouble y, GLdouble z) {
 }
 
 void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
-	flushPendingImmediate();
 	float c = cosf(angle * (3.14159265f / 180.f));
 	float s = sinf(angle * (3.14159265f / 180.f));
 	float len = sqrtf(x * x + y * y + z * z);
@@ -607,11 +528,8 @@ void glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
 }
 
 void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
-	if (g_viewport[0] == x && g_viewport[1] == y &&
-	    g_viewport[2] == w && g_viewport[3] == h) return;
-	flushPendingImmediate();
 	g_viewport[0] = x; g_viewport[1] = y; g_viewport[2] = w; g_viewport[3] = h;
-	g_dirtyBits |= DIRTY_VIEWPORT;
+	g_dirtyBits |= DIRTY_DRAW_ENV;
 }
 
 /* =====================================================================
@@ -650,14 +568,11 @@ void glPushAttrib(GLbitfield) {
 		snapshotState(&g_attrib[g_attribTop++]);
 }
 void glPopAttrib(void) {
-	flushPendingImmediate();
 	if (g_attribTop > 0)
 		restoreState(&g_attrib[--g_attribTop]);
 	/* restoreState touches draw-env caps, current texture, and texgen
 	 * enables. Conservatively re-emit all of those on the next flush. */
-	g_dirtyBits |= DIRTY_DEPTH | DIRTY_CULL | DIRTY_BLEND | DIRTY_ALPHA |
-	               DIRTY_TEXTURE_BIND | DIRTY_TEXGEN | DIRTY_VP_LIGHTING;
-	dirtyFogFragmentPrograms();
+	g_dirtyBits |= DIRTY_DRAW_ENV | DIRTY_TEXTURE | DIRTY_TEXGEN;
 }
 
 static int lightIndex(GLenum cap) {
@@ -669,45 +584,20 @@ static int lightIndex(GLenum cap) {
 void glEnable(GLenum cap) {
 	int li;
 	switch (cap) {
-		case GL_TEXTURE_2D:
-			if (!g_tex2d) { flushPendingImmediate(); g_tex2d = GL_TRUE; g_dirtyBits |= DIRTY_TEXTURE_BIND; }
-			break;
-		case GL_BLEND:
-			if (!g_blend) { flushPendingImmediate(); g_blend = GL_TRUE; g_dirtyBits |= DIRTY_BLEND; }
-			break;
-		case GL_DEPTH_TEST:
-			if (!g_depthTest) { flushPendingImmediate(); g_depthTest = GL_TRUE; g_dirtyBits |= DIRTY_DEPTH | DIRTY_BLEND; }
-			break;
-		case GL_CULL_FACE:
-			if (!g_cullFace) { flushPendingImmediate(); g_cullFace = GL_TRUE; g_dirtyBits |= DIRTY_CULL | DIRTY_BLEND; }
-			break;
-		case GL_LIGHTING:
-			if (!g_lighting) { flushPendingImmediate(); g_lighting = GL_TRUE; g_dirtyBits |= DIRTY_VP_LIGHTING | DIRTY_BLEND; dirtyFullFragmentProgram(); }
-			break;
-		case GL_ALPHA_TEST:
-			if (!g_alphaTest) { flushPendingImmediate(); g_alphaTest = GL_TRUE; g_dirtyBits |= DIRTY_ALPHA | DIRTY_BLEND; dirtyFullFragmentProgram(); }
-			break;
-		case GL_STENCIL_TEST:
-			g_stencilTest = GL_TRUE; /* not emitted by setDrawEnv */
-			break;
-		case GL_FOG:
-			if (!g_fog) { flushPendingImmediate(); g_fog = GL_TRUE; dirtyFogFragmentPrograms(); }
-			break;
-		case GL_TEXTURE_GEN_S:
-			if (!g_texGenS) { flushPendingImmediate(); g_texGenS = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN | DIRTY_BLEND; }
-			break;
-		case GL_TEXTURE_GEN_T:
-			if (!g_texGenT) { flushPendingImmediate(); g_texGenT = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN | DIRTY_BLEND; }
-			break;
+		case GL_TEXTURE_2D:     g_tex2d = GL_TRUE; g_dirtyBits |= DIRTY_TEXTURE;  break;
+		case GL_BLEND:          g_blend = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_DEPTH_TEST:     g_depthTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_CULL_FACE:      g_cullFace = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_LIGHTING:       g_lighting = GL_TRUE; break;  /* FP uniform, not tracked */
+		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_STENCIL_TEST:   g_stencilTest = GL_TRUE; break;  /* not emitted by setDrawEnv */
+		case GL_FOG:            g_fog = GL_TRUE; break;  /* FP uniform, not tracked */
+		case GL_TEXTURE_GEN_S:  g_texGenS = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN; break;
+		case GL_TEXTURE_GEN_T:  g_texGenT = GL_TRUE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_NORMALIZE:      g_normalize = GL_TRUE; break;  /* not uploaded */
 		case GL_COLOR_MATERIAL: break; /* material always tracks glColor lightpath via vColor */
 		default:
-			if ((li = lightIndex(cap)) >= 0 && !g_light[li].enabled) {
-				flushPendingImmediate();
-				g_light[li].enabled = GL_TRUE;
-				g_dirtyBits |= DIRTY_VP_LIGHTING;
-				dirtyFullFragmentProgram();
-			}
+			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_TRUE;
 			break;
 	}
 }
@@ -715,42 +605,19 @@ void glEnable(GLenum cap) {
 void glDisable(GLenum cap) {
 	int li;
 	switch (cap) {
-		case GL_TEXTURE_2D:
-			if (g_tex2d) { flushPendingImmediate(); g_tex2d = GL_FALSE; g_dirtyBits |= DIRTY_TEXTURE_BIND; }
-			break;
-		case GL_BLEND:
-			if (g_blend) { flushPendingImmediate(); g_blend = GL_FALSE; g_dirtyBits |= DIRTY_BLEND; }
-			break;
-		case GL_DEPTH_TEST:
-			if (g_depthTest) { flushPendingImmediate(); g_depthTest = GL_FALSE; g_dirtyBits |= DIRTY_DEPTH | DIRTY_BLEND; }
-			break;
-		case GL_CULL_FACE:
-			if (g_cullFace) { flushPendingImmediate(); g_cullFace = GL_FALSE; g_dirtyBits |= DIRTY_CULL | DIRTY_BLEND; }
-			break;
-		case GL_LIGHTING:
-			if (g_lighting) { flushPendingImmediate(); g_lighting = GL_FALSE; g_dirtyBits |= DIRTY_VP_LIGHTING | DIRTY_BLEND; dirtyFullFragmentProgram(); }
-			break;
-		case GL_ALPHA_TEST:
-			if (g_alphaTest) { flushPendingImmediate(); g_alphaTest = GL_FALSE; g_dirtyBits |= DIRTY_ALPHA | DIRTY_BLEND; dirtyFullFragmentProgram(); }
-			break;
+		case GL_TEXTURE_2D:     g_tex2d = GL_FALSE; g_dirtyBits |= DIRTY_TEXTURE;  break;
+		case GL_BLEND:          g_blend = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_DEPTH_TEST:     g_depthTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_CULL_FACE:      g_cullFace = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
+		case GL_LIGHTING:       g_lighting = GL_FALSE; break;
+		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_FALSE; break;
-		case GL_FOG:
-			if (g_fog) { flushPendingImmediate(); g_fog = GL_FALSE; dirtyFogFragmentPrograms(); }
-			break;
-		case GL_TEXTURE_GEN_S:
-			if (g_texGenS) { flushPendingImmediate(); g_texGenS = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN | DIRTY_BLEND; }
-			break;
-		case GL_TEXTURE_GEN_T:
-			if (g_texGenT) { flushPendingImmediate(); g_texGenT = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN | DIRTY_BLEND; }
-			break;
+		case GL_FOG:            g_fog = GL_FALSE; break;
+		case GL_TEXTURE_GEN_S:  g_texGenS = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
+		case GL_TEXTURE_GEN_T:  g_texGenT = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_NORMALIZE:      g_normalize = GL_FALSE; break;
 		default:
-			if ((li = lightIndex(cap)) >= 0 && g_light[li].enabled) {
-				flushPendingImmediate();
-				g_light[li].enabled = GL_FALSE;
-				g_dirtyBits |= DIRTY_VP_LIGHTING;
-				dirtyFullFragmentProgram();
-			}
+			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_FALSE;
 			break;
 	}
 }
@@ -770,34 +637,13 @@ GLboolean glIsEnabled(GLenum cap) {
 	}
 }
 
-void glDepthMask(GLboolean f) {
-	if (g_depthMask == f) return;
-	flushPendingImmediate();
-	g_depthMask = f;
-	g_dirtyBits |= DIRTY_DEPTH | DIRTY_BLEND;
-}
-void glDepthFunc(GLenum f) {
-	if (g_depthFunc == f) return;
-	flushPendingImmediate();
-	g_depthFunc = f;
-	g_dirtyBits |= DIRTY_DEPTH;
-}
+void glDepthMask(GLboolean f) { g_depthMask = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
+void glDepthFunc(GLenum f)    { g_depthFunc = f; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glShadeModel(GLenum)     { }
-void glAlphaFunc(GLenum f, GLclampf r) {
-	if (g_alphaFunc == f && g_alphaRef == r) return;
-	flushPendingImmediate();
-	g_alphaFunc = f; g_alphaRef = r;
-	g_dirtyBits |= DIRTY_ALPHA | DIRTY_BLEND;
-	dirtyFullFragmentProgram();
-}
+void glAlphaFunc(GLenum f, GLclampf r) { g_alphaFunc = f; g_alphaRef = r; g_dirtyBits |= DIRTY_DRAW_ENV; }
 void glStencilFunc(GLenum, GLint, GLuint) { }
 void glStencilOp(GLenum, GLenum, GLenum)  { }
-void glBlendFunc(GLenum sf, GLenum df) {
-	if (g_blendSrc == sf && g_blendDst == df) return;
-	flushPendingImmediate();
-	g_blendSrc = sf; g_blendDst = df;
-	g_dirtyBits |= DIRTY_BLEND;
-}
+void glBlendFunc(GLenum sf, GLenum df)    { g_blendSrc = sf; g_blendDst = df; g_dirtyBits |= DIRTY_DRAW_ENV; }
 
 /* =====================================================================
  * GL: lighting / material / fog / texgen
@@ -806,7 +652,6 @@ void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
 	int li = lightIndex(light);
 	if (li < 0 || !p) return;
 	Light &L = g_light[li];
-	Light next = L;
 	switch (pname) {
 		case GL_POSITION: {
 			/* OpenGL freezes light position into eye-space under the CURRENT
@@ -814,84 +659,56 @@ void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
 			float eye[4];
 			matMulVec4(eye, g_mv.m, p);
 			if (p[3] == 0.f) {
-				next.posEye[0] = eye[0]; next.posEye[1] = eye[1]; next.posEye[2] = eye[2];
-				next.isDir = GL_TRUE;
+				L.posEye[0] = eye[0]; L.posEye[1] = eye[1]; L.posEye[2] = eye[2];
+				L.isDir = GL_TRUE;
 			} else {
 				float iw = (eye[3] != 0.f) ? (1.f / eye[3]) : 1.f;
-				next.posEye[0] = eye[0] * iw;
-				next.posEye[1] = eye[1] * iw;
-				next.posEye[2] = eye[2] * iw;
-				next.isDir = GL_FALSE;
+				L.posEye[0] = eye[0] * iw;
+				L.posEye[1] = eye[1] * iw;
+				L.posEye[2] = eye[2] * iw;
+				L.isDir = GL_FALSE;
 			}
 			break;
 		}
-		case GL_AMBIENT:  memcpy(next.ambient,  p, 4 * sizeof(float)); break;
-		case GL_DIFFUSE:  memcpy(next.diffuse,  p, 4 * sizeof(float)); break;
-		case GL_SPECULAR: memcpy(next.specular, p, 4 * sizeof(float)); break;
-		default: return;
+		case GL_AMBIENT:  memcpy(L.ambient,  p, 4 * sizeof(float)); break;
+		case GL_DIFFUSE:  memcpy(L.diffuse,  p, 4 * sizeof(float)); break;
+		case GL_SPECULAR: memcpy(L.specular, p, 4 * sizeof(float)); break;
+		default: break;
 	}
-	if (memcmp(&L, &next, sizeof(L)) == 0) return;
-	flushPendingImmediate();
-	L = next;
-	g_dirtyBits |= DIRTY_VP_LIGHTING;
-	dirtyFullFragmentProgram();
 }
 
 void glMaterialf(GLenum, GLenum pname, GLfloat v) {
-	if (pname == GL_SHININESS && g_matShininess != v) {
-		flushPendingImmediate();
-		g_matShininess = v;
-		g_dirtyBits |= DIRTY_VP_LIGHTING;
-		dirtyFullFragmentProgram();
-	}
+	if (pname == GL_SHININESS) g_matShininess = v;
 }
 
 void glMaterialfv(GLenum, GLenum pname, const GLfloat *p) {
 	if (!p) return;
-	float *destination = NULL;
 	switch (pname) {
 		case GL_AMBIENT_AND_DIFFUSE:
-		case GL_DIFFUSE:  destination = g_matDiffuse; break;
-		case GL_SPECULAR: destination = g_matSpecular; break;
-		case GL_AMBIENT:  /* absorbed into light ambient; ignore material ambient */ return;
-		default: return;
+		case GL_DIFFUSE:  memcpy(g_matDiffuse,  p, 4 * sizeof(float)); break;
+		case GL_SPECULAR: memcpy(g_matSpecular, p, 4 * sizeof(float)); break;
+		case GL_AMBIENT:  /* absorbed into light ambient; ignore material ambient */ break;
+		default: break;
 	}
-	if (memcmp(destination, p, 4 * sizeof(float)) == 0) return;
-	flushPendingImmediate();
-	memcpy(destination, p, 4 * sizeof(float));
-	g_dirtyBits |= DIRTY_VP_LIGHTING;
-	dirtyFullFragmentProgram();
 }
 
 void glFogi(GLenum pname, GLint v) {
 	(void)pname; (void)v; /* only GL_LINEAR is supported */
 }
 void glFogf(GLenum pname, GLfloat v) {
-	float *destination = pname == GL_FOG_START ? &g_fogStart :
-	                     pname == GL_FOG_END ? &g_fogEnd : NULL;
-	if (!destination || *destination == v) return;
-	flushPendingImmediate();
-	*destination = v;
-	dirtyFogFragmentPrograms();
+	if (pname == GL_FOG_START) g_fogStart = v;
+	else if (pname == GL_FOG_END) g_fogEnd = v;
 }
 void glFogfv(GLenum pname, const GLfloat *p) {
-	if (pname == GL_FOG_COLOR && p) {
-		if (memcmp(g_fogColor, p, 4 * sizeof(float)) == 0) return;
-		flushPendingImmediate();
-		memcpy(g_fogColor, p, 4 * sizeof(float));
-		dirtyFogFragmentPrograms();
-	}
+	if (pname == GL_FOG_COLOR && p) memcpy(g_fogColor, p, 4 * sizeof(float));
 }
 void glHint(GLenum, GLenum) { }
 
 void glTexGeni(GLenum, GLenum, GLint) { /* only OBJECT_LINEAR is used */ }
 void glTexGenfv(GLenum coord, GLenum pname, const GLfloat *p) {
 	if (pname != GL_OBJECT_PLANE || !p) return;
-	float *destination = coord == GL_S ? g_texPlaneS :
-	                     coord == GL_T ? g_texPlaneT : NULL;
-	if (!destination || memcmp(destination, p, 4 * sizeof(float)) == 0) return;
-	flushPendingImmediate();
-	memcpy(destination, p, 4 * sizeof(float));
+	if (coord == GL_S) memcpy(g_texPlaneS, p, 4 * sizeof(float));
+	else if (coord == GL_T) memcpy(g_texPlaneT, p, 4 * sizeof(float));
 	g_dirtyBits |= DIRTY_TEXGEN;
 }
 
@@ -912,54 +729,19 @@ static GLenum mapPrim(GLenum p) {
 	}
 }
 
-static int batchablePrimitiveStep(GLenum mode) {
-	switch (mode) {
-		case GL_QUADS:     return 4;
-		case GL_TRIANGLES: return 3;
-		case GL_LINES:     return 2;
-		case GL_POINTS:    return 1;
-		default:           return 0;
-	}
-}
-
 void glBegin(GLenum mode) {
-	const int step = batchablePrimitiveStep(mode);
-	if (g_batchPending && (mode != g_primMode || step == 0))
-		flushPendingImmediate();
-	if (!g_batchPending) {
-		g_primMode = mode;
-		g_immCount = 0;
-	}
-	g_beginStartCount = g_immCount;
+	g_primMode = mode;
+	g_immCount = 0;
 	g_inBegin = 1;
 }
 
 void glEnd(void) {
-	if (!g_inBegin) return;
 	g_inBegin = 0;
-	const int step = batchablePrimitiveStep(g_primMode);
-	if (step > 0) {
-		/* Incomplete primitives are discarded at each glBegin/glEnd boundary;
-		 * otherwise their vertices could incorrectly join the next batch. */
-		const int added = g_immCount - g_beginStartCount;
-		g_immCount -= added % step;
-		g_batchPending = (g_immCount > 0) ? GL_TRUE : GL_FALSE;
-		return;
-	}
 	if (g_immCount > 0) ps3_gl_flush();
 	g_immCount = 0;
-	g_batchPending = GL_FALSE;
 }
 
 static void pushImm(float x, float y, float z) {
-	const int step = batchablePrimitiveStep(g_primMode);
-	const int limit = step ? (PS3_IMM_MAX / step) * step : PS3_IMM_MAX;
-	if (step && g_immCount >= limit) {
-		ps3_gl_flush();
-		g_immCount = 0;
-		g_beginStartCount = 0;
-		g_batchPending = GL_FALSE;
-	}
 	if (g_immCount >= PS3_IMM_MAX) return;
 	ImmVtx &v = g_immVtx[g_immCount++];
 	v.x = x; v.y = y; v.z = z;
@@ -1194,30 +976,6 @@ static void fetchVertex(GLint idx, ImmVtx &v) {
 	v.r = c[0]; v.g = c[1]; v.b = c[2]; v.a = c[3];
 }
 
-static ImmVtx *prepareDirectArrayDraw(GLsizei count) {
-	GFX_ASSERT(g_preparedDrawBuf == NULL,
-	           "nested direct array-draw reservation");
-	g_preparedRingSlot = -1;
-	g_preparedOversizeRingSlot = -1;
-	if (count <= PS3_VTX_SLOT_MAX) {
-		g_preparedRingSlot = g_vtxRingHead;
-		VtxSlot &slot = g_vtxRing[g_preparedRingSlot];
-		waitVtxLabel(slot.labelVal);
-		g_preparedDrawBuf = slot.buf;
-		g_preparedDrawOffset = slot.offset;
-		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
-	} else {
-		g_preparedOversizeRingSlot = g_vtxOversizeRingHead;
-		VtxSlot &slot = g_vtxOversizeRing[g_preparedOversizeRingSlot];
-		waitVtxLabel(slot.labelVal);
-		g_preparedDrawBuf = slot.buf;
-		g_preparedDrawOffset = slot.offset;
-		g_vtxOversizeRingHead =
-		    (g_vtxOversizeRingHead + 1) % PS3_OVERSIZE_RING;
-	}
-	return g_preparedDrawBuf;
-}
-
 void glVertexPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) {
 	g_vertexArray.size = size; g_vertexArray.type = type;
 	g_vertexArray.stride = stride; g_vertexArray.pointer = ptr;
@@ -1236,7 +994,6 @@ void glColorPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) 
 }
 
 void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
-	flushPendingImmediate();
 	if (count <= 0) return;
 	/* Snow flakes and curtains provide separate packed float position and
 	 * texture-coordinate arrays, with the current normal and colour applying
@@ -1303,7 +1060,6 @@ void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
 }
 
 void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
-	flushPendingImmediate();
 	if (count <= 0 || !indices) return;
 	/* expand fully-indexed draw into de-indexed ImmVtx and reuse DrawArrays
 	 * batching path. 32-bit indices are the course's preferred form. */
@@ -1332,32 +1088,30 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 		}
 		if (batch > PS3_IMM_MAX) batch = PS3_IMM_MAX;
 		g_immCount = 0;
-		ImmVtx *drawVertices = prepareDirectArrayDraw(batch);
-		if (!drawVertices) return;
 		if (fastGather) {
 			/* `issued` advances the index base each batch so the inner
 			 * gather can read indices[0..batch-1] directly. */
 			if (hasNrm && hasColUbyte) {
 				if (type == GL_UNSIGNED_INT)
-					gatherIndexed<true, true, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, drawVertices);
+					gatherIndexed<true, true, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
 				else if (type == GL_UNSIGNED_SHORT)
-					gatherIndexed<true, true, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, drawVertices);
+					gatherIndexed<true, true, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
 				else
-					gatherIndexed<true, true, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, drawVertices);
+					gatherIndexed<true, true, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
 			} else if (hasNrm) {
 				if (type == GL_UNSIGNED_INT)
-					gatherIndexed<true, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, drawVertices);
+					gatherIndexed<true, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
 				else if (type == GL_UNSIGNED_SHORT)
-					gatherIndexed<true, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, drawVertices);
+					gatherIndexed<true, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
 				else
-					gatherIndexed<true, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, drawVertices);
+					gatherIndexed<true, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
 			} else {
 				if (type == GL_UNSIGNED_INT)
-					gatherIndexed<false, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, drawVertices);
+					gatherIndexed<false, false, GLuint>(pos, nrm, tex, col, batch, (const GLuint *)indices + issued, g_immVtx);
 				else if (type == GL_UNSIGNED_SHORT)
-					gatherIndexed<false, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, drawVertices);
+					gatherIndexed<false, false, GLushort>(pos, nrm, tex, col, batch, (const GLushort *)indices + issued, g_immVtx);
 				else
-					gatherIndexed<false, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, drawVertices);
+					gatherIndexed<false, false, GLubyte>(pos, nrm, tex, col, batch, (const GLubyte *)indices + issued, g_immVtx);
 			}
 			g_immCount = batch;
 		} else {
@@ -1369,7 +1123,7 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 					idx = ((const GLushort *)indices)[issued + i];
 				else
 					idx = ((const GLubyte *)indices)[issued + i];
-				fetchVertex((GLint)idx, drawVertices[g_immCount++]);
+				fetchVertex((GLint)idx, g_immVtx[g_immCount++]);
 			}
 		}
 		g_primMode = mode;
@@ -1391,7 +1145,6 @@ void glGenTextures(GLsizei n, GLuint *t) {
 }
 
 void glDeleteTextures(GLsizei n, const GLuint *t) {
-	flushPendingImmediate();
 	for (GLsizei i = 0; i < n; i++) {
 		GLuint id = t[i];
 		if (id > 0 && id < PS3_MAX_TEXTURES) {
@@ -1404,22 +1157,17 @@ void glDeleteTextures(GLsizei n, const GLuint *t) {
 			if (g_freeCount < PS3_MAX_TEXTURES) g_freeIds[g_freeCount++] = id;
 		}
 	}
-	g_dirtyBits |= DIRTY_TEXTURE_BIND;
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 
 void glBindTexture(GLenum, GLuint t) {
-	GLuint next = g_currentTex;
-	if (t > 0 && t < PS3_MAX_TEXTURES) next = t;
-	else if (t == 0) next = 0;
-	if (next == g_currentTex) return;
-	flushPendingImmediate();
-	g_currentTex = next;
-	g_dirtyBits |= DIRTY_TEXTURE_BIND;
+	if (t > 0 && t < PS3_MAX_TEXTURES) g_currentTex = t;
+	else if (t == 0) g_currentTex = 0;
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 
 void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
                   GLenum, GLenum, const GLvoid *data) {
-	flushPendingImmediate();
 	if (g_currentTex == 0 || g_currentTex >= PS3_MAX_TEXTURES) return;
 	TIMER_START("TEXIMAGE2D");
 	/* RSX caps A8R8G8B8 dimensions at 4096 and needs w,h > 0. A 0 dim
@@ -1491,6 +1239,7 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	}
 
 	asm volatile("sync");
+	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
 	GFX_ASSERT(rsxAddressToOffset(T.buffer, &T.offset) == 0,
 	           "rsxAddressToOffset(texture) failed");
 	/* GCM_TEXTURE_FORMAT_A8R8G8B8 | LIN needs a 128-aligned base offset
@@ -1506,26 +1255,17 @@ void glTexParameteri(GLenum, GLenum pname, GLint param) {
 	GlTex &T = g_tex[g_currentTex];
 	switch (pname) {
 		case GL_TEXTURE_MIN_FILTER:
-		case GL_TEXTURE_MAG_FILTER: {
-			GLboolean smooth =
-			    (param == GL_LINEAR || param == GL_LINEAR_MIPMAP_LINEAR ||
-			     param == GL_NEAREST_MIPMAP_LINEAR) ? GL_TRUE : GL_FALSE;
-			if (T.smooth == smooth) return;
-			flushPendingImmediate();
-			T.smooth = smooth;
+		case GL_TEXTURE_MAG_FILTER:
+			T.smooth = (param == GL_LINEAR || param == GL_LINEAR_MIPMAP_LINEAR ||
+			            param == GL_NEAREST_MIPMAP_LINEAR) ? GL_TRUE : GL_FALSE;
 			break;
-		}
 		case GL_TEXTURE_WRAP_S:
-		case GL_TEXTURE_WRAP_T: {
-			GLboolean repeated = (param == GL_REPEAT) ? GL_TRUE : GL_FALSE;
-			if (T.repeated == repeated) return;
-			flushPendingImmediate();
-			T.repeated = repeated;
+		case GL_TEXTURE_WRAP_T:
+			T.repeated = (param == GL_REPEAT) ? GL_TRUE : GL_FALSE;
 			break;
-		}
-		default: return;
+		default: break;
 	}
-	g_dirtyBits |= DIRTY_TEXTURE_BIND;
+	g_dirtyBits |= DIRTY_TEXTURE;
 }
 void glTexEnvf(GLenum, GLenum, GLfloat) { }
 void glPixelStorei(GLenum, GLint)       { }
@@ -1539,7 +1279,6 @@ void glClearColor(GLclampf r, GLclampf g, GLclampf b, GLclampf a) {
 void glClearStencil(GLint s) { g_clearStencil = s; }
 
 void glClear(GLbitfield) {
-	flushPendingImmediate();
 	if (!g_rsxReady) return;
 	TIMER_START("CLEAR");
 	u32 col = ((u32)(g_clearA * 255.f) & 0xFF) << 24 |
@@ -1622,7 +1361,7 @@ extern "C" void *glXGetVisualFromFBConfig(void *, GLXFBConfig) { return NULL; }
 extern "C" GLXContext glXCreateNewContext(void *, GLXFBConfig, int, GLXContext, GLboolean) { return NULL; }
 extern "C" void  glXDestroyContext(void *, GLXContext) { }
 extern "C" int   glXMakeCurrent(void *, unsigned long, GLXContext) { return 1; }
-extern "C" void  glXSwapBuffers(void *, unsigned long) { ps3_gl_flush_pending(); }
+extern "C" void  glXSwapBuffers(void *, unsigned long) { }
 
 /* =====================================================================
  * init / draw-env / bind-texture / flush
@@ -1708,8 +1447,6 @@ void ps3_gl_init(void) {
 		GFX_ASSERT(rsxAddressToOffset(g_fpRing[i].buf, &g_fpRing[i].offset) == 0,
 		           "rsxAddressToOffset(fp ring) failed");
 		GFX_ASSERT_ALIGNED(g_fpRing[i].offset, 64);
-		g_fpRing[i].labelVal = 0;
-		g_fpRing[i].generation = 0;
 
 		g_terrainFpRing[i].buf =
 		    (u32 *)rsxMemalign(64, g_terrainFpUcodeSize);
@@ -1724,11 +1461,26 @@ void ps3_gl_init(void) {
 		                             &g_terrainFpRing[i].offset) == 0,
 		           "rsxAddressToOffset(terrain fp ring) failed");
 		GFX_ASSERT_ALIGNED(g_terrainFpRing[i].offset, 64);
-		g_terrainFpRing[i].labelVal = 0;
-		g_terrainFpRing[i].generation = 0;
 	}
-	g_fpRingHead = g_terrainFpRingHead = 0;
-	g_currentFpSlot = g_currentTerrainFpSlot = NULL;
+	g_fpOversize.buf = (u32 *)rsxMemalign(64, g_fpUcodeSize);
+	if (g_fpOversize.buf) {
+		GFX_ASSERT_ALIGNED(g_fpOversize.buf, 64);
+		memcpy(g_fpOversize.buf, g_fpUcode, g_fpUcodeSize);
+		GFX_ASSERT(rsxAddressToOffset(g_fpOversize.buf, &g_fpOversize.offset) == 0,
+		           "rsxAddressToOffset(fp oversize) failed");
+		GFX_ASSERT_ALIGNED(g_fpOversize.offset, 64);
+	}
+	g_terrainFpOversize.buf =
+	    (u32 *)rsxMemalign(64, g_terrainFpUcodeSize);
+	if (g_terrainFpOversize.buf) {
+		GFX_ASSERT_ALIGNED(g_terrainFpOversize.buf, 64);
+		memcpy(g_terrainFpOversize.buf, g_terrainFpUcode,
+		       g_terrainFpUcodeSize);
+		GFX_ASSERT(rsxAddressToOffset(g_terrainFpOversize.buf,
+		                             &g_terrainFpOversize.offset) == 0,
+		           "rsxAddressToOffset(terrain fp oversize) failed");
+		GFX_ASSERT_ALIGNED(g_terrainFpOversize.offset, 64);
+	}
 
 	g_uGlobalAmbient = rsxFragmentProgramGetConst(g_fpo, "globalAmbient");
 	g_uLightPos      = rsxFragmentProgramGetConst(g_fpo, "lightPosition");
@@ -1786,26 +1538,16 @@ void ps3_gl_init(void) {
 		g_vtxRing[i].labelVal = 0;
 	}
 	g_vtxRingHead = 0;
-	for (int i = 0; i < PS3_OVERSIZE_RING; ++i) {
-		VtxSlot &slot = g_vtxOversizeRing[i];
-		slot.buf = (ImmVtx *)rsxMemalign(64,
-		                                  sizeof(ImmVtx) * PS3_IMM_MAX);
-		if (!slot.buf) {
-			sysTtyTrace("[etr] ps3_gl_init: vtx oversize ring alloc FAILED\n");
-			return;
-		}
-		GFX_ASSERT_ALIGNED(slot.buf, 64);
-		GFX_ASSERT(rsxAddressToOffset(slot.buf, &slot.offset) == 0,
-		           "rsxAddressToOffset(vtx oversize ring) failed");
-		GFX_ASSERT_ALIGNED(slot.offset, 64);
-		slot.labelVal = 0;
-	}
-	g_vtxOversizeRingHead = 0;
+	g_vtxOversize = (ImmVtx *)rsxMemalign(64, sizeof(ImmVtx) * PS3_IMM_MAX);
+	GFX_ASSERT(g_vtxOversize != NULL, "vtx oversize alloc failed");
+	GFX_ASSERT_ALIGNED(g_vtxOversize, 64);
+	GFX_ASSERT(rsxAddressToOffset(g_vtxOversize, &g_vtxOversizeOff) == 0,
+	           "rsxAddressToOffset(vtx oversize) failed");
+	GFX_ASSERT_ALIGNED(g_vtxOversizeOff, 64);
 
 	g_vtxLabel = (vu32 *)gcmGetLabelAddress(PS3_VTX_LABEL_IDX);
 	*g_vtxLabel = 0;
 	g_vtxLabelNext = 1;
-	g_unflushedDraws = 0;
 
 	matIdentity(g_proj.m);
 	matIdentity(g_mv.m);
@@ -1820,85 +1562,73 @@ void ps3_gl_init(void) {
 }
 
 static void setDrawEnv(void) {
-	if (g_dirtyBits & DIRTY_FIXED_ENV) {
-		rsxSetColorMask(context, GCM_COLOR_MASK_R | GCM_COLOR_MASK_G |
-		                         GCM_COLOR_MASK_B | GCM_COLOR_MASK_A);
-		rsxSetColorMaskMrt(context, 0);
-		rsxSetFrontFace(context, GCM_FRONTFACE_CCW);
-		rsxSetShadeModel(context, GCM_SHADE_MODEL_SMOOTH);
-		rsxSetLogicOpEnable(context, GCM_FALSE);
-		rsxSetBlendEquation(context, GCM_FUNC_ADD, GCM_FUNC_ADD);
-		/* Match OpenGL's clip-volume behavior. Ignoring W while clamping Z
-		 * lets behind-camera vertices survive the perspective divide. */
-		rsxSetZMinMaxControl(context, GCM_TRUE, GCM_FALSE, GCM_FALSE);
+	u16 x = 0, y = 0;
+	u16 w = display_width, h = display_height;
+	float min = 0.f, max = 1.f;
+	float scale[4], offset[4];
+	scale[0] = w * 0.5f;  scale[1] = h * -0.5f;  scale[2] = (max - min) * 0.5f;  scale[3] = 0.f;
+	offset[0] = x + w * 0.5f;  offset[1] = y + h * 0.5f;  offset[2] = (max + min) * 0.5f;  offset[3] = 0.f;
+
+	rsxSetColorMask(context, GCM_COLOR_MASK_R | GCM_COLOR_MASK_G | GCM_COLOR_MASK_B | GCM_COLOR_MASK_A);
+	rsxSetColorMaskMrt(context, 0);
+	rsxSetViewport(context, x, y, w, h, min, max, scale, offset);
+	rsxSetScissor(context, x, y, w, h);
+
+	/* GCM depth-func enums match the GL values we store. */
+	rsxSetDepthTestEnable(context, g_depthTest ? GCM_TRUE : GCM_FALSE);
+	rsxSetDepthFunc(context, g_depthFunc);
+	rsxSetDepthWriteEnable(context, g_depthMask ? 1 : 0);
+
+	rsxSetFrontFace(context, GCM_FRONTFACE_CCW);
+	rsxSetCullFaceEnable(context, g_cullFace ? GCM_TRUE : GCM_FALSE);
+	if (g_cullFace) rsxSetCullFace(context, GCM_CULL_BACK);
+	rsxSetShadeModel(context, GCM_SHADE_MODEL_SMOOTH);
+
+	rsxSetLogicOpEnable(context, GCM_FALSE);
+	rsxSetBlendEquation(context, GCM_FUNC_ADD, GCM_FUNC_ADD);
+	/* The legacy renderer enables GL_BLEND for every render mode, including
+	 * the fully opaque skybox and base course. At 1080p that needlessly makes
+	 * RSX read and blend millions of destination pixels each frame. Keep
+	 * blending for transparent terrain overlays, trees, shadows, snow and UI. */
+	const GLboolean opaqueCourse =
+	    g_lighting && g_depthTest && g_depthMask && g_cullFace &&
+	    !g_alphaTest && g_texGenS && g_texGenT &&
+	    g_blendSrc == GL_SRC_ALPHA && g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
+	const GLboolean opaqueSky =
+	    !g_lighting && !g_depthTest && !g_depthMask && !g_alphaTest &&
+	    !g_texGenS && !g_texGenT &&
+	    g_blendSrc == GL_SRC_ALPHA && g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
+	const GLboolean opaqueCutout =
+	    g_alphaTest && g_alphaFunc == GL_GEQUAL &&
+	    g_depthTest && g_depthMask &&
+	    g_blendSrc == GL_SRC_ALPHA && g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
+	const GLboolean effectiveBlend =
+	    g_blend && !opaqueCourse && !opaqueSky && !opaqueCutout;
+	rsxSetBlendFunc(context,
+	                effectiveBlend ? g_blendSrc : GCM_ONE,
+	                effectiveBlend ? g_blendDst : GCM_ZERO,
+	                effectiveBlend ? g_blendSrc : GCM_ONE,
+	                effectiveBlend ? g_blendDst : GCM_ZERO);
+	rsxSetBlendEnable(context, effectiveBlend ? GCM_TRUE : GCM_FALSE);
+
+	/* Hardware alpha test for GEQUAL (trees/particles). Other funcs fall
+	 * back to the shader discard path. */
+	if (g_alphaTest && g_alphaFunc == GL_GEQUAL) {
+		rsxSetAlphaFunc(context, GCM_GEQUAL, (u32)(g_alphaRef * 255.f));
+		rsxSetAlphaTestEnable(context, GCM_TRUE);
+	} else {
+		rsxSetAlphaTestEnable(context, GCM_FALSE);
 	}
 
-	if (g_dirtyBits & DIRTY_VIEWPORT) {
-		const u16 x = 0, y = 0;
-		const u16 w = display_width, h = display_height;
-		const float min = 0.f, max = 1.f;
-		float scale[4], offset[4];
-		scale[0] = w * 0.5f; scale[1] = h * -0.5f;
-		scale[2] = (max - min) * 0.5f; scale[3] = 0.f;
-		offset[0] = x + w * 0.5f; offset[1] = y + h * 0.5f;
-		offset[2] = (max + min) * 0.5f; offset[3] = 0.f;
-		rsxSetViewport(context, x, y, w, h, min, max, scale, offset);
-		rsxSetScissor(context, x, y, w, h);
-		for (u8 i = 0; i < 8; i++)
-			rsxSetViewportClip(context, i, display_width, display_height);
-	}
-
-	if (g_dirtyBits & DIRTY_DEPTH) {
-		/* GCM depth-func enums match the GL values we store. */
-		rsxSetDepthTestEnable(context, g_depthTest ? GCM_TRUE : GCM_FALSE);
-		rsxSetDepthFunc(context, g_depthFunc);
-		rsxSetDepthWriteEnable(context, g_depthMask ? 1 : 0);
-	}
-
-	if (g_dirtyBits & DIRTY_CULL) {
-		rsxSetCullFaceEnable(context, g_cullFace ? GCM_TRUE : GCM_FALSE);
-		if (g_cullFace) rsxSetCullFace(context, GCM_CULL_BACK);
-	}
-
-	if (g_dirtyBits & DIRTY_BLEND) {
-		/* Avoid destination reads for opaque course, sky, and cutout passes. */
-		const GLboolean opaqueCourse =
-		    g_lighting && g_depthTest && g_depthMask && g_cullFace &&
-		    !g_alphaTest && g_texGenS && g_texGenT &&
-		    g_blendSrc == GL_SRC_ALPHA &&
-		    g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
-		const GLboolean opaqueSky =
-		    !g_lighting && !g_depthTest && !g_depthMask && !g_alphaTest &&
-		    !g_texGenS && !g_texGenT &&
-		    g_blendSrc == GL_SRC_ALPHA &&
-		    g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
-		const GLboolean opaqueCutout =
-		    g_alphaTest && g_alphaFunc == GL_GEQUAL &&
-		    g_depthTest && g_depthMask &&
-		    g_blendSrc == GL_SRC_ALPHA &&
-		    g_blendDst == GL_ONE_MINUS_SRC_ALPHA;
-		const GLboolean effectiveBlend =
-		    g_blend && !opaqueCourse && !opaqueSky && !opaqueCutout;
-		rsxSetBlendFunc(context,
-		                effectiveBlend ? g_blendSrc : GCM_ONE,
-		                effectiveBlend ? g_blendDst : GCM_ZERO,
-		                effectiveBlend ? g_blendSrc : GCM_ONE,
-		                effectiveBlend ? g_blendDst : GCM_ZERO);
-		rsxSetBlendEnable(context, effectiveBlend ? GCM_TRUE : GCM_FALSE);
-	}
-
-	if (g_dirtyBits & DIRTY_ALPHA) {
-		if (g_alphaTest && g_alphaFunc == GL_GEQUAL) {
-			rsxSetAlphaFunc(context, GCM_GEQUAL,
-			                (u32)(g_alphaRef * 255.f));
-			rsxSetAlphaTestEnable(context, GCM_TRUE);
-		} else {
-			rsxSetAlphaTestEnable(context, GCM_FALSE);
-		}
-	}
+	for (u8 i = 0; i < 8; i++)
+		rsxSetViewportClip(context, i, display_width, display_height);
+	/* Match OpenGL's clip-volume behavior. Ignoring W while clamping Z lets
+	 * behind-camera vertices survive the perspective divide on real RSX,
+	 * producing screen-spanning wedges as the camera passes geometry. */
+	rsxSetZMinMaxControl(context, GCM_TRUE, GCM_FALSE, GCM_FALSE);
 }
 
-static void bindTextureForDraw(u8 unit) {
+static void bindTextureForDraw(void) {
 	gcmTexture texture;
 	u32 offset, tw, th, pitch;
 	u8  filtMin, filtMag, wrapS, wrapT;
@@ -1927,6 +1657,8 @@ static void bindTextureForDraw(u8 unit) {
 	GFX_ASSERT(tw > 0 && th > 0, "texture dims zero at draw time");
 	GFX_ASSERT(tw <= 4096 && th <= 4096, "texture dims exceed 4096");
 
+	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
+
 	texture.format    = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_FORMAT_LIN;
 	texture.mipmap    = 1;
 	texture.dimension = GCM_TEXTURE_DIMS_2D;
@@ -1946,11 +1678,15 @@ static void bindTextureForDraw(u8 unit) {
 	texture.pitch     = pitch;
 	texture.offset    = offset;
 
+	GLboolean uiDraw = useUiFragmentProgram();
+	GLboolean liteDraw = useLiteFragmentProgram();
+	u8 unit = uiDraw && g_uiTexSampler ? g_uiTexSampler->index :
+	          liteDraw && g_tTexSampler ? g_tTexSampler->index :
+	          g_texSampler ? g_texSampler->index : 0;
 	rsxLoadTexture(context, unit, &texture);
 	rsxTextureControl(context, unit, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
 	rsxTextureFilter(context, unit, 0, filtMag, filtMin, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
 	rsxTextureWrapMode(context, unit, wrapS, wrapT, wrapT, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
-	g_boundTextureUnit = unit;
 }
 
 /* Pick primary light (first enabled; usually light0) + sum ambient. Position is
@@ -1985,18 +1721,8 @@ static void composeLighting(float *outAmbient, float *outLightPosEye,
 	outSpec[0] = L.specular[0]; outSpec[1] = L.specular[1]; outSpec[2] = L.specular[2];
 }
 
-static void submitPendingRsxCommands(void) {
-	if (g_unflushedDraws == 0) return;
-	rsxFlushBuffer(context);
-	g_unflushedDraws = 0;
-}
-
 static void waitVtxLabel(u32 val) {
 	if (val == 0 || !g_vtxLabel) return;
-	/* A label cannot advance until its command buffer has been published.
-	 * Flush here before a ring reuse can block; ordinary draws publish in
-	 * larger groups below. */
-	submitPendingRsxCommands();
 	TIMER_START("GL_FLUSH_WAIT");
 	while ((s32)(*g_vtxLabel - val) < 0)
 		usleep(10);
@@ -2012,26 +1738,13 @@ extern "C" void ps3_gl_flush(void) {
 	u32 drawOffset;
 	ImmVtx *drawBuf;
 	int ringSlot = -1;
-	int oversizeRingSlot = -1;
-	FpSlot *activeFpSlot = NULL;
+	u32 *fpBuf = NULL;
 	u32  fpOffset = 0;
-	GLboolean patchFragmentProgram = GL_FALSE;
 	const GLboolean terrainDraw = useTerrainFragmentProgram();
 	const GLboolean uiDraw = useUiFragmentProgram();
 	const GLboolean liteDraw = useLiteFragmentProgram();
-	const GLboolean drawAlreadyPrepared =
-	    g_preparedDrawBuf ? GL_TRUE : GL_FALSE;
 
-	if (drawAlreadyPrepared) {
-		drawBuf = g_preparedDrawBuf;
-		drawOffset = g_preparedDrawOffset;
-		ringSlot = g_preparedRingSlot;
-		oversizeRingSlot = g_preparedOversizeRingSlot;
-		g_preparedDrawBuf = NULL;
-		g_preparedDrawOffset = 0;
-		g_preparedRingSlot = -1;
-		g_preparedOversizeRingSlot = -1;
-	} else if (n <= PS3_VTX_SLOT_MAX) {
+	if (n <= PS3_VTX_SLOT_MAX) {
 		/* Acquire next ring slot for BOTH vertex data and the fragment-program
 		 * ucode copy. Waiting on the same label keeps the two in lockstep. */
 		ringSlot = g_vtxRingHead;
@@ -2039,49 +1752,25 @@ extern "C" void ps3_gl_flush(void) {
 		waitVtxLabel(slot.labelVal);
 		drawBuf    = slot.buf;
 		drawOffset = slot.offset;
+		fpBuf      = liteDraw ? g_terrainFpRing[ringSlot].buf
+		                      : g_fpRing[ringSlot].buf;
+		fpOffset   = liteDraw ? g_terrainFpRing[ringSlot].offset
+		                      : g_fpRing[ringSlot].offset;
 		g_vtxRingHead = (g_vtxRingHead + 1) % PS3_VTX_RING;
 	} else {
-		/* Large strips/fans cannot be split without preserving topology. Keep
-		 * them asynchronous in a smaller ring instead of draining the whole
-		 * RSX before every large Tux sphere. */
-		oversizeRingSlot = g_vtxOversizeRingHead;
-		VtxSlot &slot = g_vtxOversizeRing[oversizeRingSlot];
-		waitVtxLabel(slot.labelVal);
-		drawBuf    = slot.buf;
-		drawOffset = slot.offset;
-		g_vtxOversizeRingHead =
-		    (g_vtxOversizeRingHead + 1) % PS3_OVERSIZE_RING;
+		u32 idleVal = g_vtxLabelNext++;
+		if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
+		rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, idleVal);
+		rsxFlushBuffer(context);
+		waitVtxLabel(idleVal);
+		drawBuf    = g_vtxOversize;
+		drawOffset = g_vtxOversizeOff;
+		fpBuf      = liteDraw ? g_terrainFpOversize.buf
+		                      : g_fpOversize.buf;
+		fpOffset   = liteDraw ? g_terrainFpOversize.offset
+		                      : g_fpOversize.offset;
 	}
-
-	/* Fragment-program storage rotates only when its constants change. The
-	 * selected slot remains immutable and can be shared by any number of
-	 * consecutive draws without being tied to the vertex-ring cadence. */
-	if (liteDraw) {
-		if (!g_currentTerrainFpSlot ||
-		    g_currentTerrainFpSlot->generation != g_liteFpGeneration) {
-			FpSlot &slot = g_terrainFpRing[g_terrainFpRingHead];
-			waitVtxLabel(slot.labelVal);
-			g_currentTerrainFpSlot = &slot;
-			g_terrainFpRingHead = (g_terrainFpRingHead + 1) % PS3_VTX_RING;
-			patchFragmentProgram = GL_TRUE;
-		}
-		activeFpSlot = g_currentTerrainFpSlot;
-	} else if (!uiDraw) {
-		if (!g_currentFpSlot ||
-		    g_currentFpSlot->generation != g_fullFpGeneration) {
-			FpSlot &slot = g_fpRing[g_fpRingHead];
-			waitVtxLabel(slot.labelVal);
-			g_currentFpSlot = &slot;
-			g_fpRingHead = (g_fpRingHead + 1) % PS3_VTX_RING;
-			patchFragmentProgram = GL_TRUE;
-		}
-		activeFpSlot = g_currentFpSlot;
-	}
-	if (!uiDraw) {
-		if (!activeFpSlot || !activeFpSlot->buf || !activeFpSlot->offset)
-			return;
-		fpOffset = activeFpSlot->offset;
-	}
+	if (!fpBuf || !fpOffset) return;
 
 	TIMER_START("GL_FLUSH");
 
@@ -2093,7 +1782,7 @@ extern "C" void ps3_gl_flush(void) {
 	GFX_ASSERT(drawBuf != NULL, "drawBuf NULL at flush");
 	GFX_ASSERT_ALIGNED(drawBuf, 64);
 	GFX_ASSERT_ALIGNED(drawOffset, 64);
-	if (!uiDraw) GFX_ASSERT_ALIGNED(fpOffset, 64);
+	GFX_ASSERT_ALIGNED(fpOffset, 64);
 	/* Stride must be a multiple of 4 for F32 attribs (true at 48). */
 	GFX_ASSERT(GFX_IS_MULT(sizeof(ImmVtx), 4), "stride not 4-aligned");
 	/* Note: we deliberately do NOT assert on primitive-count-vs-mode here.
@@ -2104,8 +1793,7 @@ extern "C" void ps3_gl_flush(void) {
 	 * fan. RSX also produces nothing for those cases. The strict checks
 	 * here caused false halts during gameplay. */
 
-	if (!drawAlreadyPrepared)
-		memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
+	memcpy(drawBuf, g_immVtx, sizeof(ImmVtx) * n);
 	/* Publish PPU stores to RSX-visible local memory before the invalidate
 	 * and draw commands can reach the GPU.  RPCS3 presents coherent memory,
 	 * but real hardware can otherwise fetch a mixture of old/new cache lines
@@ -2113,16 +1801,8 @@ extern "C" void ps3_gl_flush(void) {
 	asm volatile("sync");
 
 	if (g_dirtyBits & DIRTY_DRAW_ENV) setDrawEnv();
-	const u8 wantedTextureUnit =
-	    uiDraw && g_uiTexSampler ? g_uiTexSampler->index :
-	    liteDraw && g_tTexSampler ? g_tTexSampler->index :
-	    g_texSampler ? g_texSampler->index : 0;
-	if (wantedTextureUnit != g_boundTextureUnit)
-		g_dirtyBits |= DIRTY_TEXTURE_BIND;
-	if (g_dirtyBits & DIRTY_TEXTURE_DATA)
-		rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
-	if (g_dirtyBits & DIRTY_TEXTURE_BIND)
-		bindTextureForDraw(wantedTextureUnit);
+	if (g_dirtyBits & DIRTY_TEXTURE)  bindTextureForDraw();
+	(void)fpBuf; /* buffer contents are patched via InlineTransfer on fpOffset */
 
 	/* POS / NRM / TEX0 / COL attribs.
 	 * F32 attribs require each per-vertex offset to be 4-byte aligned;
@@ -2147,153 +1827,112 @@ extern "C" void ps3_gl_flush(void) {
 	                         drawOffset + sizeof(float) * 8,
 	                         stride, 4, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
-	/* Vertex program + uniforms (transposed matrices). A program switch forces
-	 * every constant into the new program; otherwise only state changed since
-	 * the preceding draw is emitted. */
+	/* Vertex program + uniforms (transposed matrices).  A program switch must
+	 * reload matrix/texgen constants even when the corresponding GL state did
+	 * not change, because the two Cg programs may use different registers. */
 	alignas(16) float tmp[16];
-	const VertexProgramKind wantedVertexProgram =
-	    terrainDraw ? VP_TERRAIN : VP_GENERAL;
-	const GLboolean vertexProgramChanged =
-	    g_loadedVertexProgram != wantedVertexProgram;
 	if (terrainDraw) {
-		if (vertexProgramChanged)
-			rsxLoadVertexProgram(context, g_terrainVpo, g_terrainVpUcode);
-		if (g_tvProj &&
-		    (vertexProgramChanged || (g_dirtyBits & DIRTY_PROJ_MATRIX))) {
+		rsxLoadVertexProgram(context, g_terrainVpo, g_terrainVpUcode);
+		if (g_tvProj) {
 			matTranspose(tmp, g_proj.m);
 			rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvProj, tmp);
 		}
-		if (g_tvMV &&
-		    (vertexProgramChanged || (g_dirtyBits & DIRTY_MV_MATRIX))) {
+		if (g_tvMV) {
 			matTranspose(tmp, g_mv.m);
 			rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvMV, tmp);
 		}
-		if (vertexProgramChanged || (g_dirtyBits & DIRTY_TEXGEN)) {
-			float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
-			if (g_tvDoTexGen)  rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvDoTexGen, &doTexGen);
-			if (g_tvTexPlaneS) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneS, g_texPlaneS);
-			if (g_tvTexPlaneT) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneT, g_texPlaneT);
-		}
+		float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
+		if (g_tvDoTexGen)  rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvDoTexGen, &doTexGen);
+		if (g_tvTexPlaneS) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneS, g_texPlaneS);
+		if (g_tvTexPlaneT) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneT, g_texPlaneT);
 
-		if (vertexProgramChanged || (g_dirtyBits & DIRTY_VP_LIGHTING)) {
-			float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
-			composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
-			float matDiff[3] = {
-				g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2]
-			};
-			if (g_tvGlobalAmbient) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvGlobalAmbient, ambient);
-			if (g_tvLightPos)      rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightPos, lightPos);
-			if (g_tvLightColor)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightColor, lightDiff);
-			if (g_tvLightIsDir)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightIsDir, &isDir);
-			if (g_tvMatDiffuse)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvMatDiffuse, matDiff);
-		}
+		float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
+		composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
+		float matDiff[3] = {
+			g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2]
+		};
+		if (g_tvGlobalAmbient) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvGlobalAmbient, ambient);
+		if (g_tvLightPos)      rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightPos, lightPos);
+		if (g_tvLightColor)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightColor, lightDiff);
+		if (g_tvLightIsDir)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightIsDir, &isDir);
+		if (g_tvMatDiffuse)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvMatDiffuse, matDiff);
 	} else {
-		if (vertexProgramChanged)
-			rsxLoadVertexProgram(context, g_vpo, g_vpUcode);
-		if (g_uProj &&
-		    (vertexProgramChanged || (g_dirtyBits & DIRTY_PROJ_MATRIX))) {
+		rsxLoadVertexProgram(context, g_vpo, g_vpUcode);
+		if (g_uProj) {
 			matTranspose(tmp, g_proj.m);
 			rsxSetVertexProgramParameter(context, g_vpo, g_uProj, tmp);
 		}
-		if (g_uMV &&
-		    (vertexProgramChanged || (g_dirtyBits & DIRTY_MV_MATRIX))) {
+		if (g_uMV) {
 			matTranspose(tmp, g_mv.m);
 			rsxSetVertexProgramParameter(context, g_vpo, g_uMV, tmp);
 		}
-		if (vertexProgramChanged || (g_dirtyBits & DIRTY_TEXGEN)) {
-			float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
-			if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
-			if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
-			if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
-		}
+		float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
+		if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
+		if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
+		if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
 	}
-	g_loadedVertexProgram = wantedVertexProgram;
 	if (uiDraw) {
 		/* The immutable UI shader has no per-draw constants.  Patching the
 		 * unused 3D lighting/fog program here used to emit fifteen inline
 		 * transfers for every HUD quad before immediately loading etr_ui. */
-		if (g_loadedFragmentProgram != FP_UI ||
-		    g_loadedFragmentOffset != g_uiFpOffset) {
-			rsxLoadFragmentProgramLocation(context, g_uiFpo, g_uiFpOffset,
-			                               GCM_LOCATION_RSX);
-			g_loadedFragmentProgram = FP_UI;
-			g_loadedFragmentOffset = g_uiFpOffset;
-		}
+		rsxLoadFragmentProgramLocation(context, g_uiFpo, g_uiFpOffset, GCM_LOCATION_RSX);
 	} else if (liteDraw) {
-		if (patchFragmentProgram) {
-			float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
-			float fogSE[2] = { g_fogStart, g_fogEnd };
-			float doFog = g_fog ? 1.f : 0.f;
-			float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
+		float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
+		float fogSE[2] = { g_fogStart, g_fogEnd };
+		float doFog = g_fog ? 1.f : 0.f;
+		float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
 
-			TIMER_START("FLUSH_FP_PATCHES");
-			if (g_tFogColor)      rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
-			if (g_tFogSE)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
-			if (g_tDoFog)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
-			if (g_tOutputScale)   rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
-			TIMER_END("FLUSH_FP_PATCHES");
-			activeFpSlot->generation = g_liteFpGeneration;
-		}
+		TIMER_START("FLUSH_FP_PATCHES");
+		if (g_tFogColor)      rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
+		if (g_tFogSE)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
+		if (g_tDoFog)         rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
+		if (g_tOutputScale)   rsxSetFragmentProgramParameter(context, g_terrainFpo, g_tOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
+		TIMER_END("FLUSH_FP_PATCHES");
 
-		if (patchFragmentProgram ||
-		    g_loadedFragmentProgram != FP_LITE ||
-		    g_loadedFragmentOffset != fpOffset) {
-			rsxLoadFragmentProgramLocation(context, g_terrainFpo, fpOffset,
-			                               GCM_LOCATION_RSX);
-			g_loadedFragmentProgram = FP_LITE;
-			g_loadedFragmentOffset = fpOffset;
-		}
+		rsxLoadFragmentProgramLocation(context, g_terrainFpo, fpOffset,
+		                               GCM_LOCATION_RSX);
 	} else {
-		if (patchFragmentProgram) {
-			float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
-			composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
+		/* 3D fragment uniforms — patched into fpBuf, then the slot is loaded. */
+		float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
+		composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
 
-			float anyLight = (g_light[0].enabled || g_light[1].enabled ||
-			                  g_light[2].enabled || g_light[3].enabled) ? 1.f : 0.f;
-			float doLighting = (g_lighting && anyLight) ? 1.f : 0.f;
+		float anyLight = (g_light[0].enabled || g_light[1].enabled ||
+		                  g_light[2].enabled || g_light[3].enabled) ? 1.f : 0.f;
+		float doLighting = (g_lighting && anyLight) ? 1.f : 0.f;
 
-			float doFog = g_fog ? 1.f : 0.f;
-			float fogSE[2] = { g_fogStart, g_fogEnd };
-			float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
-			float matDiff[3] = { g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2] };
-			float matSpec[3] = { g_matSpecular[0], g_matSpecular[1], g_matSpecular[2] };
-			float shin = g_matShininess > 0.f ? g_matShininess : 1.f;
-			/* shader discard only for non-GEQUAL alpha tests (hw path covers GEQUAL) */
-			float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
-			float aRef = g_alphaRef;
-			float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
+		float doFog = g_fog ? 1.f : 0.f;
+		float fogSE[2] = { g_fogStart, g_fogEnd };
+		float fogCol[3] = { g_fogColor[0], g_fogColor[1], g_fogColor[2] };
+		float matDiff[3] = { g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2] };
+		float matSpec[3] = { g_matSpecular[0], g_matSpecular[1], g_matSpecular[2] };
+		float shin = g_matShininess > 0.f ? g_matShininess : 1.f;
+		/* shader discard only for non-GEQUAL alpha tests (hw path covers GEQUAL) */
+		float doATest = (g_alphaTest && g_alphaFunc != GL_GEQUAL) ? 1.f : 0.f;
+		float aRef = g_alphaRef;
+		float outputScale[4] = {1.f, 1.f, 1.f, 1.f};
 
-			TIMER_START("FLUSH_FP_PATCHES");
-			if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
-			if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
-			if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, fpOffset, GCM_LOCATION_RSX);
-			if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, fpOffset, GCM_LOCATION_RSX);
-			if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, fpOffset, GCM_LOCATION_RSX);
-			if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, fpOffset, GCM_LOCATION_RSX);
-			if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, fpOffset, GCM_LOCATION_RSX);
-			if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, fpOffset, GCM_LOCATION_RSX);
-			if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, fpOffset, GCM_LOCATION_RSX);
-			if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
-			if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
-			if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
-			if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
-			if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
-			if (g_uOutputScale)   rsxSetFragmentProgramParameter(context, g_fpo, g_uOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
-			TIMER_END("FLUSH_FP_PATCHES");
-			activeFpSlot->generation = g_fullFpGeneration;
-		}
+		TIMER_START("FLUSH_FP_PATCHES");
+		if (g_uGlobalAmbient) rsxSetFragmentProgramParameter(context, g_fpo, g_uGlobalAmbient, ambient, fpOffset, GCM_LOCATION_RSX);
+		if (g_uLightPos)      rsxSetFragmentProgramParameter(context, g_fpo, g_uLightPos, lightPos, fpOffset, GCM_LOCATION_RSX);
+		if (g_uLightColor)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightColor, lightDiff, fpOffset, GCM_LOCATION_RSX);
+		if (g_uLightSpec)     rsxSetFragmentProgramParameter(context, g_fpo, g_uLightSpec, lightSpec, fpOffset, GCM_LOCATION_RSX);
+		if (g_uLightIsDir)    rsxSetFragmentProgramParameter(context, g_fpo, g_uLightIsDir, &isDir, fpOffset, GCM_LOCATION_RSX);
+		if (g_uMatDiffuse)    rsxSetFragmentProgramParameter(context, g_fpo, g_uMatDiffuse, matDiff, fpOffset, GCM_LOCATION_RSX);
+		if (g_uMatSpecular)   rsxSetFragmentProgramParameter(context, g_fpo, g_uMatSpecular, matSpec, fpOffset, GCM_LOCATION_RSX);
+		if (g_uShininess)     rsxSetFragmentProgramParameter(context, g_fpo, g_uShininess, &shin, fpOffset, GCM_LOCATION_RSX);
+		if (g_uDoLighting)    rsxSetFragmentProgramParameter(context, g_fpo, g_uDoLighting, &doLighting, fpOffset, GCM_LOCATION_RSX);
+		if (g_uFogColor)      rsxSetFragmentProgramParameter(context, g_fpo, g_uFogColor, fogCol, fpOffset, GCM_LOCATION_RSX);
+		if (g_uFogSE)         rsxSetFragmentProgramParameter(context, g_fpo, g_uFogSE, fogSE, fpOffset, GCM_LOCATION_RSX);
+		if (g_uDoFog)         rsxSetFragmentProgramParameter(context, g_fpo, g_uDoFog, &doFog, fpOffset, GCM_LOCATION_RSX);
+		if (g_uAlphaRef)      rsxSetFragmentProgramParameter(context, g_fpo, g_uAlphaRef, &aRef, fpOffset, GCM_LOCATION_RSX);
+		if (g_uDoAlphaTest)   rsxSetFragmentProgramParameter(context, g_fpo, g_uDoAlphaTest, &doATest, fpOffset, GCM_LOCATION_RSX);
+		if (g_uOutputScale)   rsxSetFragmentProgramParameter(context, g_fpo, g_uOutputScale, outputScale, fpOffset, GCM_LOCATION_RSX);
+		TIMER_END("FLUSH_FP_PATCHES");
 
-		if (patchFragmentProgram ||
-		    g_loadedFragmentProgram != FP_FULL ||
-		    g_loadedFragmentOffset != fpOffset) {
-			rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset,
-			                               GCM_LOCATION_RSX);
-			g_loadedFragmentProgram = FP_FULL;
-			g_loadedFragmentOffset = fpOffset;
-		}
+		rsxLoadFragmentProgramLocation(context, g_fpo, fpOffset, GCM_LOCATION_RSX);
 	}
 
-	if (g_dirtyBits & DIRTY_FIXED_ENV) {
+	if (g_dirtyBits & DIRTY_DRAW_ENV) {
 		/* All-clip-planes-disabled is idempotent; only need to emit once
 		 * unless something in setDrawEnv's domain changed. Shares the
 		 * DRAW_ENV bit since the trigger conditions overlap heavily. */
@@ -2308,14 +1947,9 @@ extern "C" void ps3_gl_flush(void) {
 	u32 doneVal = g_vtxLabelNext++;
 	if (g_vtxLabelNext == 0) g_vtxLabelNext = 1;
 	rsxSetWriteBackendLabel(context, PS3_VTX_LABEL_IDX, doneVal);
-	if (++g_unflushedDraws >= PS3_SUBMIT_BATCH_DRAWS)
-		submitPendingRsxCommands();
+	rsxFlushBuffer(context);
 	if (ringSlot >= 0)
 		g_vtxRing[ringSlot].labelVal = doneVal;
-	else if (oversizeRingSlot >= 0)
-		g_vtxOversizeRing[oversizeRingSlot].labelVal = doneVal;
-	if (activeFpSlot)
-		activeFpSlot->labelVal = doneVal;
 
 	/* State uploaded this flush is now the RSX's current state; clears
 	 * let subsequent mutators re-arm only what they actually change. */

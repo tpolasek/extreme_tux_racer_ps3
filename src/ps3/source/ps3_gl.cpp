@@ -162,9 +162,17 @@ enum DirtyBit {
 	DIRTY_PROJ_MATRIX = 1 << 2,
 	DIRTY_MV_MATRIX   = 1 << 3,
 	DIRTY_TEXGEN      = 1 << 4,
+	DIRTY_VP_LIGHTING = 1 << 5,
 	DIRTY_ALL         = ~0u,
 };
 static u32 g_dirtyBits = DIRTY_ALL;
+
+enum VertexProgramKind {
+	VP_NONE,
+	VP_GENERAL,
+	VP_TERRAIN,
+};
+static VertexProgramKind g_loadedVertexProgram = VP_NONE;
 
 /* Route a matrix mutation to the bit for the currently-active stack.
  * Mirrors activeMatrix(): only PROJECTION and MODELVIEW are uploaded
@@ -573,7 +581,8 @@ void glPopAttrib(void) {
 		restoreState(&g_attrib[--g_attribTop]);
 	/* restoreState touches draw-env caps, current texture, and texgen
 	 * enables. Conservatively re-emit all of those on the next flush. */
-	g_dirtyBits |= DIRTY_DRAW_ENV | DIRTY_TEXTURE | DIRTY_TEXGEN;
+	g_dirtyBits |= DIRTY_DRAW_ENV | DIRTY_TEXTURE | DIRTY_TEXGEN |
+	               DIRTY_VP_LIGHTING;
 }
 
 static int lightIndex(GLenum cap) {
@@ -589,7 +598,7 @@ void glEnable(GLenum cap) {
 		case GL_BLEND:          g_blend = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_DEPTH_TEST:     g_depthTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_CULL_FACE:      g_cullFace = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
-		case GL_LIGHTING:       g_lighting = GL_TRUE; break;  /* FP uniform, not tracked */
+		case GL_LIGHTING:       g_lighting = GL_TRUE; g_dirtyBits |= DIRTY_VP_LIGHTING; break;
 		case GL_ALPHA_TEST:     g_alphaTest = GL_TRUE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_TRUE; break;  /* not emitted by setDrawEnv */
 		case GL_FOG:            g_fog = GL_TRUE; break;  /* FP uniform, not tracked */
@@ -598,7 +607,10 @@ void glEnable(GLenum cap) {
 		case GL_NORMALIZE:      g_normalize = GL_TRUE; break;  /* not uploaded */
 		case GL_COLOR_MATERIAL: break; /* material always tracks glColor lightpath via vColor */
 		default:
-			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_TRUE;
+			if ((li = lightIndex(cap)) >= 0) {
+				g_light[li].enabled = GL_TRUE;
+				g_dirtyBits |= DIRTY_VP_LIGHTING;
+			}
 			break;
 	}
 }
@@ -610,7 +622,7 @@ void glDisable(GLenum cap) {
 		case GL_BLEND:          g_blend = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_DEPTH_TEST:     g_depthTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_CULL_FACE:      g_cullFace = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
-		case GL_LIGHTING:       g_lighting = GL_FALSE; break;
+		case GL_LIGHTING:       g_lighting = GL_FALSE; g_dirtyBits |= DIRTY_VP_LIGHTING; break;
 		case GL_ALPHA_TEST:     g_alphaTest = GL_FALSE; g_dirtyBits |= DIRTY_DRAW_ENV; break;
 		case GL_STENCIL_TEST:   g_stencilTest = GL_FALSE; break;
 		case GL_FOG:            g_fog = GL_FALSE; break;
@@ -618,7 +630,10 @@ void glDisable(GLenum cap) {
 		case GL_TEXTURE_GEN_T:  g_texGenT = GL_FALSE; g_dirtyBits |= DIRTY_TEXGEN; break;
 		case GL_NORMALIZE:      g_normalize = GL_FALSE; break;
 		default:
-			if ((li = lightIndex(cap)) >= 0) g_light[li].enabled = GL_FALSE;
+			if ((li = lightIndex(cap)) >= 0) {
+				g_light[li].enabled = GL_FALSE;
+				g_dirtyBits |= DIRTY_VP_LIGHTING;
+			}
 			break;
 	}
 }
@@ -676,10 +691,14 @@ void glLightfv(GLenum light, GLenum pname, const GLfloat *p) {
 		case GL_SPECULAR: memcpy(L.specular, p, 4 * sizeof(float)); break;
 		default: break;
 	}
+	g_dirtyBits |= DIRTY_VP_LIGHTING;
 }
 
 void glMaterialf(GLenum, GLenum pname, GLfloat v) {
-	if (pname == GL_SHININESS) g_matShininess = v;
+	if (pname == GL_SHININESS) {
+		g_matShininess = v;
+		g_dirtyBits |= DIRTY_VP_LIGHTING;
+	}
 }
 
 void glMaterialfv(GLenum, GLenum pname, const GLfloat *p) {
@@ -691,6 +710,7 @@ void glMaterialfv(GLenum, GLenum pname, const GLfloat *p) {
 		case GL_AMBIENT:  /* absorbed into light ambient; ignore material ambient */ break;
 		default: break;
 	}
+	g_dirtyBits |= DIRTY_VP_LIGHTING;
 }
 
 void glFogi(GLenum pname, GLint v) {
@@ -1849,50 +1869,67 @@ extern "C" void ps3_gl_flush(void) {
 	                         drawOffset + sizeof(float) * 8,
 	                         stride, 4, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
 
-	/* Vertex program + uniforms (transposed matrices).  A program switch must
-	 * reload matrix/texgen constants even when the corresponding GL state did
-	 * not change, because the two Cg programs may use different registers. */
+	/* Vertex program + uniforms (transposed matrices). A program switch forces
+	 * every constant into the new program; otherwise only state changed since
+	 * the preceding draw is emitted. */
 	alignas(16) float tmp[16];
+	const VertexProgramKind wantedVertexProgram =
+	    terrainDraw ? VP_TERRAIN : VP_GENERAL;
+	const GLboolean vertexProgramChanged =
+	    g_loadedVertexProgram != wantedVertexProgram;
 	if (terrainDraw) {
-		rsxLoadVertexProgram(context, g_terrainVpo, g_terrainVpUcode);
-		if (g_tvProj) {
+		if (vertexProgramChanged)
+			rsxLoadVertexProgram(context, g_terrainVpo, g_terrainVpUcode);
+		if (g_tvProj &&
+		    (vertexProgramChanged || (g_dirtyBits & DIRTY_PROJ_MATRIX))) {
 			matTranspose(tmp, g_proj.m);
 			rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvProj, tmp);
 		}
-		if (g_tvMV) {
+		if (g_tvMV &&
+		    (vertexProgramChanged || (g_dirtyBits & DIRTY_MV_MATRIX))) {
 			matTranspose(tmp, g_mv.m);
 			rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvMV, tmp);
 		}
-		float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
-		if (g_tvDoTexGen)  rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvDoTexGen, &doTexGen);
-		if (g_tvTexPlaneS) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneS, g_texPlaneS);
-		if (g_tvTexPlaneT) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneT, g_texPlaneT);
+		if (vertexProgramChanged || (g_dirtyBits & DIRTY_TEXGEN)) {
+			float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
+			if (g_tvDoTexGen)  rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvDoTexGen, &doTexGen);
+			if (g_tvTexPlaneS) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneS, g_texPlaneS);
+			if (g_tvTexPlaneT) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvTexPlaneT, g_texPlaneT);
+		}
 
-		float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
-		composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
-		float matDiff[3] = {
-			g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2]
-		};
-		if (g_tvGlobalAmbient) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvGlobalAmbient, ambient);
-		if (g_tvLightPos)      rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightPos, lightPos);
-		if (g_tvLightColor)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightColor, lightDiff);
-		if (g_tvLightIsDir)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightIsDir, &isDir);
-		if (g_tvMatDiffuse)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvMatDiffuse, matDiff);
+		if (vertexProgramChanged || (g_dirtyBits & DIRTY_VP_LIGHTING)) {
+			float ambient[3], lightPos[3], lightDiff[3], lightSpec[3], isDir;
+			composeLighting(ambient, lightPos, lightDiff, lightSpec, &isDir);
+			float matDiff[3] = {
+				g_matDiffuse[0], g_matDiffuse[1], g_matDiffuse[2]
+			};
+			if (g_tvGlobalAmbient) rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvGlobalAmbient, ambient);
+			if (g_tvLightPos)      rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightPos, lightPos);
+			if (g_tvLightColor)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightColor, lightDiff);
+			if (g_tvLightIsDir)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvLightIsDir, &isDir);
+			if (g_tvMatDiffuse)    rsxSetVertexProgramParameter(context, g_terrainVpo, g_tvMatDiffuse, matDiff);
+		}
 	} else {
-		rsxLoadVertexProgram(context, g_vpo, g_vpUcode);
-		if (g_uProj) {
+		if (vertexProgramChanged)
+			rsxLoadVertexProgram(context, g_vpo, g_vpUcode);
+		if (g_uProj &&
+		    (vertexProgramChanged || (g_dirtyBits & DIRTY_PROJ_MATRIX))) {
 			matTranspose(tmp, g_proj.m);
 			rsxSetVertexProgramParameter(context, g_vpo, g_uProj, tmp);
 		}
-		if (g_uMV) {
+		if (g_uMV &&
+		    (vertexProgramChanged || (g_dirtyBits & DIRTY_MV_MATRIX))) {
 			matTranspose(tmp, g_mv.m);
 			rsxSetVertexProgramParameter(context, g_vpo, g_uMV, tmp);
 		}
-		float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
-		if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
-		if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
-		if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
+		if (vertexProgramChanged || (g_dirtyBits & DIRTY_TEXGEN)) {
+			float doTexGen = (g_texGenS || g_texGenT) ? 1.f : 0.f;
+			if (g_uDoTexGen)  rsxSetVertexProgramParameter(context, g_vpo, g_uDoTexGen, &doTexGen);
+			if (g_uTexPlaneS) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneS, g_texPlaneS);
+			if (g_uTexPlaneT) rsxSetVertexProgramParameter(context, g_vpo, g_uTexPlaneT, g_texPlaneT);
+		}
 	}
+	g_loadedVertexProgram = wantedVertexProgram;
 	if (uiDraw) {
 		/* The immutable UI shader has no per-draw constants.  Patching the
 		 * unused 3D lighting/fog program here used to emit fifteen inline

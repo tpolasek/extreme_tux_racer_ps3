@@ -21,6 +21,7 @@ GNU General Public License for more details.
 
 #include "physics.h"
 #include "course.h"
+#include "tree_collision.h"
 #include "tux.h"
 #include "audio.h"
 #include "particles.h"
@@ -120,27 +121,32 @@ bool CControl::CheckTreeCollisions(const TVector3d& pos, TVector3d *tree_loc) co
 
 	TVector3d loc(0, 0, 0);
 	bool hit = false;
-	TMatrix<4, 4> mat;
+	constexpr double kTuxRadius = 0.6;
 
 	for (std::size_t i = 0; i<Course.CollArr.size(); i++) {
 		double diam = Course.CollArr[i].diam;
 		double height = Course.CollArr[i].height;
 		loc = Course.CollArr[i].pt;
+		std::size_t tt = Course.CollArr[i].tree_type;
+		const TreeSilhouette& sil = Course.ObjTypes[tt].silhouette;
+
+		// Empty-mask early-out: skip trees with no silhouette. (Empty
+		// mask means the PNG didn't load — collision would be silently
+		// disabled for that tree. Skip rather than run a guaranteed-miss
+		// narrow phase.)
+		if (sil.W == 0) continue;
+
+		// Broad phase: tighter than diam/2 + kTuxRadius when the
+		// measured silhouette is narrower than the nominal quad.
+		double bp_radius = diam * 0.5 * sil.maxHalfWidthFrac + kTuxRadius;
+		if (pos.y < loc.y + height * sil.minYFrac - kTuxRadius ||
+		    pos.y > loc.y + height * sil.maxYFrac + kTuxRadius) continue;
+
 		TVector3d distvec(loc.x - pos.x, 0.0, loc.z - pos.z);
+		if (MAG_SQD(distvec) > bp_radius * bp_radius) continue;
 
-		// check distance from tree; .6 is the radius of a bounding sphere
-		double squared_dist = (diam / 2.0 + 0.6);
-		squared_dist *= squared_dist;
-		if (MAG_SQD(distvec) > squared_dist) continue;
-
-		TPolyhedron ph2 = Course.GetPoly(Course.CollArr[i].tree_type);
-		mat.SetScalingMatrix(diam, height, diam);
-		TransPolyhedron(mat, ph2);
-		mat.SetTranslationMatrix(loc.x, loc.y, loc.z);
-		TransPolyhedron(mat, ph2);
-
-		hit = g_game.character->shape->Collision(pos, ph2);
-		if (hit == true) {
+		if (TestTreeSilhouette(sil, pos, loc, diam, height, kTuxRadius)) {
+			hit = true;
 			if (tree_loc != nullptr) *tree_loc = loc;
 			Sound.Play("tree_hit", 0);
 			break;

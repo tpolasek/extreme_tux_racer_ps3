@@ -31,6 +31,7 @@ GNU General Public License for more details.
 #include "game_ctrl.h"
 #include "font.h"
 #include "physics.h"
+#include "tree_collision.h"
 #include "winsys.h"
 #include "translation.h"
 #include <cmath>
@@ -349,6 +350,17 @@ bool CCourse::LoadElevMap() {
 //						LoadItemList
 // ====================================================================
 
+// Loads the GL texture for an object type on first use and, for
+// collidables, builds the silhouette mask. No-op if the type isn't
+// drawable or the texture is already loaded.
+static void LoadObjectTypeAssets(TObjectType& type) {
+	if (type.texture != nullptr || !type.drawable) return;
+	type.texture = new TTexture();
+	type.texture->Load(MakePathStr(param.obj_dir, type.textureFile), false);
+	if (type.collidable)
+		BuildTreeSilhouette(type);
+}
+
 void CCourse::LoadItemList() {
 	if (ObjTypes.empty()) {
 		Message("No object types loaded.");
@@ -374,10 +386,7 @@ void CCourse::LoadItemList() {
 
 		std::string name = SPStrN(*line, "name");
 		std::size_t type = ObjectIndex[name];
-		if (ObjTypes[type].texture == nullptr && ObjTypes[type].drawable) {
-			ObjTypes[type].texture = new TTexture();
-			ObjTypes[type].texture->Load(MakePathStr(param.obj_dir, ObjTypes[type].textureFile), false);
-		}
+		LoadObjectTypeAssets(ObjTypes[type]);
 
 		if (ObjTypes[type].collidable)
 			CollArr.emplace_back(xx, FindYCoord(xx, zz), zz, height, diam, type);
@@ -453,10 +462,7 @@ bool CCourse::LoadAndConvertObjectMap() {
 				cnt++;
 				double xx = (nx - x) / (double)((double)nx - 1.0) * curr_course->size.x;
 				double zz = -(int)(ny - y) / (double)((double)ny - 1.0) * curr_course->size.y;
-				if (ObjTypes[type].texture == nullptr && ObjTypes[type].drawable) {
-					ObjTypes[type].texture = new TTexture();
-					ObjTypes[type].texture->Load(MakePathStr(param.obj_dir, ObjTypes[type].textureFile), false);
-				}
+				LoadObjectTypeAssets(ObjTypes[type]);
 
 				// set random height and diam - see constants above
 				switch (type) {

@@ -21,6 +21,7 @@ GNU General Public License for more details.
 #include "bh.h"
 #include "mathlib.h"
 #include <vector>
+#include <cstdint>
 #include <unordered_map>
 
 #define FLOATVAL(i) (*(GLfloat*)(vnc_array+idx+(i)*sizeof(GLfloat)))
@@ -55,6 +56,19 @@ struct TTerrType {
 	int stoptex;
 };
 
+// Bit-packed alpha silhouette of a collidable object's texture, used for
+// near-pixel-perfect tree collision. One per TObjectType, populated at course
+// load by BuildTreeSilhouette (tree_collision.cpp). Empty mask (W == 0) is
+// treated as "no silhouette" by the narrow phase and falls back to a miss.
+struct TreeSilhouette {
+	std::vector<uint32_t> rows;  // ceil(W/32) words per row, H rows; MSB = leftmost texel
+	uint16_t W = 0, H = 0;       // mask dimensions
+	// Measured extents of the opaque content, in fractions of the billboard quad:
+	float maxHalfWidthFrac = 0.f;  // rightmost opaque column / W (0..1)
+	float minYFrac = 0.f;          // lowest opaque row / H (0 = bottom of trunk)
+	float maxYFrac = 0.f;          // highest opaque row / H (1 = top of canopy)
+};
+
 struct TObjectType {
 	std::string name;
 	std::string textureFile;
@@ -66,6 +80,7 @@ struct TObjectType {
 	bool		use_normal;
 	TVector3d	normal;
 	int			poly;
+	TreeSilhouette silhouette;
 };
 
 struct TObject {

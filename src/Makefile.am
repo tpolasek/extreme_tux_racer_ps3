@@ -34,6 +34,7 @@ etr_SOURCES =		\
 	textures.cpp	\
 	track_marks.cpp	\
 	translation.cpp	\
+	tree_collision.cpp \
 	tux.cpp		\
 	vectors.cpp	\
 	view.cpp	\
@@ -82,6 +83,7 @@ noinst_HEADERS =	\
 	textures.h	\
 	track_marks.h	\
 	translation.h	\
+	tree_collision.h \
 	tux.h		\
 	vectors.h	\
 	version.h	\

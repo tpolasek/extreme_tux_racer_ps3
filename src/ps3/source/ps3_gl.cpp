@@ -166,11 +166,13 @@ enum DirtyBit {
 	DIRTY_BLEND        = 1 << 3,
 	DIRTY_ALPHA        = 1 << 4,
 	DIRTY_FIXED_ENV    = 1 << 5,
-	DIRTY_TEXTURE      = 1 << 6,
-	DIRTY_PROJ_MATRIX  = 1 << 7,
-	DIRTY_MV_MATRIX    = 1 << 8,
-	DIRTY_TEXGEN       = 1 << 9,
-	DIRTY_VP_LIGHTING  = 1 << 10,
+	DIRTY_TEXTURE_BIND = 1 << 6,
+	DIRTY_TEXTURE_DATA = 1 << 7,
+	DIRTY_TEXTURE      = DIRTY_TEXTURE_BIND | DIRTY_TEXTURE_DATA,
+	DIRTY_PROJ_MATRIX  = 1 << 8,
+	DIRTY_MV_MATRIX    = 1 << 9,
+	DIRTY_TEXGEN       = 1 << 10,
+	DIRTY_VP_LIGHTING  = 1 << 11,
 	DIRTY_DRAW_ENV     = DIRTY_VIEWPORT | DIRTY_DEPTH | DIRTY_CULL |
 	                     DIRTY_BLEND | DIRTY_ALPHA | DIRTY_FIXED_ENV,
 	DIRTY_ALL         = ~0u,
@@ -239,6 +241,7 @@ static GLuint g_currentTex = 0;
 static GLuint g_nextTexId  = 1;
 static GLuint g_freeIds[PS3_MAX_TEXTURES];
 static u32    g_freeCount = 0;
+static u8     g_boundTextureUnit = 0xff;
 
 /* shader handles (etr3d) */
 static rsxVertexProgram   *g_vpo = NULL;
@@ -663,7 +666,7 @@ void glPopAttrib(void) {
 	/* restoreState touches draw-env caps, current texture, and texgen
 	 * enables. Conservatively re-emit all of those on the next flush. */
 	g_dirtyBits |= DIRTY_DEPTH | DIRTY_CULL | DIRTY_BLEND | DIRTY_ALPHA |
-	               DIRTY_TEXTURE | DIRTY_TEXGEN | DIRTY_VP_LIGHTING;
+	               DIRTY_TEXTURE_BIND | DIRTY_TEXGEN | DIRTY_VP_LIGHTING;
 	dirtyFogFragmentPrograms();
 }
 
@@ -677,7 +680,7 @@ void glEnable(GLenum cap) {
 	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:
-			if (!g_tex2d) { flushPendingImmediate(); g_tex2d = GL_TRUE; g_dirtyBits |= DIRTY_TEXTURE; }
+			if (!g_tex2d) { flushPendingImmediate(); g_tex2d = GL_TRUE; g_dirtyBits |= DIRTY_TEXTURE_BIND; }
 			break;
 		case GL_BLEND:
 			if (!g_blend) { flushPendingImmediate(); g_blend = GL_TRUE; g_dirtyBits |= DIRTY_BLEND; }
@@ -723,7 +726,7 @@ void glDisable(GLenum cap) {
 	int li;
 	switch (cap) {
 		case GL_TEXTURE_2D:
-			if (g_tex2d) { flushPendingImmediate(); g_tex2d = GL_FALSE; g_dirtyBits |= DIRTY_TEXTURE; }
+			if (g_tex2d) { flushPendingImmediate(); g_tex2d = GL_FALSE; g_dirtyBits |= DIRTY_TEXTURE_BIND; }
 			break;
 		case GL_BLEND:
 			if (g_blend) { flushPendingImmediate(); g_blend = GL_FALSE; g_dirtyBits |= DIRTY_BLEND; }
@@ -1411,7 +1414,7 @@ void glDeleteTextures(GLsizei n, const GLuint *t) {
 			if (g_freeCount < PS3_MAX_TEXTURES) g_freeIds[g_freeCount++] = id;
 		}
 	}
-	g_dirtyBits |= DIRTY_TEXTURE;
+	g_dirtyBits |= DIRTY_TEXTURE_BIND;
 }
 
 void glBindTexture(GLenum, GLuint t) {
@@ -1421,7 +1424,7 @@ void glBindTexture(GLenum, GLuint t) {
 	if (next == g_currentTex) return;
 	flushPendingImmediate();
 	g_currentTex = next;
-	g_dirtyBits |= DIRTY_TEXTURE;
+	g_dirtyBits |= DIRTY_TEXTURE_BIND;
 }
 
 void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
@@ -1498,7 +1501,6 @@ void glTexImage2D(GLenum, GLint, GLint, GLsizei w, GLsizei h, GLint,
 	}
 
 	asm volatile("sync");
-	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
 	GFX_ASSERT(rsxAddressToOffset(T.buffer, &T.offset) == 0,
 	           "rsxAddressToOffset(texture) failed");
 	/* GCM_TEXTURE_FORMAT_A8R8G8B8 | LIN needs a 128-aligned base offset
@@ -1533,7 +1535,7 @@ void glTexParameteri(GLenum, GLenum pname, GLint param) {
 		}
 		default: return;
 	}
-	g_dirtyBits |= DIRTY_TEXTURE;
+	g_dirtyBits |= DIRTY_TEXTURE_BIND;
 }
 void glTexEnvf(GLenum, GLenum, GLfloat) { }
 void glPixelStorei(GLenum, GLint)       { }
@@ -1906,7 +1908,7 @@ static void setDrawEnv(void) {
 	}
 }
 
-static void bindTextureForDraw(void) {
+static void bindTextureForDraw(u8 unit) {
 	gcmTexture texture;
 	u32 offset, tw, th, pitch;
 	u8  filtMin, filtMag, wrapS, wrapT;
@@ -1935,8 +1937,6 @@ static void bindTextureForDraw(void) {
 	GFX_ASSERT(tw > 0 && th > 0, "texture dims zero at draw time");
 	GFX_ASSERT(tw <= 4096 && th <= 4096, "texture dims exceed 4096");
 
-	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
-
 	texture.format    = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_FORMAT_LIN;
 	texture.mipmap    = 1;
 	texture.dimension = GCM_TEXTURE_DIMS_2D;
@@ -1956,15 +1956,11 @@ static void bindTextureForDraw(void) {
 	texture.pitch     = pitch;
 	texture.offset    = offset;
 
-	GLboolean uiDraw = useUiFragmentProgram();
-	GLboolean liteDraw = useLiteFragmentProgram();
-	u8 unit = uiDraw && g_uiTexSampler ? g_uiTexSampler->index :
-	          liteDraw && g_tTexSampler ? g_tTexSampler->index :
-	          g_texSampler ? g_texSampler->index : 0;
 	rsxLoadTexture(context, unit, &texture);
 	rsxTextureControl(context, unit, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
 	rsxTextureFilter(context, unit, 0, filtMag, filtMin, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
 	rsxTextureWrapMode(context, unit, wrapS, wrapT, wrapT, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
+	g_boundTextureUnit = unit;
 }
 
 /* Pick primary light (first enabled; usually light0) + sum ambient. Position is
@@ -2127,7 +2123,16 @@ extern "C" void ps3_gl_flush(void) {
 	asm volatile("sync");
 
 	if (g_dirtyBits & DIRTY_DRAW_ENV) setDrawEnv();
-	if (g_dirtyBits & DIRTY_TEXTURE)  bindTextureForDraw();
+	const u8 wantedTextureUnit =
+	    uiDraw && g_uiTexSampler ? g_uiTexSampler->index :
+	    liteDraw && g_tTexSampler ? g_tTexSampler->index :
+	    g_texSampler ? g_texSampler->index : 0;
+	if (wantedTextureUnit != g_boundTextureUnit)
+		g_dirtyBits |= DIRTY_TEXTURE_BIND;
+	if (g_dirtyBits & DIRTY_TEXTURE_DATA)
+		rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
+	if (g_dirtyBits & DIRTY_TEXTURE_BIND)
+		bindTextureForDraw(wantedTextureUnit);
 
 	/* POS / NRM / TEX0 / COL attribs.
 	 * F32 attribs require each per-vertex offset to be 4-byte aligned;

@@ -64,13 +64,6 @@ void DrawTrees() {
 	ScopedRenderMode rm(TREES);
 	double fwd_clip_limit = param.forward_clip_distance;
 	double bwd_clip_limit = param.backward_clip_distance;
-#ifdef OS_PS3
-	/* Alpha-tested foliage is a significant fill cost on RSX. Preserve
-	 * nearby silhouettes while dropping distant billboards that contribute
-	 * little detail through the course fog. */
-	if (fwd_clip_limit > 38.0) fwd_clip_limit = 38.0;
-	if (bwd_clip_limit > 20.0) bwd_clip_limit = 20.0;
-#endif
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	set_material(colWhite, colBlack, 1.0);

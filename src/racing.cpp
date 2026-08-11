@@ -15,10 +15,6 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 ---------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include <iostream>
 #include <ctime>
 #include <cstring>
@@ -382,6 +378,8 @@ void CRacing::Loop(float time_step) {
 	TIMER_START("RACE_DRAW_TUX");
 	g_game.character->shape->Draw();
 	TIMER_END("RACE_DRAW_TUX");
+
+	DrawCollisionDebug();
 
 	UpdateWind(time_step);
 	UpdateSnow(time_step, ctrl);

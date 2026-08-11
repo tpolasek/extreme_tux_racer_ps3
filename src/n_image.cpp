@@ -3,10 +3,6 @@ EXTREME TUXRACER - native replacement types
 
 Image implementation - libpng decode/encode to RGBA8.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_image.h"
 
 #include <png.h>

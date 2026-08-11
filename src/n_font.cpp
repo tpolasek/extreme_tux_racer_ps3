@@ -11,10 +11,6 @@ Texture upload path on Linux:
 Same logical path on PS3:
     fontRenderCharGlyphImage → fontRenderSurface → RSX texture → quad.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_font.h"
 #include "n_glutil.h"
 

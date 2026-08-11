@@ -125,6 +125,34 @@ void BuildTreeSilhouette(TObjectType& type) {
 	// Row 0 == top of tree == V = 1, so invert when converting row → V frac.
 	sil.minYFrac = static_cast<float>(kMaskH - lastOpaqueRow) / kMaskH;
 	sil.maxYFrac = static_cast<float>(kMaskH - firstOpaqueRow) / kMaskH;
+
+	// Envelope polygon: per opaque row, leftmost + rightmost opaque column.
+	// Walked top→bottom on the left, bottom→top on the right to form a
+	// closed line loop. Stored in world-UV (v bottom-up).
+	auto rowEnds = [&](int my, int& xL, int& xR) {
+		xL = -1; xR = -1;
+		const std::size_t rowOff = static_cast<std::size_t>(my) * wordsPerRow;
+		for (int x = 0; x < kMaskW; ++x) {
+			if (sil.rows[rowOff + (x >> 5)] & (1u << (31 - (x & 31)))) {
+				if (xL < 0) xL = x;
+				xR = x;
+			}
+		}
+	};
+
+	std::vector<TVector2d> leftEdge, rightEdge;
+	for (int my = firstOpaqueRow; my <= lastOpaqueRow; ++my) {
+		int xL, xR;
+		rowEnds(my, xL, xR);
+		if (xL < 0) continue;  // gap row — skip
+		const float uL = static_cast<float>(xL) / kMaskW;
+		const float uR = static_cast<float>(xR + 1) / kMaskW;
+		const float v  = static_cast<float>(kMaskH - my) / kMaskH;
+		leftEdge.emplace_back(uL, v);
+		rightEdge.emplace_back(uR, v);
+	}
+	sil.contourUV.swap(leftEdge);
+	sil.contourUV.insert(sil.contourUV.end(), rightEdge.rbegin(), rightEdge.rend());
 }
 
 // --------------------------------------------------------------------

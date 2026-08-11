@@ -103,6 +103,14 @@ private:
 	bool CheckPolyhedronCollision(const TCharNode *node, const TMatrix<4, 4>& modelMatrix,
 	                              const TMatrix<4, 4>& invModelMatrix, const TPolyhedron& ph);
 	bool CheckCollision(const TPolyhedron& ph);
+	// DAG walk: tracks the visible node whose unit sphere, transformed
+	// by the accumulated node transform, has the largest bounding radius.
+	void FindLargestSphere(const TCharNode *node, const TMatrix<4, 4> &accum,
+	                       TVector3d &bestCenter, double &bestRadius) const;
+	// Cached at Load(): model-space centre + radius of the largest visible
+	// rendered sphere. Read by the tree-collision proxy.
+	TVector3d m_collisionCenter;
+	double m_collisionRadius;
 
 	// shadow
 	void DrawShadowVertex(double x, double y, double z, const TMatrix<4, 4>& mat) const;
@@ -146,6 +154,14 @@ public:
 	                  double paddling_factor, double speed,
 	                  const TVector3d& net_force, double flap_factor);
 	bool Collision(const TVector3d& pos, const TPolyhedron& ph);
+
+	// Largest visible rendered sphere; used as the tree-collision proxy.
+	const TVector3d& CollisionCenter() const { return m_collisionCenter; }
+	double CollisionRadius() const { return m_collisionRadius; }
+	// World-space centre of that sphere given the integrator root position
+	// (cpos). Adds the TUX_Y_CORR render offset; ignores orientation — see
+	// comment in CheckTreeCollisions.
+	TVector3d CollisionCenterWorld(const TVector3d& rootPos) const;
 
 	std::size_t GetNodeName(std::size_t idx) const;
 	std::size_t GetNodeName(const std::string& node_trivialname) const;

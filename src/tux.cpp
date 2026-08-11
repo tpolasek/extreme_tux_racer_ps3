@@ -20,10 +20,6 @@ defining the character has radically changed though the character is
 still shaped with spheres.
 ---------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "tux.h"
 #include "ogl.h"
 #include "spx.h"
@@ -33,6 +29,7 @@ still shaped with spheres.
 #include "ps3_log.h"
 #include <GL/glu.h>
 #include <algorithm>
+#include <cmath>
 
 #define MAX_ARM_ANGLE2 30.0
 #define MAX_PADDLING_ANGLE2 35.0
@@ -73,6 +70,8 @@ CCharShape::CCharShape() {
 	highlighted = false;
 	highlight_node = -1;
 	m_lastDrawMat = nullptr;
+	m_collisionCenter = TVector3d(0, 0, 0);
+	m_collisionRadius = 0.6;   // safe fallback before Load()
 }
 
 CCharShape::~CCharShape() {
@@ -530,6 +529,18 @@ bool CCharShape::Load(const std::string& dir, const std::string& filename, bool 
 		}
 	}
 	newActions = false;
+
+	// Cache the largest visible sphere. The model is in its default pose
+	// here, so node->trans accumulated from the root gives each sphere's
+	// rendered model-space position.
+	m_collisionCenter = TVector3d(0, 0, 0);
+	m_collisionRadius = 0.0;
+	const TCharNode *root = GetNode(0);
+	if (root != nullptr) {
+		FindLargestSphere(root, TMatrix<4, 4>::getIdentity(),
+		                  m_collisionCenter, m_collisionRadius);
+	}
+
 	return true;
 }
 
@@ -680,6 +691,37 @@ bool CCharShape::Collision(const TVector3d& pos, const TPolyhedron& ph) {
 	ResetNode(0);
 	TranslateNode(0, TVector3d(pos.x, pos.y, pos.z));
 	return CheckCollision(ph);
+}
+
+void CCharShape::FindLargestSphere(const TCharNode *node, const TMatrix<4, 4> &accum,
+                                   TVector3d &bestCenter, double &bestRadius) const {
+	TMatrix<4, 4> nodeAccum = accum * node->trans;
+
+	if (node->visible) {
+		// Each visible node renders as a unit sphere (gluSphere 1.0) at the
+		// translation column of its accumulated transform. The linear part
+		// maps the unit sphere to an ellipsoid; the longest column length of
+		// the 3x3 is a tight upper bound on the rendered radius.
+		TVector3d center(nodeAccum[3][0], nodeAccum[3][1], nodeAccum[3][2]);
+		double r0 = std::sqrt(nodeAccum[0][0]*nodeAccum[0][0] + nodeAccum[0][1]*nodeAccum[0][1] + nodeAccum[0][2]*nodeAccum[0][2]);
+		double r1 = std::sqrt(nodeAccum[1][0]*nodeAccum[1][0] + nodeAccum[1][1]*nodeAccum[1][1] + nodeAccum[1][2]*nodeAccum[1][2]);
+		double r2 = std::sqrt(nodeAccum[2][0]*nodeAccum[2][0] + nodeAccum[2][1]*nodeAccum[2][1] + nodeAccum[2][2]*nodeAccum[2][2]);
+		double r = std::max({r0, r1, r2});
+		if (r > bestRadius) {
+			bestRadius = r;
+			bestCenter = center;
+		}
+	}
+
+	const TCharNode *child = node->child;
+	while (child != nullptr) {
+		FindLargestSphere(child, nodeAccum, bestCenter, bestRadius);
+		child = child->next;
+	}
+}
+
+TVector3d CCharShape::CollisionCenterWorld(const TVector3d& rootPos) const {
+	return rootPos + TVector3d(0, TUX_Y_CORR, 0) + m_collisionCenter;
 }
 
 // --------------------------------------------------------------------

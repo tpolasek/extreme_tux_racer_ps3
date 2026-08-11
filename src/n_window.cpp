@@ -3,10 +3,6 @@ EXTREME TUXRACER - native replacement types
 
 RenderWindow (X11 + GLX), Event dispatch, Joystick (/dev/input/js*).
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_window.h"
 #include "n_draw.h"
 

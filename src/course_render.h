@@ -25,4 +25,13 @@ void setup_course_tex_gen();
 void RenderCourse();
 void DrawTrees();
 
+// Debug overlay: neon-green outlines of every visible tree silhouette plus
+// the player's collision sphere. Compiled in only when built with
+// -DDRAW_COLLISION_DEBUG=1 (see Makefile.ps3).
+#ifdef DRAW_COLLISION_DEBUG
+void DrawCollisionDebug();
+#else
+static inline void DrawCollisionDebug() {}
+#endif
+
 #endif

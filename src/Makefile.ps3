@@ -50,7 +50,11 @@ DEMO_MODE	?=	0
 # Off by default. Enable with `make DEMO_SHOTS=1`. No effect when
 # DEMO_MODE is off.
 DEMO_SHOTS	?=	0
-CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(filter-out 0,$(DEMO_MODE)),-DDEMO_MODE=1) $(if $(filter-out 0,$(DEMO_SHOTS)),-DDEMO_SHOTS=1)
+# DRAW_COLLISION_DEBUG: neon-green overlay of tree silhouette contours +
+# player collision sphere. Off by default. Enable with
+# `make DRAW_COLLISION_DEBUG=1`.
+DRAW_COLLISION_DEBUG	?=	0
+CFLAGS		=	-O2 -Wall -g -std=gnu++14 -mcpu=cell $(MACHDEP) $(INCLUDE) $(if $(filter-out 0,$(DEMO_MODE)),-DDEMO_MODE=1) $(if $(filter-out 0,$(DEMO_SHOTS)),-DDEMO_SHOTS=1) $(if $(filter-out 0,$(DRAW_COLLISION_DEBUG)),-DDRAW_COLLISION_DEBUG=1)
 CXXFLAGS	=	$(CFLAGS) $(CXXFLAGS_INIT)
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map

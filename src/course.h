@@ -67,6 +67,9 @@ struct TreeSilhouette {
 	float maxHalfWidthFrac = 0.f;  // rightmost opaque column / W (0..1)
 	float minYFrac = 0.f;          // lowest opaque row / H (0 = bottom of trunk)
 	float maxYFrac = 0.f;          // highest opaque row / H (1 = top of canopy)
+	// Envelope polygon of the opaque content in UV space (u,v in [0,1], v
+	// bottom-up — world space). Closed line loop; empty if mask is empty.
+	std::vector<TVector2d> contourUV;
 };
 
 struct TObjectType {

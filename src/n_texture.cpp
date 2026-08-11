@@ -3,10 +3,6 @@ EXTREME TUXRACER - native replacement types
 
 Texture implementation - libpng decode (via Image) + glTexImage2D upload.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_texture.h"
 #include "n_image.h"
 

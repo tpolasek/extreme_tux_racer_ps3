@@ -4,10 +4,6 @@ EXTREME TUXRACER
 Per-course best-time persistence.
 ---------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "highscore.h"
 #include "bh.h"
 #include "course.h"

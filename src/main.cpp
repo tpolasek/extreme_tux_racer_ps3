@@ -15,10 +15,6 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 ---------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "bh.h"
 #include "textures.h"
 #include "ogl.h"
@@ -75,7 +71,7 @@ extern "C" int etr_run() {
 	std::signal(SIGINT, sigint_handler);
 	ETR_TRACE("InitConfig");
 	InitConfig();
-#ifdef OS_PS3
+#if defined(DEMO_MODE) && DEMO_MODE
 	ps3_perf_open((param.save_dir + SEP "etr_perf.log").c_str());
 #endif
 	ETR_TRACE("InitGame");
@@ -108,7 +104,7 @@ extern "C" int etr_run() {
 
 	ETR_TRACE("shutdown");
 	FreeHudResources();
-#ifdef OS_PS3
+#if defined(DEMO_MODE) && DEMO_MODE
 	ps3_perf_close();
 #endif
 	Winsys.Quit();

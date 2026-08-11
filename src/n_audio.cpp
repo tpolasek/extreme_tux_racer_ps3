@@ -8,10 +8,6 @@ uses sysEventQueueReceive and fills PSL1GHT libaudio DMA blocks directly.
 Mixer is single-threaded inside the audio thread: iterates voices +
 music, sums int16 samples, clips, writes to ALSA period buffer.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_audio.h"
 
 #include <alsa/asoundlib.h>

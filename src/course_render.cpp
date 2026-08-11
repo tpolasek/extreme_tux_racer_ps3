@@ -15,10 +15,6 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 ---------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "textures.h"
 #include "course_render.h"
 #include "course.h"
@@ -28,6 +24,7 @@ GNU General Public License for more details.
 #include "env.h"
 #include "game_ctrl.h"
 #include "physics.h"
+#include "tux.h"
 #include <vector>
 #include <cmath>
 
@@ -211,3 +208,74 @@ void DrawTrees() {
 		glDisableClientState(GL_VERTEX_ARRAY);
 	}
 }
+
+// --------------------------------------------------------------------
+//                   collision debug overlay
+// --------------------------------------------------------------------
+#ifdef DRAW_COLLISION_DEBUG
+
+void DrawCollisionDebug() {
+	const CControl* ctrl = g_game.player->ctrl;
+
+	glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_LIGHTING);
+	glDisable(GL_DEPTH_TEST);   // draw over everything
+	glColor4f(0.5f, 1.0f, 0.2f, 1.0f);   // neon green
+
+	// Tree silhouettes — stroke each contour polygon in the billboard plane.
+	const double fwd_clip_limit = param.forward_clip_distance;
+	const double bwd_clip_limit = param.backward_clip_distance;
+	for (std::size_t i = 0; i < Course.CollArr.size(); i++) {
+		if (clip_course) {
+			if (ctrl->viewpos.z - Course.CollArr[i].pt.z > fwd_clip_limit) continue;
+			if (Course.CollArr[i].pt.z - ctrl->viewpos.z > bwd_clip_limit) continue;
+		}
+		const TCollidable& t = Course.CollArr[i];
+		const TreeSilhouette& sil = Course.ObjTypes[t.tree_type].silhouette;
+		if (sil.contourUV.empty()) continue;
+
+		const double r = t.diam * 0.5;
+		const double h = t.height;
+		const double px = t.pt.x, py = t.pt.y, pz = t.pt.z;
+
+		// GL_LINE_STRIP (not LOOP) — the shim doesn't map GL_LINE_LOOP to
+		// an RSX primitive. Close the loop by re-emitting the first vertex.
+		glBegin(GL_LINE_STRIP);
+		for (const TVector2d& uv : sil.contourUV)
+			glVertex3d(px + (uv.x - 0.5) * 2.0 * r,
+			           py + uv.y * h,
+			           pz);
+		glVertex3d(px + (sil.contourUV.front().x - 0.5) * 2.0 * r,
+		           py + sil.contourUV.front().y * h,
+		           pz);
+		glEnd();
+	}
+
+	// Player collision sphere: three perpendicular rings matching the
+	// largest rendered sphere of the character (same proxy the tree
+	// collision uses), so what you see is what collides.
+	const CCharShape *shape = g_game.character->shape;
+	const TVector3d center = shape->CollisionCenterWorld(ctrl->cpos);
+	const double radius = shape->CollisionRadius();
+	constexpr int kSegments = 24;
+	constexpr double kTwoPi = 6.2831853;
+
+	for (int axis = 0; axis < 3; ++axis) {
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i <= kSegments; ++i) {
+			const double a = (double)i * kTwoPi / kSegments;
+			const double ca = cos(a), sa = sin(a);
+			double x = center.x, y = center.y, z = center.z;
+			if (axis == 0) { x += ca * radius; z += sa * radius; }
+			else if (axis == 1) { x += ca * radius; y += sa * radius; }
+			else { y += sa * radius; z += ca * radius; }
+			glVertex3d(x, y, z);
+		}
+		glEnd();
+	}
+
+	glPopAttrib();
+}
+
+#endif // DRAW_COLLISION_DEBUG

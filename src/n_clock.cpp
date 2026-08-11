@@ -3,10 +3,6 @@ EXTREME TUXRACER - native replacement types
 
 Clock implementation - clock_gettime(CLOCK_MONOTONIC).
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_clock.h"
 
 #include "bh.h"   // OS_PS3

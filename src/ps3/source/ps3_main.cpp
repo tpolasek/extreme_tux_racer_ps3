@@ -10,10 +10,6 @@
  * etr_run() lives in src/main.cpp (the Linux main() body, refactored into a
  * callable extern "C" entry point guarded by OS_PS3).
  */
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include <sys/thread.h>
 #include <sys/process.h>
 #include <sys/tty.h>

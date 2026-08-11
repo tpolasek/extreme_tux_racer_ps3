@@ -15,10 +15,6 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 ---------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "physics.h"
 #include "course.h"
 #include "tree_collision.h"
@@ -121,7 +117,16 @@ bool CControl::CheckTreeCollisions(const TVector3d& pos, TVector3d *tree_loc) co
 
 	TVector3d loc(0, 0, 0);
 	bool hit = false;
-	constexpr double kTuxRadius = 0.6;
+
+	// Tux proxy = largest sphere actually drawn for the character. The model
+	// is rendered with its root at cpos + TUX_Y_CORR (SetTuxPosition), and
+	// the cached CollisionCenter is in the model's default-pose frame, so we
+	// ignore orientation here — tree collisions happen while racing, where
+	// the character is within a few degrees of upright and the offset's
+	// vertical component (which dominates) is essentially unchanged.
+	CCharShape *shape = g_game.character->shape;
+	const double tuxRadius = shape->CollisionRadius();
+	const TVector3d sphereCenter = shape->CollisionCenterWorld(pos);
 
 	for (std::size_t i = 0; i<Course.CollArr.size(); i++) {
 		double diam = Course.CollArr[i].diam;
@@ -136,16 +141,16 @@ bool CControl::CheckTreeCollisions(const TVector3d& pos, TVector3d *tree_loc) co
 		// narrow phase.)
 		if (sil.W == 0) continue;
 
-		// Broad phase: tighter than diam/2 + kTuxRadius when the
+		// Broad phase: tighter than diam/2 + tuxRadius when the
 		// measured silhouette is narrower than the nominal quad.
-		double bp_radius = diam * 0.5 * sil.maxHalfWidthFrac + kTuxRadius;
-		if (pos.y < loc.y + height * sil.minYFrac - kTuxRadius ||
-		    pos.y > loc.y + height * sil.maxYFrac + kTuxRadius) continue;
+		double bp_radius = diam * 0.5 * sil.maxHalfWidthFrac + tuxRadius;
+		if (sphereCenter.y < loc.y + height * sil.minYFrac - tuxRadius ||
+		    sphereCenter.y > loc.y + height * sil.maxYFrac + tuxRadius) continue;
 
-		TVector3d distvec(loc.x - pos.x, 0.0, loc.z - pos.z);
+		TVector3d distvec(loc.x - sphereCenter.x, 0.0, loc.z - sphereCenter.z);
 		if (MAG_SQD(distvec) > bp_radius * bp_radius) continue;
 
-		if (TestTreeSilhouette(sil, pos, loc, diam, height, kTuxRadius)) {
+		if (TestTreeSilhouette(sil, sphereCenter, loc, diam, height, tuxRadius)) {
 			hit = true;
 			if (tree_loc != nullptr) *tree_loc = loc;
 			Sound.Play("tree_hit", 0);

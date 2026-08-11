@@ -1,8 +1,4 @@
 
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "quadtree.h"
 #include "textures.h"
 #include "course.h"

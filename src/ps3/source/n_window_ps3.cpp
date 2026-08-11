@@ -7,10 +7,6 @@
  * The contract (n_window.h) is platform-neutral and unchanged; only this .cpp
  * differs from the Linux (X11+GLX) backend.
  */
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_window.h"
 #include "n_draw.h"
 #include "GL/gl.h"

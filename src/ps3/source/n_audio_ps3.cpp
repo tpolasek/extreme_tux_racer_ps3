@@ -5,10 +5,6 @@ PSL1GHT libaudio exposes a fixed 48 kHz, interleaved float32 ring buffer.
 A dedicated PPU thread waits for block-consumed events, mixes the game's
 WAV effects and streamed Vorbis music, and fills the next hardware block.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_audio.h"
 #include "ps3_tty.h"
 

@@ -7,10 +7,6 @@ preserving display aspect with bilinear filtering.
 
 Only linked into the PS3 build; only called under #ifdef DEMO_MODE.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "screenshot.h"
 
 #include "rsxutil.h"

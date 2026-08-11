@@ -3,10 +3,6 @@ EXTREME TUXRACER - native replacement types
 
 Color static constant definitions (out-of-line for C++14 odr-use).
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_color.h"
 
 const Color Color::Transparent(0,   0,   0,   0);

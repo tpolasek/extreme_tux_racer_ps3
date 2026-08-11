@@ -3,10 +3,6 @@ EXTREME TUXRACER - native replacement types
 
 Sprite / RectangleShape rendering via fixed-function GL quads.
 ---------------------------------------------------------------------*/
-#ifdef HAVE_CONFIG_H
-#include <etr_config.h>
-#endif
-
 #include "n_draw.h"
 #include "n_texture.h"
 #include "n_glutil.h"
